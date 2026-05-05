@@ -1,42 +1,53 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-05-05.03",
+  "version": "2026-05-05.04",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
+  "deployment": {
+    "baseUrl": "https://mattclangford.github.io/hhplugin/",
+    "versionStep": 0.1,
+    "pluginStringDoc": "docs/HIREHOP_PLUGIN_STRING.md"
+  },
   "activeScripts": [
     {
       "file": "1-docprev.js",
       "status": "active",
+      "cacheVersion": "0.1",
       "role": "Document preview panel used by power users and by the page editor preview dock.",
       "recommendedLoadOrder": 1
     },
     {
       "file": "2-apselall.js",
       "status": "active",
+      "cacheVersion": "0.1",
       "role": "Small native-popup helper for repetitive line item selection actions.",
       "recommendedLoadOrder": 2
     },
     {
       "file": "3-meta.js",
       "status": "active-module",
+      "cacheVersion": "0.1",
       "role": "Shared WisePageMeta and editor/template identifier contract consumed by the section builder and aligned to the QTC renderer.",
       "recommendedLoadOrder": 3
     },
     {
       "file": "4-layout.js",
       "status": "active-module",
+      "cacheVersion": "0.1",
       "role": "Shared proposal page/layout catalogue consumed by the section builder.",
       "recommendedLoadOrder": 4
     },
     {
       "file": "5-hirehop.js",
       "status": "active-module",
+      "cacheVersion": "0.1",
       "role": "Shared HireHop selectors, endpoint paths, depot rules, retry timings, and tree item prefixes consumed by the section builder.",
       "recommendedLoadOrder": 5
     },
     {
       "file": "6-editor2.js",
       "status": "active-primary",
+      "cacheVersion": "0.1",
       "role": "Main proposal page editor and HireHop authoring layer.",
       "recommendedLoadOrder": 6
     }
