@@ -5,7 +5,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-05-05.01-labour-day-prefix-and-roomier-page-copy",
+    version: "2026-05-05.03-labour-crew-picker-bridge",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -2490,7 +2490,6 @@
   var GENERIC_META_VERSION = 1;
   var LABOUR_DAY_META_EDITOR = "genericLabourDay";
   var LABOUR_DAY_META_VERSION = 1;
-  var LABOUR_DAY_PREFIX = "Day - ";
 
   var GENERIC_LAYOUTS = {
     HERO: "hero",
@@ -2984,7 +2983,7 @@
     return normaliseLabourDay({
       uid: newUid("labourday"),
       id: getNodeDataId(headingNode),
-      title: getLabourDayEditableTitle(getNodeTitle(headingNode), index === 0 ? "Day of event" : ""),
+      title: getNodeTitle(headingNode) || (index === 0 ? "Day of event" : ""),
       intro: getNodeDescription(headingNode),
       baseMemo: metaInfo.baseText || "",
       meta: readLabourDayMeta(metaInfo.meta),
@@ -3601,25 +3600,6 @@
     return "Day " + String(Number(index) + 1);
   }
 
-  function stripLabourDayPrefix(value) {
-    return $.trim(String(value || "").replace(/^day\s*[-\u2013\u2014:]\s*/i, ""));
-  }
-
-  function getLabourDayEditableTitle(value, fallback) {
-    var title = cleanHeadingTitle(stripLabourDayPrefix(value));
-    return title || String(fallback || "");
-  }
-
-  function getLabourDayStoredHeading(value, index) {
-    return LABOUR_DAY_PREFIX + getLabourDayEditableTitle(value, getDefaultLabourDayTitle(index));
-  }
-
-  function labourDayHasStoredPrefix(day) {
-    var raw = "";
-    if (day && day.nodeData) raw = day.nodeData.title || day.nodeData.TITLE || day.nodeData.name || day.nodeData.NAME || "";
-    return /^day\s*[-\u2013\u2014:]\s*/i.test($.trim(String(raw || "")));
-  }
-
   function normaliseLabourDay(day) {
     day = day || {};
     var itemIds = normaliseIdList(day.itemIds || []);
@@ -3928,7 +3908,7 @@
   }
 
   function genericLabourActionsHtml(state) {
-    return '<div class="wpe-page-actions"><span>Each Day card saves the Labour page and can delete its saved crew folder. Image split keeps one Day folder; three-column layout can keep up to three.</span></div>';
+    return '<div class="wpe-page-actions"><span>Each Day card can save its folder, open HireHop\'s Crew picker for that folder, and delete the saved crew folder. Image split keeps one Day folder; three-column layout can keep up to three.</span></div>';
   }
 
   function genericCostingActionsHtml(state) {
@@ -4293,6 +4273,7 @@
         '<textarea class="wpe-field" data-labour-day-field="intro" placeholder="Optional short note above the crew list.">' + esc(day.intro) + '</textarea>' +
         '<div class="wpe-labour-day-items' + (count ? '' : ' is-empty') + '">' + esc(preview) + '</div>' +
         '<div class="wpe-labour-day-actions">' +
+          '<button type="button" class="wpe-mini-btn" data-weo-action="open-labour-crew-picker" data-labour-day-index="' + index + '">Add Crew</button>' +
           '<button type="button" class="wpe-mini-btn" data-weo-action="save-labour-day" data-labour-day-index="' + index + '">Save</button>' +
           '<button type="button" class="wpe-mini-btn is-danger" data-weo-action="delete-labour-day" data-labour-day-index="' + index + '"' + (canDelete ? '' : ' disabled') + '>Delete</button>' +
         '</div>' +
@@ -4303,7 +4284,7 @@
     day = normaliseLabourDay(day);
     if (day.itemNames.length) return day.itemNames.join(" · ");
     if (Math.max(day.itemCount, day.itemIds.length)) return "Crew resource items are saved in this folder.";
-    return "No crew resource items added yet.";
+    return "No crew resource items added yet. Use Add Crew to open HireHop's Crew picker.";
   }
 
   function genericTeamHtml(state) {
@@ -4590,6 +4571,11 @@
       return;
     }
 
+    if (action === "open-labour-crew-picker" && dayIndex >= 0) {
+      openLabourCrewPicker(state, dayIndex);
+      return;
+    }
+
     if (action === "save-labour-day" && dayIndex >= 0) {
       saveLabourDayCard(state, dayIndex);
       return;
@@ -4854,6 +4840,59 @@
     setTimeout(function () { openNativeNewLineEditor({ preferListedItem: true }); }, 140);
   }
 
+  async function openLabourCrewPicker(state, dayIndex) {
+    state = normaliseGenericState(state || editor.current || {});
+    if (!shouldUseLabourDayFolders(state)) return;
+
+    var dayLimit = getLabourDayLimitForState(state);
+    if (dayIndex < 0 || dayIndex >= dayLimit) {
+      setStatus("Choose a visible Labour day card first.", "warning");
+      return;
+    }
+
+    var days = getLabourDaysForEditor(state);
+    var day = normaliseLabourDay(days[dayIndex] || {});
+    if (!$.trim(day.title)) day.title = getDefaultLabourDayTitle(dayIndex);
+    days[dayIndex] = day;
+    state.labourDays = days.slice(0, dayLimit);
+
+    editor.current = normaliseGenericState(state);
+    renderEditor(editor.current);
+
+    var label = getLabourDayLabel(day, dayIndex);
+    var persisted = await persistGenericStateIfNeeded({
+      savingMessage: "Saving " + label + " before opening HireHop's Crew picker...",
+      errorMessage: "Could not save " + label + " before opening the Crew picker.",
+      rerender: true,
+      refreshList: true,
+      successMessage: label + " saved. Preparing Crew picker..."
+    });
+    if (!persisted.ok) return;
+
+    state = normaliseGenericState(persisted.state || editor.current || state);
+    day = getLabourDayAtIndex(state, dayIndex);
+
+    if (!day.id) {
+      setStatus("Could not find or create the " + label + " folder for Crew items.", "warning");
+      return;
+    }
+
+    setStatus("Opening HireHop's Crew picker for " + label + "...", "info");
+    setTimeout(function () {
+      var tree = getTree();
+      var selected = selectTreeHeadingByDataId(tree, day.id);
+      if (!selected) {
+        setStatus(label + " is ready. Select that day folder, then use the native New/list picker.", "warning");
+        return;
+      }
+
+      hideEditorOverlayForNativePopup();
+      setTimeout(function () {
+        openNativeNewLineEditor({ preferListedItem: true, picklistMode: "labourCrew" });
+      }, 120);
+    }, 900);
+  }
+
   async function saveLabourDayCard(state, dayIndex) {
     state = normaliseGenericState(state || editor.current || {});
     if (!shouldUseLabourDayFolders(state)) return;
@@ -5014,7 +5053,6 @@
       if (!$.trim(day.title)) day.title = getDefaultLabourDayTitle(i);
       var dayMeta = buildLabourDayMeta(day, i, originalDay && originalDay.meta && originalDay.meta.updatedAt);
       var dayMemo = composeStoredPageMetaText(day.baseMemo || "", dayMeta);
-      var storedHeading = getLabourDayStoredHeading(day.title, i);
 
       if (!day.id) {
         setStatus("Creating " + getDefaultLabourDayTitle(i).toLowerCase() + " folder...", "info");
@@ -5022,7 +5060,7 @@
           jobId: jobId,
           id: "",
           parentId: state.rootId || getNodeDataId(rootNode),
-          rawName: storedHeading,
+          rawName: day.title,
           allowPlainRawName: true,
           renderType: "normal",
           title: day.title,
@@ -5040,7 +5078,7 @@
           jobId: jobId,
           id: day.id,
           parentId: state.rootId || getNodeDataId(rootNode),
-          rawName: storedHeading,
+          rawName: day.title,
           allowPlainRawName: true,
           renderType: "normal",
           title: day.title,
@@ -5054,7 +5092,7 @@
       if (day.id) keepIds.push(day.id);
       day.meta = dayMeta;
       day.baseMemo = day.baseMemo || "";
-      day.nodeData = extendSnapshot(day.nodeData, { ID: day.id, title: storedHeading, TITLE: storedHeading, DESCRIPTION: day.intro, TECHNICAL: dayMemo });
+      day.nodeData = extendSnapshot(day.nodeData, { ID: day.id, title: day.title, TITLE: day.title, DESCRIPTION: day.intro, TECHNICAL: dayMemo });
       nextDays.push(day);
     }
 
@@ -5080,7 +5118,6 @@
 
   function labourDayNeedsSave(day, originalDay, memo) {
     if (!originalDay) return true;
-    if (!labourDayHasStoredPrefix(originalDay)) return true;
     return String(day.title || "") !== String(originalDay.title || "") ||
       String(day.intro || "") !== String(originalDay.intro || "") ||
       String(memo || "") !== composeStoredPageMetaText(originalDay.baseMemo || "", originalDay.meta || null);
@@ -5549,7 +5586,7 @@
     var opts = options || {};
     var $new = findNativeNewButton();
     if (!$new.length) {
-      setStatus("Native HireHop New button could not be found. Select // Technical Use and use the native New/list picker.", "warning");
+      setStatus("Native HireHop New button could not be found. Select the target folder in the supplying list, then use HireHop's native New/list picker.", "warning");
       return;
     }
     try {
@@ -5557,6 +5594,9 @@
       if (opts.preferListedItem) {
         setTimeout(function () { clickLikelyListedItemMenuOption(); }, 350);
         setTimeout(function () { clickLikelyListedItemMenuOption(); }, 900);
+      }
+      if (opts.picklistMode) {
+        scheduleListedItemsDialogAutomation(opts.picklistMode);
       }
     } catch (err) {
       warn("Native new item picker failed", err);
@@ -5591,6 +5631,74 @@
       return true;
     }
     return false;
+  }
+
+  function scheduleListedItemsDialogAutomation(mode) {
+    if (!mode) return;
+    var delays = [450, 900, 1500, 2300, 3200];
+    for (var i = 0; i < delays.length; i++) {
+      (function (delay) {
+        setTimeout(function () { applyListedItemsDialogAutomation(mode); }, delay);
+      })(delays[i]);
+    }
+  }
+
+  function applyListedItemsDialogAutomation(mode) {
+    if (mode === "labourCrew") return configureLabourCrewListedItemsDialog();
+    return false;
+  }
+
+  function findVisibleListedItemsDialog() {
+    return $(".ui-dialog:visible").filter(function () {
+      var $dialog = $(this);
+      var title = $.trim($dialog.find(".ui-dialog-title").first().text() || "").toLowerCase();
+      return title === "add listed items" && $dialog.find(".hh_picklist_dlg").length > 0;
+    }).first();
+  }
+
+  function configureLabourCrewListedItemsDialog() {
+    var $dialog = findVisibleListedItemsDialog();
+    if (!$dialog.length) return false;
+
+    setPicklistTypeCheckboxState($dialog, "4", true);
+    setPicklistTypeCheckboxState($dialog, "1", false);
+    setPicklistTypeCheckboxState($dialog, "2", false);
+    activatePicklistCategoryTab($dialog, "Crew");
+    return true;
+  }
+
+  function setPicklistTypeCheckboxState($dialog, value, checked) {
+    if (!$dialog || !$dialog.length) return false;
+    var expected = !!checked;
+    var $input = $dialog.find('input.picklist_type[type="checkbox"]').filter(function () {
+      return String($(this).val() || "") === String(value);
+    }).first();
+
+    if (!$input.length) return false;
+    if (!!$input.prop("checked") === expected) return true;
+
+    clickElementLikeUser($input.get(0));
+    if (!!$input.prop("checked") !== expected) {
+      $input.prop("checked", expected).trigger("change");
+    }
+    return true;
+  }
+
+  function activatePicklistCategoryTab($dialog, label) {
+    if (!$dialog || !$dialog.length) return false;
+    var target = normalizeGenericMatchText(label);
+    var $anchor = $dialog.find(".category_tabs_container .ui-tabs-anchor:visible").filter(function () {
+      return normalizeGenericMatchText($(this).text() || "") === target;
+    }).first();
+
+    if (!$anchor.length) return false;
+    var $tab = $anchor.closest("li");
+    if ($tab.hasClass("ui-tabs-active") || $tab.hasClass("ui-state-active") || String($tab.attr("aria-selected") || "").toLowerCase() === "true") {
+      return true;
+    }
+
+    clickElementLikeUser($anchor.get(0));
+    return true;
   }
 
   async function saveGenericManagedRows(jobId, state) {
