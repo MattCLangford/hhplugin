@@ -10,7 +10,7 @@ The primary editor can consume small module files when they are available, but i
 
 ## Current Module Boundary
 
-`wise-sectionbuilder-meta-ui.js` owns the shared metadata contract.
+`3-meta.js` owns the shared metadata contract.
 
 It owns:
 
@@ -19,7 +19,7 @@ It owns:
 - Generic page editor IDs and versions.
 - Labour day editor IDs and versions.
 
-`wise-sectionbuilder-layouts-ui.js` owns the shared layout catalogue.
+`4-layout.js` owns the shared layout catalogue.
 
 It owns:
 
@@ -27,7 +27,17 @@ It owns:
 - Layout matching rules.
 - Layout flags such as `locked`, `managedRows`, and `costingRows`.
 
-`wise-sectionbuilder2-ui.js` still owns:
+`5-hirehop.js` owns the shared HireHop integration contract.
+
+It owns:
+
+- HireHop supplying-list selectors.
+- HireHop item save/delete endpoint paths.
+- Depot gating defaults.
+- Retry timings.
+- Tree item kind prefixes.
+
+`6-editor2.js` still owns:
 
 - Modal/editor rendering.
 - HireHop tree reads.
@@ -39,34 +49,37 @@ It owns:
 
 ## Next Extractions
 
-1. `wise-sectionbuilder-hirehop-ui.js`
-   Owns toolbar detection, tree selection, native New/Edit handoff, refresh detection, depot detection, and item endpoint wrappers.
+1. `wise-sectionbuilder-preview-ui.js`
+   Owns the preview dock integration with `1-docprev.js`.
 
-2. `wise-sectionbuilder-preview-ui.js`
-   Owns the preview dock integration with `wise-docpreviewpanel-ui.js`.
-
-3. `wise-sectionbuilder-eventoverview-ui.js`
+2. `wise-sectionbuilder-eventoverview-ui.js`
    Owns the Event Overview-specific editor state, validation, rendering, and save behavior.
 
-4. `wise-sectionbuilder-pages-ui.js`
+3. `wise-sectionbuilder-pages-ui.js`
    Owns generic proposal page rendering and action handling.
+
+4. `wise-sectionbuilder-hirehop-actions-ui.js`
+   Owns toolbar detection, tree selection, native New/Edit handoff, refresh detection, depot detection, and item endpoint wrappers after those behaviours are ready to move out of the editor.
 
 ## Deployment Policy
 
 Recommended HireHop script set:
 
-- Load `wise-docpreviewpanel-ui.js`.
-- Load `wise-autopull-selectall-ui.js`.
-- Load `wise-sectionbuilder-meta-ui.js`.
-- Load `wise-sectionbuilder-layouts-ui.js`.
-- Load `wise-sectionbuilder2-ui.js`.
+- Load `1-docprev.js`.
+- Load `2-apselall.js`.
+- Load `3-meta.js`.
+- Load `4-layout.js`.
+- Load `5-hirehop.js`.
+- Load `6-editor2.js`.
 
 Do not load `wise-headingedit-ui.js` or `wise-sectionbuilder-ui.js` in normal production.
 
 ## Fallback Policy
 
-If the metadata module causes issues, disable `wise-sectionbuilder-meta-ui.js` first. The main editor has built-in metadata defaults and should continue running.
+If the metadata module causes issues, disable `3-meta.js` first. The main editor has built-in metadata defaults and should continue running.
 
-If the layout module causes issues, disable `wise-sectionbuilder-layouts-ui.js`. The main editor has built-in layout defaults and should continue running.
+If the layout module causes issues, disable `4-layout.js`. The main editor has built-in layout defaults and should continue running.
 
-If `wise-sectionbuilder2-ui.js` causes issues, disable it and temporarily load the older `wise-sectionbuilder-ui.js` snapshot.
+If the HireHop integration module causes issues, disable `5-hirehop.js`. The main editor has built-in selector, endpoint, timing, depot, and prefix defaults and should continue running.
+
+If `6-editor2.js` causes issues, disable it and temporarily load the older `wise-sectionbuilder-ui.js` snapshot.
