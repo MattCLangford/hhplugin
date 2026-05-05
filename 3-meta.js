@@ -3,7 +3,7 @@
 
   /*
    * Shared metadata contract for the Wise HireHop proposal platform.
-   * Keep this aligned with QTC-V2.html and wise-sectionbuilder2-ui.js.
+   * Keep this aligned with QTC-V2.html and 6-editor2.js.
    */
   var meta = {
     version: "2026-05-05.01",
