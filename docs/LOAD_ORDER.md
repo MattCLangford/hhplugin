@@ -2,11 +2,12 @@
 
 Use this order for the live HireHop scripts.
 
-1. `wise-docpreviewpanel-ui.js`
-2. `wise-autopull-selectall-ui.js`
-3. `wise-sectionbuilder-meta-ui.js`
-4. `wise-sectionbuilder-layouts-ui.js`
-5. `wise-sectionbuilder2-ui.js`
+1. `1-docprev.js`
+2. `2-apselall.js`
+3. `3-meta.js`
+4. `4-layout.js`
+5. `5-hirehop.js`
+6. `6-editor2.js`
 
 ## Keep Off In Normal Production
 
@@ -16,7 +17,7 @@ This is the V1 concept editor and is superseded by the section builder.
 
 `wise-sectionbuilder-ui.js`
 
-This is the older fallback snapshot. Keep it available, but do not load it at the same time as `wise-sectionbuilder2-ui.js`.
+This is the older fallback snapshot. Keep it available, but do not load it at the same time as `6-editor2.js`.
 
 ## Reference Only
 
