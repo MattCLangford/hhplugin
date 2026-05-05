@@ -5,7 +5,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-04-30.05-labour-layout-cleanup-and-brand-refresh",
+    version: "2026-05-05.01-labour-day-prefix-and-roomier-page-copy",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -2490,6 +2490,7 @@
   var GENERIC_META_VERSION = 1;
   var LABOUR_DAY_META_EDITOR = "genericLabourDay";
   var LABOUR_DAY_META_VERSION = 1;
+  var LABOUR_DAY_PREFIX = "Day - ";
 
   var GENERIC_LAYOUTS = {
     HERO: "hero",
@@ -2568,6 +2569,8 @@
       "#" + CFG.modalId + " .wpe-heading{font-family:'Albra Sans',Lato,'Segoe UI',Arial,sans-serif;font-weight:400;text-transform:uppercase;line-height:.98;letter-spacing:.01em;}",
       "#" + CFG.modalId + " textarea.wpe-heading{font-size:clamp(22px,2.7vw,36px);padding:6px 8px;min-height:48px;}",
       "#" + CFG.modalId + " .wpe-blurb{font-size:clamp(9px,.88vw,12px);padding:6px 7px;min-height:88px;}",
+      "#" + CFG.modalId + " .wpe-blurb.wpe-blurb-tall{min-height:160px;}",
+      "#" + CFG.modalId + " .wpe-blurb.wpe-blurb-xl{min-height:196px;}",
       "#" + CFG.modalId + " .wpe-small-label{display:block;font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#98a2b3;margin:0 0 4px;}",
       "#" + CFG.modalId + " .wpe-kicker{font-family:'Albra Sans',Lato,'Segoe UI',Arial,sans-serif;font-size:clamp(11px,1.02vw,14px);line-height:1.05;color:#EC9797;letter-spacing:.03em;margin-bottom:5px;}",
       "#" + CFG.modalId + " .wpe-image-preview{position:relative;overflow:hidden;background:linear-gradient(145deg,#d9e2ec,#f8fafc);border:1px solid rgba(15,23,42,.12);border-radius:12px;min-height:72px;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;color:rgba(13,18,38,.42);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;}",
@@ -2981,7 +2984,7 @@
     return normaliseLabourDay({
       uid: newUid("labourday"),
       id: getNodeDataId(headingNode),
-      title: getNodeTitle(headingNode) || (index === 0 ? "Day of event" : ""),
+      title: getLabourDayEditableTitle(getNodeTitle(headingNode), index === 0 ? "Day of event" : ""),
       intro: getNodeDescription(headingNode),
       baseMemo: metaInfo.baseText || "",
       meta: readLabourDayMeta(metaInfo.meta),
@@ -3598,6 +3601,25 @@
     return "Day " + String(Number(index) + 1);
   }
 
+  function stripLabourDayPrefix(value) {
+    return $.trim(String(value || "").replace(/^day\s*[-\u2013\u2014:]\s*/i, ""));
+  }
+
+  function getLabourDayEditableTitle(value, fallback) {
+    var title = cleanHeadingTitle(stripLabourDayPrefix(value));
+    return title || String(fallback || "");
+  }
+
+  function getLabourDayStoredHeading(value, index) {
+    return LABOUR_DAY_PREFIX + getLabourDayEditableTitle(value, getDefaultLabourDayTitle(index));
+  }
+
+  function labourDayHasStoredPrefix(day) {
+    var raw = "";
+    if (day && day.nodeData) raw = day.nodeData.title || day.nodeData.TITLE || day.nodeData.name || day.nodeData.NAME || "";
+    return /^day\s*[-\u2013\u2014:]\s*/i.test($.trim(String(raw || "")));
+  }
+
   function normaliseLabourDay(day) {
     day = day || {};
     var itemIds = normaliseIdList(day.itemIds || []);
@@ -4069,6 +4091,7 @@
     if (shouldUseLabourDayFolders(state)) return genericLabourDeptTableHtml(state);
 
     var costPreview = genericCostPreviewHtml(state);
+    var blurbClass = normalizeGenericMatchText(state.title) === "project total" ? "wpe-blurb-tall" : "";
     return '' +
       '<div class="wpe-proof">' +
         proofCommonHtml(false) +
@@ -4076,7 +4099,7 @@
         '<div class="wpe-left-copy">' +
           '<div class="wpe-kicker">' + esc(state.sectionTitle || "Section") + '</div>' +
           titleFieldHtml(state.title, "", "Dept title") +
-          blurbFieldHtml(state.blurb, "", "Short blurb above the table") +
+          blurbFieldHtml(state.blurb, blurbClass, "Short blurb above the table") +
           costPreview +
         '</div>' +
       '</div>';
@@ -4180,7 +4203,7 @@
         '<div class="wpe-venue-copy">' +
           '<div class="wpe-kicker">Your venue</div>' +
           '<div class="wpe-venue-title-lock"><b>Venue name</b><span>The proposal renderer uses the venue from the project details, so this heading name is intentionally locked.</span></div>' +
-          blurbFieldHtml(state.blurb, "", "Venue description") +
+          blurbFieldHtml(state.blurb, "wpe-blurb-xl", "Venue description") +
         '</div>' +
         proofCommonHtml(true) +
       '</div>';
@@ -4195,7 +4218,7 @@
         '<div class="wpe-left-copy">' +
           titleFieldHtml(state.title, "", state.layoutId === GENERIC_LAYOUTS.EXPERTS ? "Our Experts" : "Experience & Expertise") +
           (state.layoutId === GENERIC_LAYOUTS.EXPERTS ? '<div class="wpe-kicker">&amp; Company co-owners</div>' : '') +
-          blurbFieldHtml(state.blurb, "", "Page copy") +
+          blurbFieldHtml(state.blurb, "wpe-blurb-xl", "Page copy") +
         '</div>' +
       '</div>';
   }
@@ -4991,6 +5014,7 @@
       if (!$.trim(day.title)) day.title = getDefaultLabourDayTitle(i);
       var dayMeta = buildLabourDayMeta(day, i, originalDay && originalDay.meta && originalDay.meta.updatedAt);
       var dayMemo = composeStoredPageMetaText(day.baseMemo || "", dayMeta);
+      var storedHeading = getLabourDayStoredHeading(day.title, i);
 
       if (!day.id) {
         setStatus("Creating " + getDefaultLabourDayTitle(i).toLowerCase() + " folder...", "info");
@@ -4998,7 +5022,7 @@
           jobId: jobId,
           id: "",
           parentId: state.rootId || getNodeDataId(rootNode),
-          rawName: day.title,
+          rawName: storedHeading,
           allowPlainRawName: true,
           renderType: "normal",
           title: day.title,
@@ -5016,7 +5040,7 @@
           jobId: jobId,
           id: day.id,
           parentId: state.rootId || getNodeDataId(rootNode),
-          rawName: day.title,
+          rawName: storedHeading,
           allowPlainRawName: true,
           renderType: "normal",
           title: day.title,
@@ -5030,7 +5054,7 @@
       if (day.id) keepIds.push(day.id);
       day.meta = dayMeta;
       day.baseMemo = day.baseMemo || "";
-      day.nodeData = extendSnapshot(day.nodeData, { ID: day.id, title: day.title, TITLE: day.title, DESCRIPTION: day.intro, TECHNICAL: dayMemo });
+      day.nodeData = extendSnapshot(day.nodeData, { ID: day.id, title: storedHeading, TITLE: storedHeading, DESCRIPTION: day.intro, TECHNICAL: dayMemo });
       nextDays.push(day);
     }
 
@@ -5056,6 +5080,7 @@
 
   function labourDayNeedsSave(day, originalDay, memo) {
     if (!originalDay) return true;
+    if (!labourDayHasStoredPrefix(originalDay)) return true;
     return String(day.title || "") !== String(originalDay.title || "") ||
       String(day.intro || "") !== String(originalDay.intro || "") ||
       String(memo || "") !== composeStoredPageMetaText(originalDay.baseMemo || "", originalDay.meta || null);
