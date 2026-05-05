@@ -4,6 +4,8 @@
   var $ = window.jQuery;
   if (!$) return;
 
+  var META_MODULE_GLOBAL = "WiseProposalSectionBuilderMeta";
+
   /*
    * HireHop proposal authoring layer for QTC-V2.html.
    * - Reads proposal headings and child rows from the supplying-list tree.
@@ -12,7 +14,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-05.09-layout-registry-audit",
+    version: "2026-05-05.11-modular-meta",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -41,11 +43,11 @@
     writeThrottleMs: 1150,
     rateLimitRetryMs: 65000,
     saveMaxAttempts: 2,
-    metaStart: "[WisePageMeta]",
-    metaEnd: "[/WisePageMeta]",
-    profileKey: "event_overview_schedule",
-    rootTemplateKey: "section_event_overview",
-    deptTemplateKey: "dept_proposed_timings"
+    metaStart: getMetaEnvelopeValue("start", "[WisePageMeta]"),
+    metaEnd: getMetaEnvelopeValue("end", "[/WisePageMeta]"),
+    profileKey: getEventOverviewMetaValue("profileKey", "event_overview_schedule"),
+    rootTemplateKey: getEventOverviewMetaValue("rootTemplateKey", "section_event_overview"),
+    deptTemplateKey: getEventOverviewMetaValue("deptTemplateKey", "dept_proposed_timings")
   };
 
   var LAYOUT_IMAGE = "image";
@@ -62,6 +64,7 @@
   };
   var PREVIEW_ATTACH_RETRY_DELAYS = [10, 180, 720, 1600];
   var LISTED_ITEM_MENU_RETRY_DELAYS = [350, 900, 1500, 2300];
+  var LAYOUT_MODULE_GLOBAL = "WiseProposalSectionBuilderLayouts";
 
   var EDITOR_PREVIEW = {
     dockId: "wise-proposal-page-editor-preview-dock",
@@ -89,6 +92,44 @@
     previewDocked: false,
     previewSuppressed: false
   };
+
+  function getExternalMetaModule() {
+    var module = window[META_MODULE_GLOBAL];
+    return module && typeof module === "object" ? module : null;
+  }
+
+  function getMetaModuleSection(name) {
+    var module = getExternalMetaModule();
+    var section = module && module[name];
+    return section && typeof section === "object" ? section : null;
+  }
+
+  function getMetaModuleValue(sectionName, key, fallback) {
+    var section = getMetaModuleSection(sectionName);
+    var value = section && section[key];
+    return value == null || value === "" ? fallback : value;
+  }
+
+  function getMetaEnvelopeValue(key, fallback) {
+    return String(getMetaModuleValue("envelope", key, fallback));
+  }
+
+  function getEventOverviewMetaValue(key, fallback) {
+    return String(getMetaModuleValue("eventOverview", key, fallback));
+  }
+
+  function getGenericPageMetaValue(key, fallback) {
+    return getMetaModuleValue("genericPage", key, fallback);
+  }
+
+  function getLabourDayMetaValue(key, fallback) {
+    return getMetaModuleValue("labourDay", key, fallback);
+  }
+
+  function normaliseMetaVersion(value, fallback) {
+    var n = Number(value);
+    return isFinite(n) && n > 0 ? n : fallback;
+  }
 
   log("Proposal page editor loaded", CFG.version);
   boot();
@@ -2501,10 +2542,10 @@
      ============================================================ */
   var MODE_EVENT_OVERVIEW = "eventOverview";
   var MODE_GENERIC = "generic";
-  var GENERIC_META_EDITOR = "genericPage";
-  var GENERIC_META_VERSION = 1;
-  var LABOUR_DAY_META_EDITOR = "genericLabourDay";
-  var LABOUR_DAY_META_VERSION = 1;
+  var GENERIC_META_EDITOR = String(getGenericPageMetaValue("editor", "genericPage"));
+  var GENERIC_META_VERSION = normaliseMetaVersion(getGenericPageMetaValue("version", 1), 1);
+  var LABOUR_DAY_META_EDITOR = String(getLabourDayMetaValue("editor", "genericLabourDay"));
+  var LABOUR_DAY_META_VERSION = normaliseMetaVersion(getLabourDayMetaValue("version", 1), 1);
 
   var GENERIC_LAYOUTS = {
     HERO: "hero",
@@ -3237,11 +3278,11 @@
     config[GENERIC_LAYOUTS.SUSTAINABILITY] = { label: "Sustainability", render: genericSustainabilityHtml, locked: true };
     config[GENERIC_LAYOUTS.ABOUT_US] = { label: "About us", render: genericAboutUsHtml, locked: true };
     config[GENERIC_LAYOUTS.DETAILS_CONTAINER] = { label: "Details container", render: genericDetailsContainerHtml };
-    return config;
+    return applyExternalGenericLayoutConfig(config);
   }
 
   function createGenericLayoutRules() {
-    return {
+    var fallback = {
       shared: [
         { id: GENERIC_LAYOUTS.VENUE_HERO, test: function (ctx) { return ctx.titleText === "venue hero"; } }
       ],
@@ -3267,6 +3308,81 @@
         { id: GENERIC_LAYOUTS.VISUAL, test: function (ctx) { return ctx.sectionTitleText === "visual"; } }
       ]
     };
+
+    var external = getExternalGenericLayoutModule();
+    var rules = external && external.rules ? external.rules : null;
+    return {
+      shared: buildExternalGenericLayoutRules(rules && rules.shared, fallback.shared),
+      section: buildExternalGenericLayoutRules(rules && rules.section, fallback.section),
+      dept: buildExternalGenericLayoutRules(rules && rules.dept, fallback.dept)
+    };
+  }
+
+  function getExternalGenericLayoutModule() {
+    return window[LAYOUT_MODULE_GLOBAL] || null;
+  }
+
+  function applyExternalGenericLayoutConfig(config) {
+    var external = getExternalGenericLayoutModule();
+    var layouts = external && external.layouts ? external.layouts : {};
+    var keys = Object.keys(layouts || {});
+
+    for (var i = 0; i < keys.length; i++) {
+      var id = normaliseGenericLayoutId(keys[i]);
+      if (!id || !config[id]) continue;
+
+      var source = layouts[keys[i]] || {};
+      if (source.label) config[id].label = String(source.label);
+      if (source.managedRows != null) config[id].managedRows = !!source.managedRows;
+      if (source.costingRows != null) config[id].costingRows = !!source.costingRows;
+      if (source.locked != null) config[id].locked = !!source.locked;
+    }
+
+    return config;
+  }
+
+  function buildExternalGenericLayoutRules(externalRules, fallbackRules) {
+    if (!Array.isArray(externalRules) || !externalRules.length) return fallbackRules;
+
+    var rules = [];
+    for (var i = 0; i < externalRules.length; i++) {
+      var sourceRule = externalRules[i] || {};
+      var id = normaliseGenericLayoutId(sourceRule.id);
+      if (!id) continue;
+
+      rules.push({
+        id: id,
+        test: (function (rule) {
+          return function (context) { return genericExternalRuleMatches(rule, context); };
+        })(sourceRule)
+      });
+    }
+
+    return rules.length ? rules : fallbackRules;
+  }
+
+  function genericExternalRuleMatches(rule, context) {
+    var field = String(rule.field || "titleText");
+    var rawValue = String((context && context[field]) || "");
+    var value = field === "rawTitle" ? rawValue : normalizeGenericMatchText(rawValue);
+
+    if (rule.regex) {
+      try {
+        if (new RegExp(String(rule.regex), "i").test(rawValue)) return true;
+      } catch (e) {}
+    }
+    if (Array.isArray(rule.equals) && genericTextEqualsAny(value, normaliseGenericRuleValues(rule.equals))) return true;
+    if (Array.isArray(rule.containsAny) && genericTextContainsAny(value, normaliseGenericRuleValues(rule.containsAny))) return true;
+    if (Array.isArray(rule.containsAll) && genericTextContainsAll(value, normaliseGenericRuleValues(rule.containsAll))) return true;
+    return false;
+  }
+
+  function normaliseGenericRuleValues(values) {
+    var out = [];
+    for (var i = 0; i < (values || []).length; i++) {
+      out.push(normalizeGenericMatchText(values[i]));
+    }
+    return out;
   }
 
   function getGenericLayoutConfig(layoutId) {
@@ -5900,6 +6016,18 @@
         genericPageVersion: GENERIC_META_VERSION,
         labourDayEditor: LABOUR_DAY_META_EDITOR,
         labourDayVersion: LABOUR_DAY_META_VERSION
+      },
+      modules: {
+        metaSchema: {
+          global: META_MODULE_GLOBAL,
+          loaded: !!getExternalMetaModule(),
+          version: getExternalMetaModule() && getExternalMetaModule().version ? String(getExternalMetaModule().version) : ""
+        },
+        layoutRegistry: {
+          global: LAYOUT_MODULE_GLOBAL,
+          loaded: !!getExternalGenericLayoutModule(),
+          version: getExternalGenericLayoutModule() && getExternalGenericLayoutModule().version ? String(getExternalGenericLayoutModule().version) : ""
+        }
       },
       sourceOfTruth: [
         "HireHop supplying-list tree headings/items",
