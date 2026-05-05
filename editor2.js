@@ -4,8 +4,15 @@
   var $ = window.jQuery;
   if (!$) return;
 
+  /*
+   * HireHop proposal authoring layer for QTC-V2.html.
+   * - Reads proposal headings and child rows from the supplying-list tree.
+   * - Writes WisePageMeta envelopes plus child folder/item structures back into HireHop.
+   * - Provides visual editing modes for Event Overview and generic proposal pages.
+   * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
+   */
   var CFG = {
-    version: "2026-05-05.08-labour-crew-native-picker",
+    version: "2026-05-05.09-layout-registry-audit",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -53,6 +60,8 @@
     proofMaxWidth: 920,
     proofMinWidth: 640
   };
+  var PREVIEW_ATTACH_RETRY_DELAYS = [10, 180, 720, 1600];
+  var LISTED_ITEM_MENU_RETRY_DELAYS = [350, 900, 1500, 2300];
 
   var EDITOR_PREVIEW = {
     dockId: "wise-proposal-page-editor-preview-dock",
@@ -423,9 +432,11 @@
   function promoteNativeEditButton($nativeEdit) {
     if (!$nativeEdit || !$nativeEdit.length) return;
 
+    editor.nativeEditEl = $nativeEdit.get(0);
+    installNativeEditCapture(editor.nativeEditEl);
     $nativeEdit.attr("data-wise-native-edit", "1");
     $nativeEdit.removeClass(CFG.defaultEditClass);
-    $nativeEdit.attr("title", "Open HireHop's line editor for the selected supplying-list line");
+    $nativeEdit.attr("title", "Open the Wise visual page editor for proposal headings, or HireHop's native line editor for other supplying-list rows.");
     $nativeEdit.attr("aria-label", CFG.nativeFallbackLabel);
     setToolbarButtonText($nativeEdit, CFG.nativeFallbackLabel);
 
@@ -632,10 +643,14 @@
   }
 
   function attachEditorPreviewDockSoon() {
-    setTimeout(function () { ensureEditorPreviewPanelOpen(); attachEditorPreviewDock(); }, 10);
-    setTimeout(function () { ensureEditorPreviewPanelOpen(); attachEditorPreviewDock(); }, 180);
-    setTimeout(function () { ensureEditorPreviewPanelOpen(); attachEditorPreviewDock(); }, 720);
-    setTimeout(function () { ensureEditorPreviewPanelOpen(); attachEditorPreviewDock(); }, 1600);
+    for (var i = 0; i < PREVIEW_ATTACH_RETRY_DELAYS.length; i++) {
+      (function (delay) {
+        setTimeout(function () {
+          ensureEditorPreviewPanelOpen();
+          attachEditorPreviewDock();
+        }, delay);
+      })(PREVIEW_ATTACH_RETRY_DELAYS[i]);
+    }
   }
 
   function ensureEditorPreviewPanelOpen() {
@@ -3201,35 +3216,111 @@
     return "";
   }
 
+  var GENERIC_LAYOUT_CONFIG = createGenericLayoutConfig();
+  var GENERIC_LAYOUT_RULES = createGenericLayoutRules();
+
+  function createGenericLayoutConfig() {
+    var config = {};
+    config[GENERIC_LAYOUTS.HERO] = { label: "Hero cover", render: genericHeroHtml };
+    config[GENERIC_LAYOUTS.SECTION_COVER] = { label: "Title cover", render: genericSectionCoverHtml };
+    config[GENERIC_LAYOUTS.DEPT_TABLE] = { label: "Dept costing/text page", render: genericDeptTableHtml, costingRows: true };
+    config[GENERIC_LAYOUTS.SUMMARY] = { label: "Proposal summary / project total", render: genericDeptTableHtml };
+    config[GENERIC_LAYOUTS.VISUAL] = { label: "Visual page", render: genericVisualHtml };
+    config[GENERIC_LAYOUTS.FPVISUAL] = { label: "Full-page visual / embed", render: genericFullVisualHtml };
+    config[GENERIC_LAYOUTS.VENUE_HERO] = { label: "Venue hero", render: genericVenueHeroHtml };
+    config[GENERIC_LAYOUTS.EXP] = { label: "Experience & Expertise", render: genericExperienceHtml };
+    config[GENERIC_LAYOUTS.EXPERTS] = { label: "Our Experts", render: genericExperienceHtml };
+    config[GENERIC_LAYOUTS.PM] = { label: "Project manager", render: genericProjectManagerHtml };
+    config[GENERIC_LAYOUTS.TEAM] = { label: "Specialist team", render: genericTeamHtml };
+    config[GENERIC_LAYOUTS.CRITICAL_PATH] = { label: "Critical path", render: genericCriticalPathHtml, managedRows: true };
+    config[GENERIC_LAYOUTS.THANKYOU] = { label: "Thank you", render: genericThankYouHtml };
+    config[GENERIC_LAYOUTS.SUSTAINABILITY] = { label: "Sustainability", render: genericSustainabilityHtml, locked: true };
+    config[GENERIC_LAYOUTS.ABOUT_US] = { label: "About us", render: genericAboutUsHtml, locked: true };
+    config[GENERIC_LAYOUTS.DETAILS_CONTAINER] = { label: "Details container", render: genericDetailsContainerHtml };
+    return config;
+  }
+
+  function createGenericLayoutRules() {
+    return {
+      shared: [
+        { id: GENERIC_LAYOUTS.VENUE_HERO, test: function (ctx) { return ctx.titleText === "venue hero"; } }
+      ],
+      section: [
+        { id: GENERIC_LAYOUTS.HERO, test: function (ctx) { return genericTextEqualsAny(ctx.titleText, ["hero", "hero page"]); } },
+        { id: GENERIC_LAYOUTS.DETAILS_CONTAINER, test: function (ctx) { return ctx.titleText === "details"; } }
+      ],
+      dept: [
+        { id: GENERIC_LAYOUTS.FPVISUAL, test: function (ctx) { return /^fpv(?:isual)?\b/i.test(ctx.rawTitle); } },
+        { id: GENERIC_LAYOUTS.PM, test: function (ctx) { return genericTextContainsAny(ctx.titleText, ["project manager", "dedicated project manager"]); } },
+        { id: GENERIC_LAYOUTS.TEAM, test: function (ctx) {
+          return ctx.titleText === "team" ||
+            ctx.titleText.indexOf("specialist team") !== -1 ||
+            genericTextContainsAll(ctx.titleText, ["team", "specialist"]);
+        } },
+        { id: GENERIC_LAYOUTS.EXP, test: function (ctx) { return genericTextContainsAll(ctx.titleText, ["experience", "expertise"]); } },
+        { id: GENERIC_LAYOUTS.EXPERTS, test: function (ctx) { return ctx.titleText === "our experts" || ctx.titleText.indexOf("experts") !== -1; } },
+        { id: GENERIC_LAYOUTS.CRITICAL_PATH, test: function (ctx) { return ctx.titleText === "critical path"; } },
+        { id: GENERIC_LAYOUTS.SUSTAINABILITY, test: function (ctx) { return ctx.titleText === "sustainability"; } },
+        { id: GENERIC_LAYOUTS.ABOUT_US, test: function (ctx) { return ctx.titleText === "about us"; } },
+        { id: GENERIC_LAYOUTS.THANKYOU, test: function (ctx) { return ctx.titleText.indexOf("thank you") !== -1; } },
+        { id: GENERIC_LAYOUTS.SUMMARY, test: function (ctx) { return genericTextEqualsAny(ctx.titleText, ["project total", "proposal summary"]); } },
+        { id: GENERIC_LAYOUTS.VISUAL, test: function (ctx) { return ctx.sectionTitleText === "visual"; } }
+      ]
+    };
+  }
+
+  function getGenericLayoutConfig(layoutId) {
+    return GENERIC_LAYOUT_CONFIG[String(layoutId || "")] || null;
+  }
+
+  function matchGenericLayoutRules(rules, context) {
+    for (var i = 0; i < (rules || []).length; i++) {
+      if (rules[i] && typeof rules[i].test === "function" && rules[i].test(context)) return rules[i].id;
+    }
+    return "";
+  }
+
+  function genericTextEqualsAny(text, values) {
+    for (var i = 0; i < (values || []).length; i++) {
+      if (text === values[i]) return true;
+    }
+    return false;
+  }
+
+  function genericTextContainsAny(text, values) {
+    for (var i = 0; i < (values || []).length; i++) {
+      if (text.indexOf(values[i]) !== -1) return true;
+    }
+    return false;
+  }
+
+  function genericTextContainsAll(text, values) {
+    for (var i = 0; i < (values || []).length; i++) {
+      if (text.indexOf(values[i]) === -1) return false;
+    }
+    return true;
+  }
+
   function resolveGenericLayoutId(tree, node, title, preferredLayoutId) {
     var storedLayoutId = normaliseGenericLayoutId(preferredLayoutId);
     if (storedLayoutId) return storedLayoutId;
 
     var parsed = parseHeadingBaseMeta(getNodeRawTitle(node));
-    var renderType = parsed.renderType;
-    var t = normalizeGenericMatchText(title || parsed.name || getNodeTitle(node));
-    var sectionTitle = normalizeGenericMatchText(getNearestSectionTitleForGeneric(tree, node));
+    var context = {
+      rawTitle: String(title || parsed.name || getNodeTitle(node) || ""),
+      titleText: normalizeGenericMatchText(title || parsed.name || getNodeTitle(node)),
+      sectionTitleText: normalizeGenericMatchText(getNearestSectionTitleForGeneric(tree, node)),
+      renderType: parsed.renderType
+    };
 
-    if (t === "venue hero") return GENERIC_LAYOUTS.VENUE_HERO;
+    var sharedLayoutId = matchGenericLayoutRules(GENERIC_LAYOUT_RULES.shared, context);
+    if (sharedLayoutId) return sharedLayoutId;
 
-    if (renderType === "section") {
-      if (t === "hero" || t === "hero page") return GENERIC_LAYOUTS.HERO;
-      if (t === "details") return GENERIC_LAYOUTS.DETAILS_CONTAINER;
-      return GENERIC_LAYOUTS.SECTION_COVER;
+    if (context.renderType === "section") {
+      return matchGenericLayoutRules(GENERIC_LAYOUT_RULES.section, context) || GENERIC_LAYOUTS.SECTION_COVER;
     }
 
-    if (/^fpv(?:isual)?\b/i.test(String(title || ""))) return GENERIC_LAYOUTS.FPVISUAL;
-    if (t.indexOf("project manager") !== -1 || t.indexOf("dedicated project manager") !== -1) return GENERIC_LAYOUTS.PM;
-    if (t.indexOf("specialist team") !== -1 || t === "team" || t.indexOf("team") !== -1 && t.indexOf("specialist") !== -1) return GENERIC_LAYOUTS.TEAM;
-    if (t.indexOf("experience") !== -1 && t.indexOf("expertise") !== -1) return GENERIC_LAYOUTS.EXP;
-    if (t === "our experts" || t.indexOf("experts") !== -1) return GENERIC_LAYOUTS.EXPERTS;
-    if (t === "critical path") return GENERIC_LAYOUTS.CRITICAL_PATH;
-    if (t === "sustainability") return GENERIC_LAYOUTS.SUSTAINABILITY;
-    if (t === "about us") return GENERIC_LAYOUTS.ABOUT_US;
-    if (t === "thank you" || t.indexOf("thank you") !== -1) return GENERIC_LAYOUTS.THANKYOU;
-    if (t === "project total" || t === "proposal summary") return GENERIC_LAYOUTS.SUMMARY;
-    if (sectionTitle === "visual") return GENERIC_LAYOUTS.VISUAL;
-    return GENERIC_LAYOUTS.DEPT_TABLE;
+    return matchGenericLayoutRules(GENERIC_LAYOUT_RULES.dept, context) || GENERIC_LAYOUTS.DEPT_TABLE;
   }
 
   function normalizeGenericMatchText(value) {
@@ -3285,24 +3376,8 @@
   }
 
   function genericLayoutLabel(layoutId) {
-    var labels = {};
-    labels[GENERIC_LAYOUTS.HERO] = "Hero cover";
-    labels[GENERIC_LAYOUTS.SECTION_COVER] = "Title cover";
-    labels[GENERIC_LAYOUTS.DEPT_TABLE] = "Dept costing/text page";
-    labels[GENERIC_LAYOUTS.SUMMARY] = "Proposal summary / project total";
-    labels[GENERIC_LAYOUTS.VISUAL] = "Visual page";
-    labels[GENERIC_LAYOUTS.FPVISUAL] = "Full-page visual / embed";
-    labels[GENERIC_LAYOUTS.VENUE_HERO] = "Venue hero";
-    labels[GENERIC_LAYOUTS.EXP] = "Experience & Expertise";
-    labels[GENERIC_LAYOUTS.EXPERTS] = "Our Experts";
-    labels[GENERIC_LAYOUTS.PM] = "Project manager";
-    labels[GENERIC_LAYOUTS.TEAM] = "Specialist team";
-    labels[GENERIC_LAYOUTS.CRITICAL_PATH] = "Critical path";
-    labels[GENERIC_LAYOUTS.THANKYOU] = "Thank you";
-    labels[GENERIC_LAYOUTS.SUSTAINABILITY] = "Sustainability";
-    labels[GENERIC_LAYOUTS.ABOUT_US] = "About us";
-    labels[GENERIC_LAYOUTS.DETAILS_CONTAINER] = "Details container";
-    return labels[layoutId] || "Proposal page";
+    var config = getGenericLayoutConfig(layoutId);
+    return config && config.label ? config.label : "Proposal page";
   }
 
   function isOurProposalSeparatorState(state) {
@@ -3413,11 +3488,13 @@
   }
 
   function isGenericManagedRowsLayout(layoutId) {
-    return layoutId === GENERIC_LAYOUTS.CRITICAL_PATH;
+    var config = getGenericLayoutConfig(layoutId);
+    return !!(config && config.managedRows);
   }
 
   function isCostingRowsLayout(layoutId) {
-    return layoutId === GENERIC_LAYOUTS.DEPT_TABLE;
+    var config = getGenericLayoutConfig(layoutId);
+    return !!(config && config.costingRows);
   }
 
   function isGenericCostingSupportState(state) {
@@ -3437,7 +3514,44 @@
   }
 
   function isGenericLockedLayout(layoutId) {
-    return layoutId === GENERIC_LAYOUTS.SUSTAINABILITY || layoutId === GENERIC_LAYOUTS.ABOUT_US;
+    var config = getGenericLayoutConfig(layoutId);
+    return !!(config && config.locked);
+  }
+
+  function getGenericPageNote(state) {
+    state = normaliseGenericState(state || {});
+
+    if (isOurProposalSeparatorState(state)) {
+      return "Our Proposal is a fixed visual separator. The only editable setting is whether it is hidden from the proposal.";
+    }
+    if (isFixedHeroState(state)) {
+      return "Hero is the fixed opening page. Its heading name and visibility are locked; only the background image is edited here.";
+    }
+    if (isVenueHeroState(state)) {
+      return "The venue name is taken from the project details automatically. You can edit the description, image URL and hide setting only.";
+    }
+    if (state.layoutId === GENERIC_LAYOUTS.SECTION_COVER) {
+      return "This title cover is the Section page. Use the Dept controls below to open an existing child costing page or create a new one inside this section.";
+    }
+    if (shouldUseLabourDayFolders(state)) {
+      return "Labour uses up to three Day folders for crew resource items. Edit the day titles here, then use each day card to save that folder and open HireHop's native listed-item picker on it.";
+    }
+    if (state.layoutId === GENERIC_LAYOUTS.PM || state.layoutId === GENERIC_LAYOUTS.TEAM) {
+      return "People on this page are managed from HireHop's native listed-item picker, not from manual fields in this editor.";
+    }
+    if (state.layoutId === GENERIC_LAYOUTS.DETAILS_CONTAINER) {
+      return "Details is a locked container. Keep the heading named Details; use the suffix selector only, then select a nested page heading to edit the pages inside.";
+    }
+    if (isGenericLockedLayout(state.layoutId)) {
+      return "This page is locked because its visible copy is controlled by the renderer.";
+    }
+    if (isGenericManagedRowsLayout(state.layoutId)) {
+      return "This page type stores its visible cards as child custom rows.";
+    }
+    if (isCostingRowsLayout(state.layoutId)) {
+      return "Use the costing builder below for client revenue lines and the hidden Technical Use folder for internal listed items.";
+    }
+    return "This editor updates the heading title, description and technical/image field. Existing costing rows are not changed.";
   }
 
   function readGenericRowState(node, layoutId) {
@@ -3709,37 +3823,7 @@
   }
 
   function genericTopbarHtml(state) {
-    var managed = isGenericManagedRowsLayout(state.layoutId);
-    var note = managed
-      ? "This page type stores its visible cards as child custom rows."
-      : (isCostingRowsLayout(state.layoutId)
-        ? "Use the costing builder below for client revenue lines and the hidden Technical Use folder for internal listed items."
-        : "This editor updates the heading title, description and technical/image field. Existing costing rows are not changed.");
-
-    if (state.layoutId === GENERIC_LAYOUTS.SECTION_COVER) {
-      note = "This title cover is the Section page. Use the Dept controls below to open an existing child costing page or create a new one inside this section.";
-    }
-    if (isOurProposalSeparatorState(state)) {
-      note = "Our Proposal is a fixed visual separator. The only editable setting is whether it is hidden from the proposal.";
-    }
-    if (isFixedHeroState(state)) {
-      note = "Hero is the fixed opening page. Its heading name and visibility are locked; only the background image is edited here.";
-    }
-    if (isVenueHeroState(state)) {
-      note = "The venue name is taken from the project details automatically. You can edit the description, image URL and hide setting only.";
-    }
-    if (shouldUseLabourDayFolders(state)) {
-      note = "Labour uses up to three Day folders for crew resource items. Edit the day titles here, then use each day card to save that folder and open HireHop's native listed-item picker on it.";
-    }
-    if (state.layoutId === GENERIC_LAYOUTS.PM || state.layoutId === GENERIC_LAYOUTS.TEAM) {
-      note = "People on this page are managed from HireHop's native listed-item picker, not from manual fields in this editor.";
-    }
-    if (state.layoutId === GENERIC_LAYOUTS.DETAILS_CONTAINER) {
-      note = "Details is a locked container. Keep the heading named Details; use the suffix selector only, then select a nested page heading to edit the pages inside.";
-    }
-    if (isGenericLockedLayout(state.layoutId)) {
-      note = "This page is locked because its visible copy is controlled by the renderer.";
-    }
+    var note = getGenericPageNote(state);
 
     return '' +
       '<div class="wpe-topbar">' +
@@ -3951,19 +4035,8 @@
   }
 
   function genericCanvasHtml(state) {
-    if (state.layoutId === GENERIC_LAYOUTS.HERO) return genericHeroHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.SECTION_COVER) return genericSectionCoverHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.VISUAL) return genericVisualHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.FPVISUAL) return genericFullVisualHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.VENUE_HERO) return genericVenueHeroHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.EXP || state.layoutId === GENERIC_LAYOUTS.EXPERTS) return genericExperienceHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.PM) return genericProjectManagerHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.TEAM) return genericTeamHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.CRITICAL_PATH) return genericCriticalPathHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.THANKYOU) return genericThankYouHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.DETAILS_CONTAINER) return genericDetailsContainerHtml(state);
-    if (state.layoutId === GENERIC_LAYOUTS.SUSTAINABILITY) return genericLockedPageHtml(state, "Sustainability", "This page is locked. The renderer controls the sustainability title, copy and image treatment.", true);
-    if (state.layoutId === GENERIC_LAYOUTS.ABOUT_US) return genericLockedPageHtml(state, "About Us", "This page is locked. The renderer controls the About Us title, copy and image treatment.", true);
+    var config = getGenericLayoutConfig(state.layoutId);
+    if (config && typeof config.render === "function") return config.render(state);
     return genericDeptTableHtml(state);
   }
 
@@ -4369,6 +4442,14 @@
 
   function genericFixedContentHtml(state, heading, note, dark) {
     return genericLockedPageHtml(state, heading, note, dark);
+  }
+
+  function genericSustainabilityHtml(state) {
+    return genericLockedPageHtml(state, "Sustainability", "This page is locked. The renderer controls the sustainability title, copy and image treatment.", true);
+  }
+
+  function genericAboutUsHtml(state) {
+    return genericLockedPageHtml(state, "About Us", "This page is locked. The renderer controls the About Us title, copy and image treatment.", true);
   }
 
   function genericLockedPageHtml(state, heading, note, dark) {
@@ -5601,10 +5682,11 @@
     try {
       clickElementLikeUser($new.get(0));
       if (opts.preferListedItem) {
-        setTimeout(function () { clickLikelyListedItemMenuOption(); }, 350);
-        setTimeout(function () { clickLikelyListedItemMenuOption(); }, 900);
-        setTimeout(function () { clickLikelyListedItemMenuOption(); }, 1500);
-        setTimeout(function () { clickLikelyListedItemMenuOption(); }, 2300);
+        for (var i = 0; i < LISTED_ITEM_MENU_RETRY_DELAYS.length; i++) {
+          (function (delay) {
+            setTimeout(function () { clickLikelyListedItemMenuOption(); }, delay);
+          })(LISTED_ITEM_MENU_RETRY_DELAYS[i]);
+        }
       }
     } catch (err) {
       warn("Native new item picker failed", err);
@@ -5775,6 +5857,59 @@
     }, row.id || source.ID);
   }
 
+  function getGenericLayoutRegistrySummary() {
+    var ids = Object.keys(GENERIC_LAYOUT_CONFIG);
+    var summary = [];
+
+    for (var i = 0; i < ids.length; i++) {
+      var id = ids[i];
+      var config = GENERIC_LAYOUT_CONFIG[id] || {};
+      summary.push({
+        id: id,
+        label: config.label || "Proposal page",
+        managedRows: !!config.managedRows,
+        costingRows: !!config.costingRows,
+        locked: !!config.locked,
+        renderHandler: config.render && config.render.name ? config.render.name : ""
+      });
+    }
+
+    return summary;
+  }
+
+  function describeProposalEditorArchitecture() {
+    return {
+      version: CFG.version,
+      role: "HireHop proposal authoring overlay that reads/writes supplying-list headings and metadata consumed by QTC-V2.html.",
+      rendererReference: "QTC-V2.html",
+      modes: [
+        {
+          id: MODE_EVENT_OVERVIEW,
+          purpose: "Visual editor for the hidden Event Overview root section and its day/time child headings.",
+          storageKeys: [CFG.rootTemplateKey, CFG.deptTemplateKey]
+        },
+        {
+          id: MODE_GENERIC,
+          purpose: "Visual editor for generic Section/Dept proposal pages, renderer-locked pages, and HireHop-native item handoff flows.",
+          storageKeys: [GENERIC_META_EDITOR, LABOUR_DAY_META_EDITOR]
+        }
+      ],
+      storageModel: {
+        metaEnvelope: { start: CFG.metaStart, end: CFG.metaEnd },
+        genericPageEditor: GENERIC_META_EDITOR,
+        genericPageVersion: GENERIC_META_VERSION,
+        labourDayEditor: LABOUR_DAY_META_EDITOR,
+        labourDayVersion: LABOUR_DAY_META_VERSION
+      },
+      sourceOfTruth: [
+        "HireHop supplying-list tree headings/items",
+        "Hidden WisePageMeta JSON embedded in TECHNICAL/memo fields",
+        "QTC-V2.html layout mappings and templates"
+      ],
+      registeredLayouts: getGenericLayoutRegistrySummary()
+    };
+  }
+
   window.__wiseProposalPageEditor = {
     open: openEditor,
     openNative: openNativeLineEditor,
@@ -5786,6 +5921,7 @@
       polishToolbarLine();
       updateToolbarCompression();
     },
+    describe: describeProposalEditorArchitecture,
     read: function () { return clone(editor.current); },
     version: CFG.version
   };
