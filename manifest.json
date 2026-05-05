@@ -1,38 +1,44 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-05-05.02",
+  "version": "2026-05-05.03",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "activeScripts": [
     {
-      "file": "wise-docpreviewpanel-ui.js",
+      "file": "1-docprev.js",
       "status": "active",
       "role": "Document preview panel used by power users and by the page editor preview dock.",
       "recommendedLoadOrder": 1
     },
     {
-      "file": "wise-autopull-selectall-ui.js",
+      "file": "2-apselall.js",
       "status": "active",
       "role": "Small native-popup helper for repetitive line item selection actions.",
       "recommendedLoadOrder": 2
     },
     {
-      "file": "wise-sectionbuilder-meta-ui.js",
+      "file": "3-meta.js",
       "status": "active-module",
       "role": "Shared WisePageMeta and editor/template identifier contract consumed by the section builder and aligned to the QTC renderer.",
       "recommendedLoadOrder": 3
     },
     {
-      "file": "wise-sectionbuilder-layouts-ui.js",
+      "file": "4-layout.js",
       "status": "active-module",
       "role": "Shared proposal page/layout catalogue consumed by the section builder.",
       "recommendedLoadOrder": 4
     },
     {
-      "file": "wise-sectionbuilder2-ui.js",
+      "file": "5-hirehop.js",
+      "status": "active-module",
+      "role": "Shared HireHop selectors, endpoint paths, depot rules, retry timings, and tree item prefixes consumed by the section builder.",
+      "recommendedLoadOrder": 5
+    },
+    {
+      "file": "6-editor2.js",
       "status": "active-primary",
       "role": "Main proposal page editor and HireHop authoring layer.",
-      "recommendedLoadOrder": 5
+      "recommendedLoadOrder": 6
     }
   ],
   "referenceFiles": [
