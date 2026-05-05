@@ -5,6 +5,7 @@
   if (!$) return;
 
   var META_MODULE_GLOBAL = "WiseProposalSectionBuilderMeta";
+  var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   /*
    * HireHop proposal authoring layer for QTC-V2.html.
@@ -14,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-05.11-modular-meta",
+    version: "2026-05-05.12-modular-hirehop",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -35,14 +36,14 @@
     requiredRawSectionName: "// Section: Event Overview",
     maxSchedules: 3,
     maxRows: 10,
-    allowedDepotIds: ["14"],
-    allowedDepotNames: ["Project Costs"],
-    blockWhenDepotUndetected: true,
-    bootstrapMaxTries: 120,
-    bootstrapRetryMs: 500,
-    writeThrottleMs: 1150,
-    rateLimitRetryMs: 65000,
-    saveMaxAttempts: 2,
+    allowedDepotIds: getHireHopArrayValue("depot", "allowedIds", ["14"]),
+    allowedDepotNames: getHireHopArrayValue("depot", "allowedNames", ["Project Costs"]),
+    blockWhenDepotUndetected: getHireHopBooleanValue("depot", "blockWhenUndetected", true),
+    bootstrapMaxTries: getHireHopNumberValue("timings", "bootstrapMaxTries", 120),
+    bootstrapRetryMs: getHireHopNumberValue("timings", "bootstrapRetryMs", 500),
+    writeThrottleMs: getHireHopNumberValue("timings", "writeThrottleMs", 1150),
+    rateLimitRetryMs: getHireHopNumberValue("timings", "rateLimitRetryMs", 65000),
+    saveMaxAttempts: getHireHopNumberValue("timings", "saveMaxAttempts", 2),
     metaStart: getMetaEnvelopeValue("start", "[WisePageMeta]"),
     metaEnd: getMetaEnvelopeValue("end", "[/WisePageMeta]"),
     profileKey: getEventOverviewMetaValue("profileKey", "event_overview_schedule"),
@@ -62,8 +63,17 @@
     proofMaxWidth: 920,
     proofMinWidth: 640
   };
-  var PREVIEW_ATTACH_RETRY_DELAYS = [10, 180, 720, 1600];
-  var LISTED_ITEM_MENU_RETRY_DELAYS = [350, 900, 1500, 2300];
+  var PREVIEW_ATTACH_RETRY_DELAYS = getHireHopDelayList("previewAttachRetryDelays", [10, 180, 720, 1600]);
+  var LISTED_ITEM_MENU_RETRY_DELAYS = getHireHopDelayList("listedItemMenuRetryDelays", [350, 900, 1500, 2300]);
+  var ITEMS_TAB_SELECTOR = getHireHopSelector("itemsTab", "#items_tab");
+  var ITEMS_TOOLBAR_SELECTOR = getHireHopSelector("toolbarHost", "#items_tab > div:first-child");
+  var ITEMS_TREE_SELECTOR = getHireHopSelector("tree", "#items_tab .jstree");
+  var ITEMS_TREE_NODES_SELECTOR = getHireHopSelector("treeNodes", "#items_tab li.jstree-node,#items_tab a.jstree-anchor");
+  var ITEMS_TREE_CLICKED_SELECTOR = getHireHopSelector("treeClicked", "#items_tab .jstree-clicked");
+  var ITEMS_TREE_SELECTED_FALLBACK_SELECTOR = getHireHopSelector("treeSelectedFallback", "#items_tab li.jstree-node.jstree-clicked, #items_tab li.jstree-selected, #items_tab li[aria-selected='true'], #items_tab a.jstree-anchor[aria-selected='true']");
+  var DEPOT_LABEL_SELECTOR = getHireHopSelector("depotLabel", "[data-label=\"depotTxt\"]");
+  var HIREHOP_ITEMS_SAVE_ENDPOINT = getHireHopEndpoint("itemsSave", "/php_functions/items_save.php");
+  var HIREHOP_ITEMS_DELETE_ENDPOINT = getHireHopEndpoint("itemsDelete", "/php_functions/items_delete.php");
   var LAYOUT_MODULE_GLOBAL = "WiseProposalSectionBuilderLayouts";
 
   var EDITOR_PREVIEW = {
@@ -131,6 +141,56 @@
     return isFinite(n) && n > 0 ? n : fallback;
   }
 
+  function getExternalHireHopModule() {
+    var module = window[HIREHOP_MODULE_GLOBAL];
+    return module && typeof module === "object" ? module : null;
+  }
+
+  function getHireHopModuleSection(name) {
+    var module = getExternalHireHopModule();
+    var section = module && module[name];
+    return section && typeof section === "object" ? section : null;
+  }
+
+  function getHireHopModuleValue(sectionName, key, fallback) {
+    var section = getHireHopModuleSection(sectionName);
+    var value = section && section[key];
+    return value == null || value === "" ? fallback : value;
+  }
+
+  function getHireHopSelector(key, fallback) {
+    return String(getHireHopModuleValue("selectors", key, fallback));
+  }
+
+  function getHireHopEndpoint(key, fallback) {
+    return String(getHireHopModuleValue("endpoints", key, fallback));
+  }
+
+  function getHireHopNumberValue(sectionName, key, fallback) {
+    var n = Number(getHireHopModuleValue(sectionName, key, fallback));
+    return isFinite(n) && n > 0 ? n : fallback;
+  }
+
+  function getHireHopBooleanValue(sectionName, key, fallback) {
+    var value = getHireHopModuleValue(sectionName, key, fallback);
+    return value === true || value === false ? value : fallback;
+  }
+
+  function getHireHopArrayValue(sectionName, key, fallback) {
+    var value = getHireHopModuleValue(sectionName, key, fallback);
+    return Array.isArray(value) ? value.slice() : fallback.slice();
+  }
+
+  function getHireHopDelayList(key, fallback) {
+    var values = getHireHopArrayValue("timings", key, fallback);
+    var out = [];
+    for (var i = 0; i < values.length; i++) {
+      var n = Number(values[i]);
+      if (isFinite(n) && n >= 0) out.push(n);
+    }
+    return out.length ? out : fallback.slice();
+  }
+
   log("Proposal page editor loaded", CFG.version);
   boot();
 
@@ -145,7 +205,7 @@
         return;
       }
 
-      if (!$("#items_tab").length) {
+      if (!$(ITEMS_TAB_SELECTOR).length) {
         if (tries < CFG.bootstrapMaxTries) setTimeout(attempt, CFG.bootstrapRetryMs);
         return;
       }
@@ -437,11 +497,11 @@
     var $new = findToolbarActionButton(/^new\b/i);
     if ($new.length && $new.parent().length) return $new.parent();
 
-    return $("#items_tab > div:first-child");
+    return $(ITEMS_TOOLBAR_SELECTOR);
   }
 
   function findToolbarActionButton(pattern) {
-    var $scope = $("#items_tab > div:first-child");
+    var $scope = $(ITEMS_TOOLBAR_SELECTOR);
     if (!$scope.length) return $();
     return $scope.find('button,a,[role="button"],input[type="button"],input[type="submit"]').filter(":visible").filter(function () {
       var text = $.trim($(this).text() || $(this).val() || $(this).attr("title") || $(this).attr("aria-label") || "");
@@ -456,7 +516,7 @@
   }
 
   function findNativeEditButton() {
-    var $scope = $("#items_tab > div:first-child");
+    var $scope = $(ITEMS_TOOLBAR_SELECTOR);
     if (!$scope.length) return $();
 
     return $scope.find('button,a,[role="button"],input[type="button"],input[type="submit"]').filter(":visible").filter(function () {
@@ -567,7 +627,7 @@
     if ($("#" + CFG.overlayId).is(":visible")) return;
 
     var $target = $(e.target);
-    if (!$target.closest("#items_tab").length) return;
+    if (!$target.closest(ITEMS_TAB_SELECTOR).length) return;
     if (!$target.closest(".jstree,li.jstree-node,a.jstree-anchor").length) return;
 
     var tree = getTree();
@@ -608,7 +668,7 @@
   function installTreeClickTracker() {
     $(document).off(".wiseEventOverviewSelection").on(
       "mousedown.wiseEventOverviewSelection click.wiseEventOverviewSelection dblclick.wiseEventOverviewSelection",
-      "#items_tab li.jstree-node,#items_tab a.jstree-anchor",
+      ITEMS_TREE_NODES_SELECTOR,
       function () {
         var $li = $(this).is("li.jstree-node") ? $(this) : $(this).closest("li.jstree-node");
         if ($li.length) editor.lastClickedNodeId = $.trim(String($li.attr("id") || ""));
@@ -1691,7 +1751,7 @@
   }
 
   function getTree() {
-    var $trees = $("#items_tab").find(".jstree");
+    var $trees = $(ITEMS_TREE_SELECTOR);
     for (var i = 0; i < $trees.length; i++) {
       try {
         var tree = $($trees[i]).jstree(true);
@@ -1744,12 +1804,12 @@
       }
     }
 
-    collectTreeNodesFromDom(tree, $("#items_tab .jstree-clicked"), nodes, seen);
+    collectTreeNodesFromDom(tree, $(ITEMS_TREE_CLICKED_SELECTOR), nodes, seen);
 
     if (!nodes.length) {
       collectTreeNodesFromDom(
         tree,
-        $("#items_tab li.jstree-node.jstree-clicked, #items_tab li.jstree-selected, #items_tab li[aria-selected='true'], #items_tab a.jstree-anchor[aria-selected='true']"),
+        $(ITEMS_TREE_SELECTED_FALLBACK_SELECTOR),
         nodes,
         seen
       );
@@ -2074,7 +2134,7 @@
       attempts += 1;
       await throttleWrite();
 
-      var response = await fetch("/php_functions/items_delete.php", {
+      var response = await fetch(HIREHOP_ITEMS_DELETE_ENDPOINT, {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
@@ -2101,7 +2161,7 @@
       attempts += 1;
       await throttleWrite();
 
-      var response = await fetch("/php_functions/items_save.php", {
+      var response = await fetch(HIREHOP_ITEMS_SAVE_ENDPOINT, {
         method: "POST",
         credentials: "same-origin",
         headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
@@ -2162,7 +2222,7 @@
 
   function findRefreshControl() {
     var selector = 'button,a,[role="button"],input[type="button"],input[type="submit"]';
-    var scopes = [$("#items_tab > div:first-child").get(0), $("#items_tab").get(0), document.body];
+    var scopes = [$(ITEMS_TOOLBAR_SELECTOR).get(0), $(ITEMS_TAB_SELECTOR).get(0), document.body];
 
     for (var i = 0; i < scopes.length; i++) {
       if (!scopes[i]) continue;
@@ -2307,8 +2367,8 @@
   function extendSnapshot(snapshot, updates) { return $.extend(true, {}, snapshot || {}, updates || {}); }
 
   function getTreeNodePrefixForKind(kind) {
-    var prefixes = { 0: "a", 1: "b", 2: "c", 3: "d", 4: "e", 5: "f", 6: "g" };
-    return prefixes[Number(kind)] || "";
+    var prefixes = getHireHopModuleSection("kindPrefixes") || { 0: "a", 1: "b", 2: "c", 3: "d", 4: "e", 5: "f", 6: "g" };
+    return prefixes[String(Number(kind))] || "";
   }
 
   function getSavedItemId(json) {
@@ -2396,7 +2456,7 @@
   }
 
   function findHeaderDepotSelect() {
-    var $label = $('[data-label="depotTxt"]').first();
+    var $label = $(DEPOT_LABEL_SELECTOR).first();
     var $select = findSelectNear($label);
     if ($select.length) return $select;
 
@@ -5777,7 +5837,7 @@
   }
 
   function findNativeNewButton() {
-    var $scope = $("#items_tab > div:first-child");
+    var $scope = $(ITEMS_TOOLBAR_SELECTOR);
     if (!$scope.length) return $();
     return $scope.find('button,a,[role="button"],input[type="button"],input[type="submit"]').filter(":visible").filter(function () {
       var $el = $(this);
@@ -5829,7 +5889,7 @@
     $(document.body).find(selector).filter(":visible").each(function () {
       var $el = $(this);
       if ($el.closest("#" + CFG.overlayId).length) return;
-      if ($el.closest("#items_tab").length && !$el.closest(".ui-menu,.ui-dialog,.popup,.modal,.dropdown,.context-menu").length) return;
+      if ($el.closest(ITEMS_TAB_SELECTOR).length && !$el.closest(".ui-menu,.ui-dialog,.popup,.modal,.dropdown,.context-menu").length) return;
 
       var text = $.trim($el.text() || $el.attr("title") || $el.attr("aria-label") || "");
       if (!text || text.length > 100) return;
@@ -6018,6 +6078,14 @@
         labourDayVersion: LABOUR_DAY_META_VERSION
       },
       modules: {
+        hireHopIntegration: {
+          global: HIREHOP_MODULE_GLOBAL,
+          loaded: !!getExternalHireHopModule(),
+          version: getExternalHireHopModule() && getExternalHireHopModule().version ? String(getExternalHireHopModule().version) : "",
+          itemsTabSelector: ITEMS_TAB_SELECTOR,
+          saveEndpoint: HIREHOP_ITEMS_SAVE_ENDPOINT,
+          deleteEndpoint: HIREHOP_ITEMS_DELETE_ENDPOINT
+        },
         metaSchema: {
           global: META_MODULE_GLOBAL,
           loaded: !!getExternalMetaModule(),
