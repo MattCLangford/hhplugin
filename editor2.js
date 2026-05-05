@@ -5101,7 +5101,7 @@
 
   function handleLabourCrewDialogOpenFailure() {
     var ctx = editor.labourCrewContext;
-    if (!ctx || ctx.dialogOpened) return;
+    if (!ctx || ctx.dialogOpened || ctx.closing) return;
     var rootId = String(ctx.rootId || "");
     editor.labourCrewContext = null;
     hideLabourCrewWindow();
@@ -5929,7 +5929,10 @@
   }
 
   function applyListedItemsDialogAutomation(mode) {
-    if (mode === "labourCrew") return configureLabourCrewListedItemsDialog();
+    if (mode === "labourCrew") {
+      if (!editor.labourCrewContext || editor.labourCrewContext.closing) return false;
+      return configureLabourCrewListedItemsDialog();
+    }
     return false;
   }
 
@@ -5943,7 +5946,7 @@
 
   function configureLabourCrewListedItemsDialog() {
     var ctx = editor.labourCrewContext;
-    if (!ctx) return false;
+    if (!ctx || ctx.closing) return false;
 
     var $dialog = getLabourCrewNativeDialog(ctx);
     if (!$dialog.length) $dialog = findVisibleListedItemsDialog();
@@ -6216,17 +6219,12 @@
     var $dialog = context.nativeDialogNode && document.body.contains(context.nativeDialogNode) ? $(context.nativeDialogNode) : $();
     if ($dialog.length) {
       $dialog.removeClass("wise-labour-crew-native-source");
-      if (context.nativeDialogStyle == null) $dialog.removeAttr("style");
-      else $dialog.attr("style", context.nativeDialogStyle);
-      if (context.nativeDialogAriaHidden == null) $dialog.removeAttr("aria-hidden");
-      else $dialog.attr("aria-hidden", context.nativeDialogAriaHidden);
+      $dialog.removeAttr("aria-hidden");
     }
 
     var $overlay = context.nativeOverlayNode && document.body.contains(context.nativeOverlayNode) ? $(context.nativeOverlayNode) : $();
     if ($overlay.length) {
       $overlay.removeClass("wise-labour-crew-native-overlay");
-      if (context.nativeOverlayStyle == null) $overlay.removeAttr("style");
-      else $overlay.attr("style", context.nativeOverlayStyle);
     }
   }
 
