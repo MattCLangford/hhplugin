@@ -5,7 +5,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-05-05.04-labour-crew-selector-window",
+    version: "2026-05-05.05-labour-crew-reset",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -4894,34 +4894,22 @@
     beginLabourCrewDialogSession({
       rootId: state.rootId || getNodeDataId(editor.rootNode),
       dayId: day.id,
+      dayIndex: dayIndex,
       label: label
     });
 
     setStatus("Opening Crew selector for " + label + "...", "info");
-    setTimeout(function () {
-      var tree = getTree();
-      var selected = selectTreeHeadingByDataId(tree, day.id);
-      if (!selected) {
-        editor.labourCrewContext = null;
-        setStatus(label + " is ready, but the Crew selector could not target that folder automatically.", "warning");
-        return;
-      }
-
-      hideEditorOverlayForNativePopup();
-      setTimeout(function () {
-        openNativeNewLineEditor({ preferListedItem: true, picklistMode: "labourCrew" });
-      }, 120);
-    }, 900);
+    attemptOpenLabourCrewDialog(0);
   }
 
   function beginLabourCrewDialogSession(context) {
     editor.labourCrewContext = $.extend({
       rootId: "",
       dayId: "",
+      dayIndex: -1,
       label: "Crew day",
       saveRequested: false,
-      dialogOpened: false,
-      reopened: false
+      dialogOpened: false
     }, context || {});
   }
 
@@ -4930,28 +4918,40 @@
     editor.labourCrewContext.saveRequested = true;
   }
 
+  function attemptOpenLabourCrewDialog(attempt) {
+    var ctx = editor.labourCrewContext;
+    if (!ctx) return;
+
+    var tree = getTree();
+    if (!tree || !selectTreeHeadingByDataId(tree, ctx.dayId)) {
+      if (attempt < 5) {
+        if (attempt === 0) refreshSupplyingList();
+        setTimeout(function () { attemptOpenLabourCrewDialog(attempt + 1); }, 420 + (attempt * 220));
+        return;
+      }
+
+      editor.labourCrewContext = null;
+      setStatus('Could not target the saved "' + ctx.label + '" folder for Crew selection. Refresh the supplying list and try again.', "warning");
+      return;
+    }
+
+    openNativeNewLineEditor({ preferListedItem: true, picklistMode: "labourCrew" });
+  }
+
   function handleLabourCrewDialogOpenFailure() {
     var ctx = editor.labourCrewContext;
-    if (!ctx || ctx.dialogOpened || ctx.reopened) return;
-    reopenEditorAfterLabourCrewDialog(false, ctx.label + " is saved, but the Crew selector did not open. Try Add Crew again.");
+    if (!ctx || ctx.dialogOpened) return;
+    editor.labourCrewContext = null;
+    setStatus("Could not open the Crew selector for " + ctx.label + ". The day folder saved correctly, but the Crew list never appeared.", "warning");
   }
 
   function handleLabourCrewDialogClosed() {
     var ctx = editor.labourCrewContext;
-    if (!ctx || ctx.reopened) return;
+    if (!ctx) return;
 
-    reopenEditorAfterLabourCrewDialog(
-      !!ctx.saveRequested,
-      ctx.saveRequested ? (ctx.label + " crew updated.") : "Crew selector closed."
-    );
-  }
-
-  function reopenEditorAfterLabourCrewDialog(didSave, message) {
-    var ctx = editor.labourCrewContext;
-    if (!ctx || ctx.reopened) return;
-
-    ctx.reopened = true;
     var rootId = String(ctx.rootId || "");
+    var label = String(ctx.label || "Crew day");
+    var didSave = !!ctx.saveRequested;
     editor.labourCrewContext = null;
 
     if (didSave) {
@@ -4961,12 +4961,13 @@
 
     setTimeout(function () {
       if (rootId && openEditorForHeadingDataId(rootId, {
-        notice: message,
+        showOverlay: false,
+        notice: didSave ? (label + " crew updated.") : "Crew selector closed.",
         noticeTone: didSave ? "success" : "info"
       })) return;
 
-      setStatus(message, didSave ? "success" : "info");
-    }, didSave ? 950 : 220);
+      setStatus(didSave ? (label + " crew updated.") : "Crew selector closed.", didSave ? "success" : "info");
+    }, didSave ? 950 : 180);
   }
 
   async function saveLabourDayCard(state, dayIndex) {
@@ -5713,14 +5714,14 @@
 
   function scheduleListedItemsDialogAutomation(mode) {
     if (!mode) return;
-    var delays = [450, 900, 1500, 2300, 3200];
+    var delays = [450, 900, 1500, 2300, 3200, 4200];
     for (var i = 0; i < delays.length; i++) {
       (function (delay) {
         setTimeout(function () { applyListedItemsDialogAutomation(mode); }, delay);
       })(delays[i]);
     }
     if (mode === "labourCrew") {
-      setTimeout(handleLabourCrewDialogOpenFailure, 4300);
+      setTimeout(handleLabourCrewDialogOpenFailure, 5200);
     }
   }
 
@@ -5755,6 +5756,7 @@
     if (!$dialog || !$dialog.length) return false;
 
     $dialog.addClass("wise-labour-crew-dialog");
+    $dialog.css("z-index", "100020");
     $dialog.find(".ui-dialog-title").first().text("Select Crew");
 
     var label = editor.labourCrewContext && editor.labourCrewContext.label ? editor.labourCrewContext.label : "Crew day";
@@ -5814,7 +5816,7 @@
     var timer = setInterval(function () {
       attempts += 1;
       var ctx = editor.labourCrewContext;
-      if (!ctx || ctx.reopened) {
+      if (!ctx) {
         clearInterval(timer);
         return;
       }
