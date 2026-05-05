@@ -1,0 +1,57 @@
+{
+  "name": "wise-hirehop-proposal-platform",
+  "version": "2026-05-05.02",
+  "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, and QTC renderer alignment.",
+  "runtime": "HireHop browser UI",
+  "activeScripts": [
+    {
+      "file": "wise-docpreviewpanel-ui.js",
+      "status": "active",
+      "role": "Document preview panel used by power users and by the page editor preview dock.",
+      "recommendedLoadOrder": 1
+    },
+    {
+      "file": "wise-autopull-selectall-ui.js",
+      "status": "active",
+      "role": "Small native-popup helper for repetitive line item selection actions.",
+      "recommendedLoadOrder": 2
+    },
+    {
+      "file": "wise-sectionbuilder-meta-ui.js",
+      "status": "active-module",
+      "role": "Shared WisePageMeta and editor/template identifier contract consumed by the section builder and aligned to the QTC renderer.",
+      "recommendedLoadOrder": 3
+    },
+    {
+      "file": "wise-sectionbuilder-layouts-ui.js",
+      "status": "active-module",
+      "role": "Shared proposal page/layout catalogue consumed by the section builder.",
+      "recommendedLoadOrder": 4
+    },
+    {
+      "file": "wise-sectionbuilder2-ui.js",
+      "status": "active-primary",
+      "role": "Main proposal page editor and HireHop authoring layer.",
+      "recommendedLoadOrder": 5
+    }
+  ],
+  "referenceFiles": [
+    {
+      "file": "QTC-V2.html",
+      "status": "reference-only",
+      "role": "Copy of the renderer already deployed in HireHop; useful locally for alignment checks."
+    }
+  ],
+  "legacyFiles": [
+    {
+      "file": "wise-headingedit-ui.js",
+      "status": "deprecated-off",
+      "role": "V1 concept editor superseded by sectionbuilder2."
+    },
+    {
+      "file": "wise-sectionbuilder-ui.js",
+      "status": "fallback-only",
+      "role": "Older section builder snapshot retained as a manual rollback reference."
+    }
+  ]
+}
