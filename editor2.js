@@ -5,7 +5,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-05-05.05-labour-crew-reset",
+    version: "2026-05-05.06-labour-crew-folder-lock",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -38,7 +38,8 @@
     metaEnd: "[/WisePageMeta]",
     profileKey: "event_overview_schedule",
     rootTemplateKey: "section_event_overview",
-    deptTemplateKey: "dept_proposed_timings"
+    deptTemplateKey: "dept_proposed_timings",
+    labourCrewCategoryPath: ["Root (All)", "ML - Quote Test", "Crew"]
   };
 
   var LAYOUT_IMAGE = "image";
@@ -2687,19 +2688,35 @@
       "#" + CFG.modalId + " .wpe-labour-day-items.is-empty{color:#98a2b3;font-style:italic;}",
       "#" + CFG.modalId + " .wpe-labour-day-actions{display:flex;gap:5px;flex-wrap:wrap;}",
       "#" + CFG.modalId + " .wpe-labour-day-actions .wpe-mini-btn{flex:1 1 0;min-width:96px;}",
-      ".wise-labour-crew-dialog{max-width:min(1120px,calc(100vw - 28px))!important;z-index:100003!important;}",
+      ".wise-labour-crew-dialog{max-width:min(1160px,calc(100vw - 28px))!important;border:1px solid rgba(236,151,151,.34)!important;border-radius:22px!important;overflow:hidden!important;background:#FFFDF9!important;box-shadow:0 34px 90px rgba(13,18,38,.34)!important;z-index:100003!important;}",
+      ".wise-labour-crew-dialog .ui-dialog-titlebar{border:0!important;border-bottom:1px solid rgba(236,151,151,.3)!important;padding:14px 16px 10px!important;background:linear-gradient(135deg,rgba(255,253,249,.98) 0%,rgba(236,151,151,.18) 100%)!important;}",
+      ".wise-labour-crew-dialog .ui-dialog-title{font-family:'Albra Sans',Lato,'Segoe UI',Arial,sans-serif!important;font-size:17px!important;font-weight:400!important;letter-spacing:.01em!important;color:#0D1226!important;}",
       ".wise-labour-crew-dialog .ui-dialog-titlebar button:not(.ui-dialog-titlebar-close){display:none!important;}",
-      ".wise-labour-crew-dialog .picklist_top_section{display:block!important;margin:0 0 8px!important;}",
-      ".wise-labour-crew-dialog table.hirehop_panel tr:first-child{display:table-row!important;}",
+      ".wise-labour-crew-dialog .ui-dialog-content{background:linear-gradient(180deg,#fffdf9 0%,#f4efe9 100%)!important;padding:12px!important;}",
+      ".wise-labour-crew-dialog .picklist_top_section{display:block!important;margin:0 0 8px!important;padding:8px 10px!important;border:1px solid rgba(236,151,151,.24)!important;border-radius:14px!important;background:rgba(255,253,249,.8)!important;}",
       ".wise-labour-crew-dialog table.hirehop_panel .rental_selector{display:block!important;}",
-      ".wise-labour-crew-dialog .category_tabs_container{display:block!important;margin:0 0 8px!important;}",
+      ".wise-labour-crew-dialog .category_tabs_container{display:block!important;margin:0 0 8px!important;padding:8px 10px!important;border:1px solid rgba(236,151,151,.3)!important;border-radius:14px!important;background:rgba(255,253,249,.95)!important;box-shadow:0 18px 42px rgba(13,18,38,.08)!important;}",
+      ".wise-labour-crew-dialog .category_tabs_container ul,.wise-labour-crew-dialog .category_tabs_container .ui-tabs-nav{display:flex!important;flex-wrap:wrap!important;gap:6px!important;padding:0!important;margin:0!important;border:0!important;background:transparent!important;}",
+      ".wise-labour-crew-dialog .category_tabs_container li{list-style:none!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;}",
+      ".wise-labour-crew-dialog .category_tabs_container .ui-tabs-anchor{display:inline-flex!important;align-items:center!important;border:1px solid rgba(13,18,38,.16)!important;border-radius:999px!important;background:#FFFDF9!important;color:#0D1226!important;font-family:Lato,'Segoe UI',Arial,sans-serif!important;font-size:11px!important;font-weight:700!important;line-height:1.2!important;padding:6px 10px!important;text-decoration:none!important;box-shadow:0 10px 22px rgba(13,18,38,.08)!important;}",
+      ".wise-labour-crew-dialog .category_tabs_container li.ui-tabs-active .ui-tabs-anchor,.wise-labour-crew-dialog .category_tabs_container li.ui-state-active .ui-tabs-anchor,.wise-labour-crew-dialog .category_tabs_container li[aria-selected='true'] .ui-tabs-anchor{border-color:#EC9797!important;background:rgba(236,151,151,.18)!important;box-shadow:inset 0 0 0 1px rgba(236,151,151,.16),0 12px 24px rgba(13,18,38,.08)!important;}",
       ".wise-labour-crew-dialog .hh_picklist_dlg{padding-top:10px!important;}",
-      ".wise-labour-crew-dialog .wise-labour-crew-note{margin:0 0 10px;border:1px solid rgba(236,151,151,.34);border-radius:14px;background:linear-gradient(135deg,rgba(255,253,249,.98) 0%,rgba(236,151,151,.16) 100%);padding:10px 12px;color:#0D1226;box-shadow:0 12px 28px rgba(13,18,38,.08);}",
+      ".wise-labour-crew-dialog .wise-labour-crew-note{display:grid!important;gap:6px!important;margin:0 0 12px!important;border:1px solid rgba(236,151,151,.34)!important;border-radius:16px!important;background:linear-gradient(135deg,rgba(255,253,249,.98) 0%,rgba(236,151,151,.16) 100%)!important;padding:12px 14px!important;color:#0D1226!important;box-shadow:0 12px 28px rgba(13,18,38,.08)!important;}",
       ".wise-labour-crew-dialog .wise-labour-crew-note b{display:block;font-family:'Albra Sans',Lato,'Segoe UI',Arial,sans-serif;font-size:16px;font-weight:400;line-height:1.05;}",
-      ".wise-labour-crew-dialog .wise-labour-crew-note span{display:block;margin-top:4px;font-size:11px;line-height:1.4;color:rgba(13,18,38,.78);}",
-      ".wise-labour-crew-dialog table.hirehop_panel{margin-bottom:8px!important;}",
-      ".wise-labour-crew-dialog table.hirehop_panel input[type='search']{width:280px!important;}",
+      ".wise-labour-crew-dialog .wise-labour-crew-note span{display:block;font-size:11px;line-height:1.4;color:rgba(13,18,38,.78);}",
+      ".wise-labour-crew-dialog .wise-labour-crew-state{display:inline-flex!important;align-items:center!important;justify-self:start!important;padding:4px 8px!important;border-radius:999px!important;background:rgba(13,18,38,.06)!important;border:1px solid rgba(13,18,38,.12)!important;font-size:10px!important;font-weight:800!important;letter-spacing:.05em!important;text-transform:uppercase!important;color:#0D1226!important;}",
+      ".wise-labour-crew-dialog .wise-labour-crew-path{display:inline-flex!important;align-items:center!important;justify-self:start!important;padding:6px 10px!important;border-radius:999px!important;background:rgba(255,253,249,.92)!important;border:1px solid rgba(236,151,151,.32)!important;font-size:11px!important;font-weight:700!important;color:#0D1226!important;box-shadow:0 10px 22px rgba(13,18,38,.06)!important;}",
+      ".wise-labour-crew-dialog table.hirehop_panel{margin-bottom:8px!important;border:1px solid rgba(236,151,151,.24)!important;border-radius:16px!important;background:rgba(255,253,249,.95)!important;overflow:hidden!important;box-shadow:0 18px 42px rgba(13,18,38,.08)!important;}",
+      ".wise-labour-crew-dialog table.hirehop_panel td,.wise-labour-crew-dialog table.hirehop_panel th{background:transparent!important;}",
+      ".wise-labour-crew-dialog table.hirehop_panel input[type='search']{width:320px!important;max-width:100%!important;border:1px solid rgba(236,151,151,.42)!important;border-radius:999px!important;background:rgba(255,253,249,.95)!important;color:#0D1226!important;padding:7px 11px!important;box-shadow:0 8px 18px rgba(13,18,38,.05)!important;}",
+      ".wise-labour-crew-dialog .ui-dialog-buttonpane{margin:0!important;border:0!important;border-top:1px solid rgba(236,151,151,.28)!important;background:rgba(255,253,249,.9)!important;padding:10px 12px!important;}",
+      ".wise-labour-crew-dialog .ui-dialog-buttonpane button{border:1px solid rgba(13,18,38,.16)!important;border-radius:999px!important;background:#FFFDF9!important;color:#0D1226!important;font-family:Lato,'Segoe UI',Arial,sans-serif!important;font-weight:700!important;box-shadow:0 10px 22px rgba(13,18,38,.08)!important;}",
+      ".wise-labour-crew-dialog .ui-dialog-buttonpane button:hover{background:#EC9797!important;border-color:#EC9797!important;color:#0D1226!important;}",
+      ".wise-labour-crew-dialog .ui-dialog-buttonpane .wise-labour-crew-save{border-color:#0D1226!important;background:#0D1226!important;color:#FFFDF9!important;}",
+      ".wise-labour-crew-dialog .ui-dialog-buttonpane .wise-labour-crew-save:hover{background:#EC9797!important;border-color:#EC9797!important;color:#0D1226!important;}",
       ".wise-labour-crew-dialog .ui-dialog-buttonpane .ui-button-text{max-width:none!important;}",
+      ".wise-labour-crew-dialog.is-crew-path-locked .category_tabs_container{display:none!important;}",
+      ".wise-labour-crew-dialog.is-crew-path-locked .wise-labour-crew-state{background:rgba(2,122,72,.1)!important;border-color:rgba(2,122,72,.24)!important;color:#027A48!important;}",
       "#" + CFG.modalId + " .wpe-labour-columns-shell{position:absolute;left:5%;right:5%;top:12%;bottom:13%;z-index:5;display:grid;grid-template-rows:auto 1fr;gap:10px;}",
       "#" + CFG.modalId + " .wpe-labour-columns-copy{display:grid;gap:7px;max-width:46%;}",
       "#" + CFG.modalId + " .wpe-dept-columns-grid{position:absolute;left:3.2%;right:3.2%;top:12%;bottom:14%;z-index:5;display:grid;grid-template-columns:1.05fr 1.1fr .85fr;gap:2.4%;align-items:start;}",
@@ -3743,7 +3760,7 @@
       note = "The venue name is taken from the project details automatically. You can edit the description, image URL and hide setting only.";
     }
     if (shouldUseLabourDayFolders(state)) {
-      note = "Labour uses up to three Day folders for crew resource items. Edit the day titles here, then use each day card to open the Crew selector. The picker will try to land on the right Crew/Labour view, but you can still use the native filters if your HireHop setup is different.";
+      note = "Labour uses up to three Day folders for crew resource items. Edit the day titles here, then use each day card to open the Crew selector directly in the Crew folder for that day.";
     }
     if (state.layoutId === GENERIC_LAYOUTS.PM || state.layoutId === GENERIC_LAYOUTS.TEAM) {
       note = "People on this page are managed from HireHop's native listed-item picker, not from manual fields in this editor.";
@@ -3922,7 +3939,7 @@
   }
 
   function genericLabourActionsHtml(state) {
-    return '<div class="wpe-page-actions"><span>Each Day card can save its folder, open a Crew selector, and delete the saved crew folder. The selector will prefer Crew/Labour when those filters exist, but it stays adjustable for other HireHop setups. Image split keeps one Day folder; three-column layout can keep up to three.</span></div>';
+    return '<div class="wpe-page-actions"><span>Each Day card can save its folder, open a Crew selector locked straight into the Crew folder, and delete the saved crew folder. Image split keeps one Day folder; three-column layout can keep up to three.</span></div>';
   }
 
   function genericCostingActionsHtml(state) {
@@ -4298,7 +4315,7 @@
     day = normaliseLabourDay(day);
     if (day.itemNames.length) return day.itemNames.join(" · ");
     if (Math.max(day.itemCount, day.itemIds.length)) return "Crew resource items are saved in this folder.";
-    return "No crew resource items added yet. Use Add Crew to open the Crew selector; if your HireHop setup uses different tabs or filters, you can adjust them there.";
+    return "No crew resource items added yet. Use Add Crew to open the Crew selector directly in the Crew folder.";
   }
 
   function genericTeamHtml(state) {
@@ -4909,7 +4926,10 @@
       dayIndex: -1,
       label: "Crew day",
       saveRequested: false,
-      dialogOpened: false
+      dialogOpened: false,
+      pathStep: 0,
+      pathLocked: false,
+      targetPath: getLabourCrewTargetPath(context)
     }, context || {});
   }
 
@@ -5805,32 +5825,41 @@
 
   function applyPreferredLabourCrewFilters($dialog) {
     if (!$dialog || !$dialog.length) return false;
+    var ctx = editor.labourCrewContext;
+    var targetPath = getLabourCrewTargetPath(ctx);
 
     if (!$dialog.find('input.picklist_type[type="checkbox"]').length && !$dialog.find(".category_tabs_container").length) {
       return false;
     }
 
     setPicklistTypeCheckboxState($dialog, "4", true);
-    activatePreferredPicklistCategoryTab($dialog, ["Crew", "Labour", "Staff", "Personnel", "Resources"]);
-    return true;
+    if (ctx && ctx.pathLocked) return true;
+    var pathLocked = activatePicklistCategoryPath($dialog, targetPath, ctx);
+    if (ctx) ctx.pathLocked = pathLocked;
+    return pathLocked;
   }
 
   function decorateLabourCrewListedItemsDialog($dialog) {
     if (!$dialog || !$dialog.length) return false;
 
+    var ctx = editor.labourCrewContext || {};
+    var label = ctx.label ? ctx.label : "Crew day";
+    var targetPath = getLabourCrewTargetPath(ctx);
+    var pathLocked = !!ctx.pathLocked;
+
     $dialog.addClass("wise-labour-crew-dialog");
+    $dialog.toggleClass("is-crew-path-locked", pathLocked);
     $dialog.css("z-index", "100020");
     $dialog.find(".ui-dialog-title").first().text("Select Crew");
 
-    var label = editor.labourCrewContext && editor.labourCrewContext.label ? editor.labourCrewContext.label : "Crew day";
     var $content = $dialog.find(".hh_picklist_dlg").first();
-    if ($content.length && !$content.children(".wise-labour-crew-note").length) {
-      $content.prepend(
-        '<div class="wise-labour-crew-note">' +
-          '<b>' + esc("Select Crew for " + label) + '</b>' +
-          '<span>Search the Crew list, set the quantity for each role you want, then click Add Selected Crew. If your HireHop account uses different category tabs or filters, you can change them here.</span>' +
-        '</div>'
-      );
+    if ($content.length) {
+      var $note = $content.children(".wise-labour-crew-note").first();
+      if (!$note.length) {
+        $content.prepend('<div class="wise-labour-crew-note"></div>');
+        $note = $content.children(".wise-labour-crew-note").first();
+      }
+      $note.html(buildLabourCrewDialogNoteHtml(label, targetPath, pathLocked));
     }
 
     var $search = $dialog.find('table.hirehop_panel input[type="search"]').first();
@@ -5954,6 +5983,93 @@
     if (!$anchor.length) return false;
     clickElementLikeUser($anchor.get(0));
     return true;
+  }
+
+  function getLabourCrewTargetPath(context) {
+    var source = context && context.targetPath ? context.targetPath : CFG.labourCrewCategoryPath;
+    var out = [];
+
+    for (var i = 0; i < (source || []).length; i++) {
+      var label = $.trim(String(source[i] || ""));
+      if (label) out.push(label);
+    }
+
+    return out;
+  }
+
+  function buildLabourCrewPathText(path) {
+    return getLabourCrewTargetPath({ targetPath: path }).join(" > ");
+  }
+
+  function buildLabourCrewDialogNoteHtml(label, path, pathLocked) {
+    var pathText = buildLabourCrewPathText(path);
+    return '' +
+      '<b>' + esc("Select Crew for " + label) + '</b>' +
+      '<span class="wise-labour-crew-state">' + esc(pathLocked ? "Crew Folder Locked" : "Opening Crew Folder") + '</span>' +
+      (pathText ? '<span class="wise-labour-crew-path">' + esc(pathText) + '</span>' : '') +
+      '<span>' + esc(pathLocked
+        ? "This picker is locked to the Crew folder for this Labour day. Search, set quantities, then click Add Selected Crew."
+        : "Opening the saved Crew folder for this Labour day. Once it locks in, only that Crew category stays in view.") + '</span>';
+  }
+
+  function activatePicklistCategoryPath($dialog, path, context) {
+    path = getLabourCrewTargetPath({ targetPath: path });
+    if (!$dialog || !$dialog.length || !path.length) return false;
+
+    var step = context ? Math.max(0, toInt(context.pathStep, 0)) : 0;
+    if (step >= path.length) step = path.length - 1;
+
+    for (var i = step; i < path.length; i++) {
+      var $anchor = findPicklistCategoryAnchor($dialog, path[i], i === path.length - 1);
+      if (!$anchor.length) {
+        var $leaf = findPicklistCategoryAnchor($dialog, path[path.length - 1], true);
+        if ($leaf.length && isPicklistCategoryTabActive($leaf)) {
+          if (context) context.pathStep = path.length;
+          return true;
+        }
+        return false;
+      }
+
+      if (!isPicklistCategoryTabActive($anchor)) {
+        if (context) context.pathStep = i;
+        clickElementLikeUser($anchor.get(0));
+        return false;
+      }
+
+      if (context) context.pathStep = i + 1;
+    }
+
+    return true;
+  }
+
+  function findPicklistCategoryAnchor($dialog, label, preferLast) {
+    if (!$dialog || !$dialog.length) return $();
+    var target = normalizeGenericMatchText(label);
+    if (!target) return $();
+
+    var $anchors = $dialog.find(".category_tabs_container .ui-tabs-anchor:visible");
+    var $exact = $anchors.filter(function () {
+      return normalizeGenericMatchText($(this).text() || "") === target;
+    });
+    if ($exact.length) return preferLast ? $exact.last() : $exact.first();
+
+    var $partial = $anchors.filter(function () {
+      var text = normalizeGenericMatchText($(this).text() || "");
+      return text.indexOf(target) !== -1 || target.indexOf(text) !== -1;
+    });
+    if ($partial.length) return preferLast ? $partial.last() : $partial.first();
+
+    return $();
+  }
+
+  function isPicklistCategoryTabActive($anchor) {
+    if (!$anchor || !$anchor.length) return false;
+    var $tab = $anchor.closest("li");
+    return !!(
+      $tab.hasClass("ui-tabs-active") ||
+      $tab.hasClass("ui-state-active") ||
+      String($tab.attr("aria-selected") || "").toLowerCase() === "true"
+    );
   }
 
   async function saveGenericManagedRows(jobId, state) {
