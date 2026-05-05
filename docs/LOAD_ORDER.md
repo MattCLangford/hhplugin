@@ -9,6 +9,8 @@ Use this order for the live HireHop scripts.
 5. `5-hirehop.js`
 6. `6-editor2.js`
 
+For the full paste-ready company config string, use `docs/HIREHOP_PLUGIN_STRING.md`.
+
 ## Keep Off In Normal Production
 
 `wise-headingedit-ui.js`
