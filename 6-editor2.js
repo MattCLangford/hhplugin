@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-07.02-readable-editor-text",
+    version: "2026-05-07.03-fullscreen-spellcheck",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -58,8 +58,8 @@
   var LEGACY_VARIANT_COLUMNS = "no_image_multi";
   var SLOT_KEYS = ["primary", "secondary", "tertiary"];
   var UI_COMPACT = {
-    modalMaxWidth: 1180,
-    modalViewportGap: 6,
+    modalMaxWidth: 1920,
+    modalViewportGap: 0,
     proofMaxWidth: 1040,
     proofMinWidth: 720
   };
@@ -889,6 +889,26 @@
     setSaveEnabled(false);
   }
 
+  function applyEditorTextInputAttributes() {
+    var $body = $("#" + CFG.bodyId);
+    var $textFields = $body.find("textarea,input[type='text'],input:not([type])");
+    $textFields.attr({
+      spellcheck: "true",
+      autocapitalize: "sentences"
+    });
+
+    $body.find([
+      '[data-field="imageUrl"]',
+      '[data-field="rowTime"]',
+      '[data-generic-field="technical"]',
+      '[data-generic-row-field="imageUrl"]',
+      '[data-generic-row-field="revenue"]'
+    ].join(",")).attr({
+      spellcheck: "false",
+      autocapitalize: "off"
+    });
+  }
+
   function renderEventOverviewEditor(state) {
     state = normaliseVisualEditorState(state || blankState());
     editor.current = state;
@@ -901,6 +921,7 @@
       '</div>';
 
     $("#" + CFG.bodyId).html(html);
+    applyEditorTextInputAttributes();
     setSaveEnabled(true);
     if ($("#" + CFG.overlayId).is(":visible")) {
       attachEditorPreviewDockSoon();
@@ -2815,8 +2836,11 @@
       "#" + CFG.modalId + " .wpe-page-actions{display:flex;gap:8px;align-items:center;justify-content:flex-end;border:1px solid #d9e2ec;border-radius:12px;background:#fff;padding:7px 9px;}",
       "#" + CFG.modalId + " .wpe-note-box{position:absolute;left:8%;right:8%;bottom:16%;z-index:6;border:1px dashed rgba(23,92,211,.32);border-radius:12px;background:rgba(255,255,255,.82);padding:10px;font-size:11px;line-height:1.35;color:#475467;}",
       "#" + CFG.modalId + " .wpe-note-box.wpe-thank-alt-note{left:auto;right:5%;bottom:18%;width:32%;background:rgba(13,18,38,.55);color:#fffdf9;border-color:rgba(255,255,255,.28);}",
-      "#" + CFG.overlayId + "{background:rgba(13,18,38,.72);backdrop-filter:blur(10px);}",
-      "#" + CFG.modalId + "{background:#FFFDF9;border:1px solid rgba(236,151,151,.34);border-radius:14px;box-shadow:0 34px 90px rgba(13,18,38,.34);font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:#0D1226;font-size:15px;line-height:1.35;}",
+      "#" + CFG.overlayId + "{align-items:stretch;justify-content:stretch;padding:0;background:rgba(13,18,38,.72);backdrop-filter:blur(10px);}",
+      "#" + CFG.overlayId + ".has-preview-dock{justify-content:stretch;}",
+      "#" + CFG.modalId + "{flex:1 1 auto;width:100vw;max-width:none;height:100vh;max-height:100vh;min-width:0;background:#FFFDF9;border:0;border-radius:0;box-shadow:none;font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:#0D1226;font-size:15px;line-height:1.35;}",
+      "#" + CFG.overlayId + ".has-preview-dock #" + CFG.modalId + "{width:auto;border-radius:0;}",
+      "#" + EDITOR_PREVIEW.dockId + "{height:100vh;max-height:100vh;border-radius:0;box-shadow:none;}",
       "#" + CFG.modalId + " .weo-head{background:linear-gradient(135deg,rgba(255,253,249,.98) 0%,rgba(236,151,151,.18) 100%);border-bottom:1px solid rgba(236,151,151,.3);padding:10px 12px 8px;}",
       "#" + CFG.modalId + " .weo-body{flex:1 1 auto;min-height:0;overflow:hidden;background:linear-gradient(180deg,#fffdf9 0%,#f4efe9 100%);padding:8px 10px 10px;}",
       "#" + CFG.bodyId + "{flex:1 1 auto;min-height:0;overflow:auto;}",
@@ -2844,6 +2868,7 @@
       "#" + CFG.modalId + " .wpe-labour-day{border:1px solid rgba(13,18,38,.08);border-radius:16px;background:linear-gradient(180deg,rgba(255,253,249,.98) 0%,rgba(236,151,151,.1) 100%);box-shadow:0 14px 30px rgba(13,18,38,.08);padding:10px;}",
       "#" + CFG.modalId + " .wpe-labour-day.is-empty{border-style:dashed;background:rgba(255,253,249,.8);}",
       "#" + CFG.modalId + " .wpe-labour-day-items{border-top:1px solid rgba(236,151,151,.34);padding-top:7px;color:rgba(13,18,38,.78);}",
+      "#" + CFG.modalId + " input[spellcheck='true'],#" + CFG.modalId + " textarea[spellcheck='true']{text-decoration-skip-ink:auto;}",
       "#" + CFG.modalId + " .weo-visual-editor,#" + CFG.modalId + " .wpe-editor{gap:6px;}",
       "#" + CFG.modalId + " .weo-title{font-size:18px;line-height:1.2;}",
       "#" + CFG.modalId + " .weo-subtitle{font-size:15px;line-height:1.35;}",
@@ -2862,6 +2887,7 @@
       "#" + CFG.modalId + " .wpe-cost-preview{font-size:15px;line-height:1.3;}",
       "#" + CFG.modalId + " .wpe-costing-row{grid-template-columns:minmax(0,1fr) 150px 88px;}",
       "#" + CFG.modalId + " .wpe-cost-preview-row{grid-template-columns:minmax(0,1fr) 95px;}",
+      "#" + CFG.modalId + " .wpe-title-cover-options{grid-template-columns:minmax(320px,560px);}",
       "#" + CFG.modalId + " .wpe-page-actions{flex-wrap:wrap;}",
       "#" + CFG.statusId + "{font-size:14px;line-height:1.25;min-height:18px;}",
       "@media(max-width:900px){#" + CFG.modalId + " .wpe-topbar{display:grid;}#" + CFG.modalId + " .wpe-proof{min-width:600px;}#" + CFG.modalId + " .wpe-canvas-shell{padding:8px;}#" + CFG.modalId + " .wpe-title-cover-options,#" + CFG.modalId + " .wpe-dept-layout-options{grid-template-columns:1fr;}}"
@@ -4012,6 +4038,7 @@
       '</div>';
 
     $("#" + CFG.bodyId).html(html);
+    applyEditorTextInputAttributes();
     setSaveEnabled(!isGenericLockedLayout(state.layoutId));
     if ($("#" + CFG.overlayId).is(":visible")) {
       attachEditorPreviewDockSoon();
@@ -4101,22 +4128,8 @@
   }
 
   function sectionDeptPickerHtml(state) {
-    var tree = getTree();
-    var sectionNode = tree ? (findHeadingNodeByDataId(tree, state.rootId) || editor.rootNode) : editor.rootNode;
-    var depts = getSectionDeptChildPages(tree, sectionNode);
-    var options = ['<option value="">Select existing Dept page...</option>'];
-
-    for (var i = 0; i < depts.length; i++) {
-      options.push('<option value="' + attr(getNodeDataId(depts[i])) + '">' + esc(getNodeTitle(depts[i])) + '</option>');
-    }
-
     return '' +
       '<div class="wpe-title-cover-options">' +
-        '<div class="wpe-title-cover-option">' +
-          '<div><b>Open a costing page inside this section</b><span>Choose an existing Dept heading and switch straight to editing that page.</span></div>' +
-          '<label class="wpe-select-pill">Dept page <select data-generic-field="sectionDeptTarget">' + options.join("") + '</select></label>' +
-          '<button type="button" class="wpe-mini-btn" data-weo-action="open-section-dept">Open selected Dept</button>' +
-        '</div>' +
         '<div class="wpe-title-cover-option">' +
           '<div><b>Create a new costing page here</b><span>Add a Dept heading under this Section, then open its editor automatically.</span></div>' +
           '<label class="wpe-input-pill">Dept title <input type="text" data-generic-field="newDeptTitle" placeholder="e.g. Labour"></label>' +
@@ -4811,16 +4824,6 @@
 
     if (action === "navigate-next") {
       navigateProposalEditor(1);
-      return;
-    }
-
-    if (action === "open-section-dept") {
-      var selectedDeptId = String($("#" + CFG.bodyId).find('[data-generic-field="sectionDeptTarget"]').val() || "");
-      if (!selectedDeptId) {
-        setStatus("Choose a child Dept page to open first.", "warning");
-        return;
-      }
-      openOrCreateGenericDeptChildFromSection({ targetId: selectedDeptId });
       return;
     }
 
