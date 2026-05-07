@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-07.07-layout-scroll-suffix-rules",
+    version: "2026-05-07.08-width-scroll-suffix-image",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -388,7 +388,7 @@
       setStatus("", "");
     });
 
-    $("#" + CFG.bodyId).on("input change", 'select[data-generic-field="titleSuffix"]', function () {
+    $("#" + CFG.bodyId).on("change", 'select[data-generic-field="titleSuffix"]', function () {
       if (editor.saving || editor.mode !== MODE_GENERIC) return;
       editor.current = readGenericFormState(editor.current);
       renderEditor(editor.current);
@@ -1093,7 +1093,19 @@
 
       var shellWidth = Math.max(0, shell.clientWidth - 16);
       var shellHeight = Math.max(0, shell.clientHeight - 16);
-      if (!shellWidth || !shellHeight) return;
+      if (!shellWidth) return;
+
+      if ($proof.hasClass("wpe-proof")) {
+        $proof.css({
+          width: Math.floor(shellWidth) + "px",
+          height: Math.floor(shellWidth / EDITOR_PAGE_ASPECT) + "px",
+          minWidth: "0",
+          maxWidth: "none"
+        });
+        return;
+      }
+
+      if (!shellHeight) return;
 
       var width = Math.min(shellWidth, shellHeight * EDITOR_PAGE_ASPECT);
       var height = width / EDITOR_PAGE_ASPECT;
@@ -3078,7 +3090,9 @@
       "#" + CFG.modalId + " input[spellcheck='true'],#" + CFG.modalId + " textarea[spellcheck='true']{text-decoration-skip-ink:auto;}",
       "#" + CFG.modalId + " .weo-visual-editor,#" + CFG.modalId + " .wpe-editor{flex:1 1 auto;width:100%;height:100%;min-height:0;overflow:hidden;display:grid;gap:6px;}",
       "#" + CFG.modalId + " .weo-visual-editor{grid-template-rows:auto minmax(0,1fr);}",
-      "#" + CFG.modalId + " .wpe-editor{grid-template-rows:auto minmax(0,1fr) auto;}",
+      "#" + CFG.modalId + " .wpe-editor{grid-template-rows:auto minmax(0,1fr);}",
+      "#" + CFG.modalId + " .wpe-workspace-scroll{min-height:0;overflow:auto;display:grid;gap:8px;align-content:start;padding-right:2px;overscroll-behavior:contain;}",
+      "#" + CFG.modalId + " .wpe-workspace-scroll .wpe-canvas-shell{height:auto;min-height:0;overflow:visible;align-items:flex-start;justify-content:center;}",
       "#" + CFG.modalId + " .weo-layout-strip,#" + CFG.modalId + " .wpe-topbar,#" + CFG.modalId + " .wpe-page-actions{min-height:0;flex:0 0 auto;}",
       "#" + CFG.modalId + " .weo-proof-page,#" + CFG.modalId + " .wpe-proof{min-width:0;max-width:none;}",
       "#" + CFG.modalId + " .weo-title{font-size:18px;line-height:1.2;}",
@@ -3108,6 +3122,7 @@
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-subtitle{font-size:12px;line-height:1.25;max-width:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-x{font-size:20px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-visual-editor,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-editor{gap:5px;}",
+      "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-workspace-scroll{gap:6px;padding-right:3px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-layout-strip,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-topbar{display:flex;gap:5px;flex-wrap:nowrap;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-canvas-shell,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-canvas-shell{padding:5px;border-radius:10px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-proof-page,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-proof{min-width:0;max-width:none;}",
@@ -3175,6 +3190,9 @@
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-labour-days.is-columns .wpe-labour-day-items{max-height:none;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-labour-day-actions{flex-wrap:nowrap;gap:4px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-labour-day-actions .wpe-mini-btn{min-width:0;padding-left:5px;padding-right:5px;}",
+      "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-workspace-scroll .wpe-labour-days.is-columns{height:auto;overflow:visible;align-items:start;}",
+      "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-workspace-scroll .wpe-labour-days.is-columns .wpe-labour-day{overflow:visible;grid-template-rows:auto auto minmax(42px,auto) minmax(28px,auto) auto;}",
+      "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-workspace-scroll .wpe-labour-day-items{overflow:visible;}",
       "#" + CFG.modalId + " .wpe-create-dept-option .wpe-input-pill{justify-content:flex-start;align-self:flex-start;}",
       "#" + CFG.modalId + " .wpe-create-dept-option .wpe-input-pill input{min-width:190px;width:220px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-create-dept-option .wpe-input-pill input{min-width:160px;width:190px;}",
@@ -4084,7 +4102,7 @@
       return "This Section is a hidden renderer container. It cannot create costing pages, be shown in the proposal, or use Optional Items.";
     }
     if (isProjectTotalSummaryState(state)) {
-      return "Project Total is controlled by the proposal summary renderer. Use the suffix selector only; visibility and Optional Items are locked.";
+      return "Project Total is controlled by the proposal summary renderer. Use the suffix selector and image URL only; visibility and Optional Items are locked.";
     }
     if (state.layoutId === GENERIC_LAYOUTS.SECTION_COVER) {
       return "This title cover is the Section page. Use the Dept controls below to open an existing child costing page or create a new one inside this section.";
@@ -4383,8 +4401,10 @@
     var html = '' +
       '<div class="wpe-editor">' +
         genericTopbarHtml(state) +
-        '<div class="wpe-canvas-shell">' + genericCanvasHtml(state) + '</div>' +
-        genericActionsHtml(state) +
+        '<div class="wpe-workspace-scroll">' +
+          '<div class="wpe-canvas-shell">' + genericCanvasHtml(state) + '</div>' +
+          genericActionsHtml(state) +
+        '</div>' +
       '</div>';
 
     $("#" + CFG.bodyId).html(html);
@@ -4727,7 +4747,17 @@
   }
 
   function genericProjectTotalSummaryHtml(state) {
-    return genericLockedPageHtml(state, "Project Total", "The proposal summary renderer controls this page. Use the suffix selector above to choose project total only, Dept subtotal, or Section subtotal output.", false);
+    return '' +
+      '<div class="wpe-proof is-dark wpe-on-image">' +
+        '<div class="wpe-full-image">' + imagePreviewHtml(state.technical) + '</div>' +
+        technicalFieldHtml(state.technical, "Project total image URL") +
+        '<div class="wpe-locked-panel" style="background:rgba(13,18,38,.62);color:#fffdf9;border-color:rgba(255,255,255,.28);">' +
+          '<b>Project Total</b>' +
+          '<p>The proposal summary renderer controls the visible total copy. Use the suffix selector above to choose project total only, Dept subtotal, or Section subtotal output.</p>' +
+          '<p>The image URL here is saved to this heading for the renderer.</p>' +
+        '</div>' +
+        proofCommonHtml(true) +
+      '</div>';
   }
 
   function genericLabourDeptTableHtml(state) {
