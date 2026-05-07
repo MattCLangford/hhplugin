@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-07.08-width-scroll-suffix-image",
+    version: "2026-05-07.09-proof-container-isolation",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -1091,17 +1091,33 @@
       var $proof = $shell.children(".weo-proof-page,.wpe-proof").first();
       if (!$proof.length) return;
 
-      var shellWidth = Math.max(0, shell.clientWidth - 16);
-      var shellHeight = Math.max(0, shell.clientHeight - 16);
+      var styles = window.getComputedStyle ? window.getComputedStyle(shell) : null;
+      var padLeft = styles ? parseFloat(styles.paddingLeft) || 0 : 0;
+      var padRight = styles ? parseFloat(styles.paddingRight) || 0 : 0;
+      var padTop = styles ? parseFloat(styles.paddingTop) || 0 : 0;
+      var padBottom = styles ? parseFloat(styles.paddingBottom) || 0 : 0;
+      var shellWidth = Math.max(0, shell.clientWidth - padLeft - padRight);
+      var shellHeight = Math.max(0, shell.clientHeight - padTop - padBottom);
       if (!shellWidth) return;
 
-      if ($proof.hasClass("wpe-proof")) {
+      var useWidthFit = $proof.hasClass("wpe-proof") || $("#" + CFG.overlayId).hasClass("is-inline");
+      if (useWidthFit) {
+        var proofHeight = shellWidth / EDITOR_PAGE_ASPECT;
         $proof.css({
           width: Math.floor(shellWidth) + "px",
-          height: Math.floor(shellWidth / EDITOR_PAGE_ASPECT) + "px",
+          height: Math.floor(proofHeight) + "px",
           minWidth: "0",
           maxWidth: "none"
         });
+
+        if ($proof.hasClass("wpe-proof")) {
+          var reservedHeight = Math.ceil(proofHeight + padTop + padBottom);
+          $shell.css({
+            height: reservedHeight + "px",
+            minHeight: reservedHeight + "px",
+            maxHeight: "none"
+          });
+        }
         return;
       }
 
@@ -3092,7 +3108,7 @@
       "#" + CFG.modalId + " .weo-visual-editor{grid-template-rows:auto minmax(0,1fr);}",
       "#" + CFG.modalId + " .wpe-editor{grid-template-rows:auto minmax(0,1fr);}",
       "#" + CFG.modalId + " .wpe-workspace-scroll{min-height:0;overflow:auto;display:grid;gap:8px;align-content:start;padding-right:2px;overscroll-behavior:contain;}",
-      "#" + CFG.modalId + " .wpe-workspace-scroll .wpe-canvas-shell{height:auto;min-height:0;overflow:visible;align-items:flex-start;justify-content:center;}",
+      "#" + CFG.modalId + " .wpe-workspace-scroll .wpe-canvas-shell{height:auto;min-height:0;overflow:hidden;align-items:flex-start;justify-content:center;position:relative;}",
       "#" + CFG.modalId + " .weo-layout-strip,#" + CFG.modalId + " .wpe-topbar,#" + CFG.modalId + " .wpe-page-actions{min-height:0;flex:0 0 auto;}",
       "#" + CFG.modalId + " .weo-proof-page,#" + CFG.modalId + " .wpe-proof{min-width:0;max-width:none;}",
       "#" + CFG.modalId + " .weo-title{font-size:18px;line-height:1.2;}",
@@ -3125,6 +3141,7 @@
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-workspace-scroll{gap:6px;padding-right:3px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-layout-strip,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-topbar{display:flex;gap:5px;flex-wrap:nowrap;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-canvas-shell,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-canvas-shell{padding:5px;border-radius:10px;}",
+      "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-canvas-shell{align-items:flex-start;overflow:auto;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-proof-page,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-proof{min-width:0;max-width:none;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-layout-note,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-layout-card,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-nav-card,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-costing-panel,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-page-actions,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-title-cover-option,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-locked-panel,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-native-items-note,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-separator-note{box-shadow:0 8px 20px rgba(13,18,38,.06);}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-layout-card{flex:1 1 auto;padding:6px 7px;min-width:205px;}",
