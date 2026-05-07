@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-05.12-modular-hirehop",
+    version: "2026-05-07.01-costing-total-price",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -3765,7 +3765,7 @@
 
   function getGenericRevenueFieldValue(data) {
     data = data || {};
-    var sellKeys = ["PRICE", "price", "UNIT_PRICE", "unit_price", "TOTAL", "total"];
+    var sellKeys = ["PRICE", "price", "TOTAL", "total", "UNIT_PRICE", "unit_price"];
     var firstSellValue = "";
     var hasSellValue = false;
     var hasNonZeroSellValue = false;
@@ -3788,7 +3788,7 @@
 
   function isLegacyRevenueStoredInExpectedCost(data) {
     data = data || {};
-    var sellKeys = ["PRICE", "price", "UNIT_PRICE", "unit_price", "TOTAL", "total"];
+    var sellKeys = ["PRICE", "price", "TOTAL", "total", "UNIT_PRICE", "unit_price"];
     var hasNonZeroSellValue = false;
 
     for (var i = 0; i < sellKeys.length; i++) {
@@ -5459,16 +5459,20 @@
         });
         row.id = String(result.id || row.id || "");
         var revenue = normaliseMoneyForPayload(row.revenue || "");
-        var expectedCost = getGenericDataField(row.nodeData || {}, ["VALUE", "value"]);
-        var legacyExpectedCost = isLegacyRevenueStoredInExpectedCost(row.nodeData || {});
         row.nodeData = extendSnapshot(row.nodeData, {
           ID: row.id,
           title: row.name,
           TITLE: row.name,
           PRICE: revenue,
-          UNIT_PRICE: revenue,
+          price: revenue,
+          UNIT_PRICE: "",
+          unit_price: "",
           TOTAL: revenue,
-          VALUE: legacyExpectedCost ? "0" : (expectedCost || "0"),
+          total: revenue,
+          VALUE: "0",
+          value: "0",
+          COST_PRICE: "0",
+          cost_price: "0",
           ADDITIONAL: row.additional || "",
           TECHNICAL: row.technical || ""
         });
@@ -5495,9 +5499,23 @@
     if (!row.id) return true;
     return String(row.name || "") !== getGenericDataField(data, ["title", "TITLE", "name", "NAME"]) ||
       isLegacyRevenueStoredInExpectedCost(data) ||
+      hasCostingRevenueUnitPrice(data) ||
+      hasCostingRevenueCostValue(data) ||
       normaliseMoneyForPayload(row.revenue || "") !== normaliseMoneyForPayload(getGenericRevenueFieldValue(data)) ||
       String(row.additional || "") !== getGenericDataField(data, ["ADDITIONAL", "DESCRIPTION", "additional"]) ||
       String(row.technical || "") !== getGenericDataField(data, ["TECHNICAL", "technical"]);
+  }
+
+  function hasCostingRevenueUnitPrice(data) {
+    var value = getGenericDataField(data || {}, ["UNIT_PRICE", "unit_price"]);
+    return !!$.trim(value) && normaliseMoneyForPayload(value) !== "0";
+  }
+
+  function hasCostingRevenueCostValue(data) {
+    data = data || {};
+    var value = getGenericDataField(data, ["VALUE", "value"]);
+    var costPrice = getGenericDataField(data, ["COST_PRICE", "cost_price"]);
+    return normaliseMoneyForPayload(value) !== "0" || normaliseMoneyForPayload(costPrice) !== "0";
   }
 
   async function saveCostingRevenueItemDirect(options) {
@@ -5506,9 +5524,6 @@
     var row = normaliseGenericRow(options.row);
     var source = options.sourceData || {};
     var revenue = normaliseMoneyForPayload(row.revenue || "");
-    var sourceExpectedCost = isLegacyRevenueStoredInExpectedCost(source)
-      ? "0"
-      : String(source.value == null ? (source.VALUE == null ? 0 : source.VALUE) : source.value);
 
     return postItemsSave({
       parent: String(options.parentId || "0"),
@@ -5521,21 +5536,21 @@
       qty: "1",
       name: String(row.name || ""),
       list_id: String(source.LIST_ID || "0"),
-      cust_add: String(row.additional || source.ADDITIONAL || ""),
-      memo: String(row.technical || source.TECHNICAL || ""),
+      cust_add: String(row.additional || ""),
+      memo: String(row.technical || ""),
       price_type: String(source.PRICE_TYPE == null ? 0 : source.PRICE_TYPE),
       weight: String(source.weight == null ? (source.WEIGHT == null ? 0 : source.WEIGHT) : source.weight),
       vat_rate: String(source.VAT_RATE == null ? getDefaultVatRate() : source.VAT_RATE),
-      value: sourceExpectedCost,
+      value: "0",
       acc_nominal: String(source.ACC_NOMINAL == null ? getDefaultNominalId(1) : source.ACC_NOMINAL),
       acc_nominal_po: String(source.ACC_NOMINAL_PO == null ? getDefaultNominalId(2) : source.ACC_NOMINAL_PO),
-      cost_price: String(source.COST_PRICE == null ? 0 : source.COST_PRICE),
+      cost_price: "0",
       no_scan: String(source.NO_SCAN == 1 ? 1 : 0),
       country_origin: String(source.COUNTRY_ORIGIN || ""),
       hs_code: String(source.HS_CODE || ""),
       category_id: String(source.CATEGORY_ID == null ? 0 : source.CATEGORY_ID),
       no_shortfall: String(source.NO_SHORTFALL == 1 ? 1 : 0),
-      unit_price: revenue,
+      unit_price: "",
       price: revenue,
       job: String(options.jobId || ""),
       no_availability: "0",
