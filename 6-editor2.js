@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-07.03-fullscreen-spellcheck",
+    version: "2026-05-07.04-full-height-workspace",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -63,6 +63,7 @@
     proofMaxWidth: 1040,
     proofMinWidth: 720
   };
+  var EDITOR_PAGE_ASPECT = 318 / 178.9;
   var PREVIEW_ATTACH_RETRY_DELAYS = getHireHopDelayList("previewAttachRetryDelays", [10, 180, 720, 1600]);
   var LISTED_ITEM_MENU_RETRY_DELAYS = getHireHopDelayList("listedItemMenuRetryDelays", [350, 900, 1500, 2300]);
   var ITEMS_TAB_SELECTOR = getHireHopSelector("itemsTab", "#items_tab");
@@ -228,7 +229,10 @@
     $(window).on("resize.wiseToolbarCompression", function () {
       if (editor.ready) {
         updateToolbarCompression();
-        if ($("#" + CFG.overlayId).is(":visible")) attachEditorPreviewDock();
+        if ($("#" + CFG.overlayId).is(":visible")) {
+          attachEditorPreviewDock();
+          fitEditorProofToCanvasSoon();
+        }
       }
     });
     $(document).on("click.wiseToolbarCompression", "#wise-doc-preview-toggle", function () {
@@ -733,6 +737,7 @@
   function showOverlay() {
     $("#" + CFG.overlayId).css("display", "flex");
     editor.previewSuppressed = false;
+    fitEditorProofToCanvasSoon();
     ensureEditorPreviewPanelOpen();
     attachEditorPreviewDockSoon();
     refreshEditorPreviewForCurrentHeadingSoon();
@@ -749,6 +754,7 @@
         setTimeout(function () {
           ensureEditorPreviewPanelOpen();
           attachEditorPreviewDock();
+          fitEditorProofToCanvas();
         }, delay);
       })(PREVIEW_ATTACH_RETRY_DELAYS[i]);
     }
@@ -792,6 +798,7 @@
     $overlay.addClass("has-preview-dock");
     editor.previewDocked = true;
     updateToolbarCompression();
+    fitEditorProofToCanvasSoon();
   }
 
   function prepareDockedPreviewToolbar($dock) {
@@ -909,6 +916,36 @@
     });
   }
 
+  function fitEditorProofToCanvasSoon() {
+    if (window.requestAnimationFrame) window.requestAnimationFrame(fitEditorProofToCanvas);
+    setTimeout(fitEditorProofToCanvas, 30);
+    setTimeout(fitEditorProofToCanvas, 120);
+  }
+
+  function fitEditorProofToCanvas() {
+    if (!$("#" + CFG.overlayId).is(":visible")) return;
+
+    $("#" + CFG.bodyId).find(".weo-canvas-shell,.wpe-canvas-shell").each(function () {
+      var shell = this;
+      var $shell = $(shell);
+      var $proof = $shell.children(".weo-proof-page,.wpe-proof").first();
+      if (!$proof.length) return;
+
+      var shellWidth = Math.max(0, shell.clientWidth - 16);
+      var shellHeight = Math.max(0, shell.clientHeight - 16);
+      if (!shellWidth || !shellHeight) return;
+
+      var width = Math.min(shellWidth, shellHeight * EDITOR_PAGE_ASPECT);
+      var height = width / EDITOR_PAGE_ASPECT;
+      $proof.css({
+        width: Math.floor(width) + "px",
+        height: Math.floor(height) + "px",
+        minWidth: "0",
+        maxWidth: "none"
+      });
+    });
+  }
+
   function renderEventOverviewEditor(state) {
     state = normaliseVisualEditorState(state || blankState());
     editor.current = state;
@@ -922,6 +959,7 @@
 
     $("#" + CFG.bodyId).html(html);
     applyEditorTextInputAttributes();
+    fitEditorProofToCanvasSoon();
     setSaveEnabled(true);
     if ($("#" + CFG.overlayId).is(":visible")) {
       attachEditorPreviewDockSoon();
@@ -2843,10 +2881,10 @@
       "#" + EDITOR_PREVIEW.dockId + "{height:100vh;max-height:100vh;border-radius:0;box-shadow:none;}",
       "#" + CFG.modalId + " .weo-head{background:linear-gradient(135deg,rgba(255,253,249,.98) 0%,rgba(236,151,151,.18) 100%);border-bottom:1px solid rgba(236,151,151,.3);padding:10px 12px 8px;}",
       "#" + CFG.modalId + " .weo-body{flex:1 1 auto;min-height:0;overflow:hidden;background:linear-gradient(180deg,#fffdf9 0%,#f4efe9 100%);padding:8px 10px 10px;}",
-      "#" + CFG.bodyId + "{flex:1 1 auto;min-height:0;overflow:auto;}",
+      "#" + CFG.bodyId + "{display:flex;flex:1 1 auto;width:100%;min-height:0;overflow:hidden;}",
       "#" + CFG.modalId + " .weo-title,#" + CFG.modalId + " .wpe-layout-title,#" + CFG.modalId + " .wpe-costing-title,#" + CFG.modalId + " .wpe-nav-head span:first-child{font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-weight:700;letter-spacing:0;color:#0D1226;}",
       "#" + CFG.modalId + " .weo-subtitle,#" + CFG.modalId + " .weo-layout-note,#" + CFG.modalId + " .wpe-layout-note,#" + CFG.modalId + " .wpe-nav-caption,#" + CFG.modalId + " .wpe-costing-note,#" + CFG.modalId + " .wpe-page-actions span,#" + CFG.modalId + " .wpe-note-box,#" + CFG.modalId + " .wpe-dept-columns-note{font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-weight:400;color:rgba(13,18,38,.78);}",
-      "#" + CFG.modalId + " .weo-canvas-shell,#" + CFG.modalId + " .wpe-canvas-shell{max-height:calc(100vh - 190px);background:linear-gradient(160deg,rgba(13,18,38,.08) 0%,rgba(236,151,151,.17) 100%);border:1px solid rgba(13,18,38,.1);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.5);padding:8px;}",
+      "#" + CFG.modalId + " .weo-canvas-shell,#" + CFG.modalId + " .wpe-canvas-shell{min-height:0;height:100%;max-height:none;display:flex;align-items:center;justify-content:center;overflow:auto;background:linear-gradient(160deg,rgba(13,18,38,.08) 0%,rgba(236,151,151,.17) 100%);border:1px solid rgba(13,18,38,.1);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.5);padding:8px;}",
       "#" + CFG.modalId + " .weo-layout-note,#" + CFG.modalId + " .wpe-layout-card,#" + CFG.modalId + " .wpe-nav-card,#" + CFG.modalId + " .wpe-costing-panel,#" + CFG.modalId + " .wpe-page-actions,#" + CFG.modalId + " .wpe-title-cover-option,#" + CFG.modalId + " .wpe-locked-panel,#" + CFG.modalId + " .wpe-native-items-note,#" + CFG.modalId + " .wpe-separator-note{background:rgba(255,253,249,.95);border:1px solid rgba(236,151,151,.32);box-shadow:0 18px 42px rgba(13,18,38,.08);}",
       "#" + CFG.modalId + " .weo-layout-pill,#" + CFG.modalId + " .wpe-dept-layout-pill{background:rgba(255,253,249,.96);border:1px solid rgba(13,18,38,.12);box-shadow:0 10px 24px rgba(13,18,38,.06);}",
       "#" + CFG.modalId + " .weo-layout-pill.is-selected,#" + CFG.modalId + " .wpe-dept-layout-pill.is-selected{border-color:#EC9797;background:rgba(236,151,151,.14);box-shadow:inset 0 0 0 1px rgba(236,151,151,.16),0 14px 32px rgba(13,18,38,.09);}",
@@ -2869,7 +2907,11 @@
       "#" + CFG.modalId + " .wpe-labour-day.is-empty{border-style:dashed;background:rgba(255,253,249,.8);}",
       "#" + CFG.modalId + " .wpe-labour-day-items{border-top:1px solid rgba(236,151,151,.34);padding-top:7px;color:rgba(13,18,38,.78);}",
       "#" + CFG.modalId + " input[spellcheck='true'],#" + CFG.modalId + " textarea[spellcheck='true']{text-decoration-skip-ink:auto;}",
-      "#" + CFG.modalId + " .weo-visual-editor,#" + CFG.modalId + " .wpe-editor{gap:6px;}",
+      "#" + CFG.modalId + " .weo-visual-editor,#" + CFG.modalId + " .wpe-editor{flex:1 1 auto;width:100%;height:100%;min-height:0;overflow:hidden;display:grid;gap:6px;}",
+      "#" + CFG.modalId + " .weo-visual-editor{grid-template-rows:auto minmax(0,1fr);}",
+      "#" + CFG.modalId + " .wpe-editor{grid-template-rows:auto minmax(0,1fr) auto;}",
+      "#" + CFG.modalId + " .weo-layout-strip,#" + CFG.modalId + " .wpe-topbar,#" + CFG.modalId + " .wpe-page-actions{min-height:0;flex:0 0 auto;}",
+      "#" + CFG.modalId + " .weo-proof-page,#" + CFG.modalId + " .wpe-proof{min-width:0;max-width:none;}",
       "#" + CFG.modalId + " .weo-title{font-size:18px;line-height:1.2;}",
       "#" + CFG.modalId + " .weo-subtitle{font-size:15px;line-height:1.35;}",
       "#" + CFG.modalId + " .weo-layout-pill b,#" + CFG.modalId + " .wpe-dept-layout-pill b,#" + CFG.modalId + " .wpe-layout-title,#" + CFG.modalId + " .wpe-costing-title,#" + CFG.modalId + " .wpe-nav-head,#" + CFG.modalId + " .wpe-title-cover-option b{font-size:15px;line-height:1.25;letter-spacing:0;}",
@@ -4039,6 +4081,7 @@
 
     $("#" + CFG.bodyId).html(html);
     applyEditorTextInputAttributes();
+    fitEditorProofToCanvasSoon();
     setSaveEnabled(!isGenericLockedLayout(state.layoutId));
     if ($("#" + CFG.overlayId).is(":visible")) {
       attachEditorPreviewDockSoon();
