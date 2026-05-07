@@ -40,14 +40,14 @@
     {
       "file": "5-hirehop.js",
       "status": "active-module",
-      "cacheVersion": "0.1",
+      "cacheVersion": "0.2",
       "role": "Shared HireHop selectors, endpoint paths, depot rules, retry timings, and tree item prefixes consumed by the section builder.",
       "recommendedLoadOrder": 5
     },
     {
       "file": "6-editor2.js",
       "status": "active-primary",
-      "cacheVersion": "0.4",
+      "cacheVersion": "0.5",
       "role": "Main proposal page editor and HireHop authoring layer.",
       "recommendedLoadOrder": 6
     }
