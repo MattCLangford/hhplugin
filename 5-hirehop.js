@@ -6,7 +6,7 @@
    * This module names the HireHop UI surfaces and endpoints the editor depends on.
    */
   var hirehop = {
-    version: "2026-05-05.01",
+    version: "2026-05-07.01",
     purpose: "Centralises HireHop selectors, endpoints, depot gating, retry timings, and tree item prefixes.",
 
     selectors: {
@@ -26,7 +26,7 @@
 
     depot: {
       allowedIds: ["14"],
-      allowedNames: ["Project Costs"],
+      allowedNames: ["Project Costs", "Proposal Creation"],
       blockWhenUndetected: true
     },
 
