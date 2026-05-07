@@ -47,7 +47,7 @@
     {
       "file": "6-editor2.js",
       "status": "active-primary",
-      "cacheVersion": "0.5",
+      "cacheVersion": "0.6",
       "role": "Main proposal page editor and HireHop authoring layer.",
       "recommendedLoadOrder": 6
     }
