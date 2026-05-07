@@ -15,10 +15,11 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-07.04-full-height-workspace",
+    version: "2026-05-07.05-inline-proposal-view",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
+    inlineHostId: "wise-proposal-page-editor-inline-host",
     modalId: "wise-proposal-page-editor-modal",
     titleId: "wise-proposal-page-editor-title",
     bodyId: "wise-proposal-page-editor-body",
@@ -26,6 +27,9 @@
     saveId: "wise-proposal-page-editor-save",
     closeId: "wise-proposal-page-editor-close",
     nativeFallbackId: "wise-native-line-editor-button",
+    viewToggleId: "wise-proposal-view-toggle",
+    nativeHiddenClass: "wise-proposal-native-hidden",
+    inlineParentClass: "wise-proposal-editor-parent",
     defaultEditClass: "wise-default-proposal-editor",
     defaultEditEnabled: true,
     defaultOpenOnTreeDoubleClick: true,
@@ -37,7 +41,7 @@
     maxSchedules: 3,
     maxRows: 10,
     allowedDepotIds: getHireHopArrayValue("depot", "allowedIds", ["14"]),
-    allowedDepotNames: getHireHopArrayValue("depot", "allowedNames", ["Project Costs"]),
+    allowedDepotNames: getHireHopArrayValue("depot", "allowedNames", ["Project Costs", "Proposal Creation"]),
     blockWhenDepotUndetected: getHireHopBooleanValue("depot", "blockWhenUndetected", true),
     bootstrapMaxTries: getHireHopNumberValue("timings", "bootstrapMaxTries", 120),
     bootstrapRetryMs: getHireHopNumberValue("timings", "bootstrapRetryMs", 500),
@@ -101,7 +105,9 @@
     nativeBypassClick: false,
     treeDefaultOpenInstalled: false,
     previewDocked: false,
-    previewSuppressed: false
+    previewSuppressed: false,
+    viewMode: "native",
+    userSelectedNativeView: false
   };
 
   function getExternalMetaModule() {
@@ -230,6 +236,7 @@
       if (editor.ready) {
         updateToolbarCompression();
         if ($("#" + CFG.overlayId).is(":visible")) {
+          sizeInlineEditorHost();
           attachEditorPreviewDock();
           fitEditorProofToCanvasSoon();
         }
@@ -434,11 +441,55 @@
 
     $host.addClass("wise-supply-toolbar");
     $("#" + CFG.buttonId + ",#" + CFG.nativeFallbackId).remove();
+    ensureProposalViewToggle($host);
 
     var $nativeEdit = findNativeEditButton();
     if ($nativeEdit.length) promoteNativeEditButton($nativeEdit);
 
     updateToolbarCompression($host);
+    maybeOpenDefaultProposalCreationView();
+  }
+
+  function ensureProposalViewToggle($host) {
+    $host = $host && $host.length ? $host : findToolbarHost();
+    if (!$host.length) return $();
+
+    var $toggle = $("#" + CFG.viewToggleId);
+    if (!$toggle.length) {
+      $toggle = $(
+        '<button id="' + CFG.viewToggleId + '" type="button" ' +
+          'class="items_func_btn ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-primary" ' +
+          'role="button" aria-pressed="false">' +
+          '<span class="ui-button-icon-primary ui-icon ui-icon-transferthick-e-w"></span>' +
+          '<span class="ui-button-text">Proposal Editor</span>' +
+        '</button>'
+      );
+
+      $toggle.on("click", function (e) {
+        e.preventDefault();
+        if (editor.viewMode === "proposal" && $("#" + CFG.overlayId).is(":visible")) {
+          requestNativeSupplyingListView();
+        } else {
+          editor.userSelectedNativeView = false;
+          openEditor({ source: "toggle" });
+        }
+      });
+    }
+
+    if (!$toggle.parent().is($host)) $host.append($toggle);
+    updateProposalViewToggle();
+    return $toggle;
+  }
+
+  function updateProposalViewToggle() {
+    var $toggle = $("#" + CFG.viewToggleId);
+    if (!$toggle.length) return;
+
+    var active = editor.viewMode === "proposal" && $("#" + CFG.overlayId).is(":visible");
+    $toggle.attr("aria-pressed", active ? "true" : "false");
+    $toggle.toggleClass("ui-state-active is-active", active);
+    setToolbarButtonText($toggle, active ? "Native List" : "Proposal Editor");
+    $toggle.attr("title", active ? "Switch to HireHop's native supplying list." : "Switch to the Wise proposal page editor.");
   }
 
   function updateToolbarCompression($host) {
@@ -517,6 +568,21 @@
   function maintainDefaultSupplyingListEditor() {
     addToolbarButton();
     installTreeDefaultOpenHandler();
+    maybeOpenDefaultProposalCreationView();
+  }
+
+  function maybeOpenDefaultProposalCreationView() {
+    if (editor.saving || editor.userSelectedNativeView) return;
+    if ($("#" + CFG.overlayId).is(":visible")) return;
+    if (!isProposalCreationDepot(getActiveDepotContext())) return;
+    if (!getTree()) return;
+
+    openEditor({ source: "default-proposal-creation" });
+  }
+
+  function isProposalCreationDepot(context) {
+    var name = normaliseDepotText(context && context.name, false);
+    return name === "proposal creation";
   }
 
   function findNativeEditButton() {
@@ -583,7 +649,7 @@
         return;
       }
 
-      if ($("#" + CFG.overlayId).is(":visible")) return;
+      if ($("#" + CFG.overlayId).is(":visible") || editor.viewMode === "native") return;
       if (!canOpenVisualEditorForCurrentSelection()) return;
 
       e.preventDefault();
@@ -615,12 +681,14 @@
     editor.treeDefaultOpenInstalled = true;
 
     document.addEventListener("dblclick", function (e) {
-      if (!CFG.defaultOpenOnTreeDoubleClick) return;
+    if (!CFG.defaultOpenOnTreeDoubleClick) return;
+      if (editor.viewMode === "native") return;
       handleDefaultTreeOpenEvent(e, "dblclick");
     }, true);
 
     document.addEventListener("keydown", function (e) {
       if (!CFG.defaultOpenOnEnter) return;
+      if (editor.viewMode === "native") return;
       if (e.key !== "Enter") return;
       handleDefaultTreeOpenEvent(e, "enter");
     }, true);
@@ -729,23 +797,105 @@
 
   function closeEditor() {
     if (editor.saving) return;
-    closeEditorPreviewPanel();
-    $("#" + CFG.overlayId).hide();
+    editor.userSelectedNativeView = true;
+    showNativeSupplyingListView({ force: true });
     setStatus("", "");
   }
 
   function showOverlay() {
-    $("#" + CFG.overlayId).css("display", "flex");
-    editor.previewSuppressed = false;
+    showProposalEditorView();
+    editor.previewSuppressed = true;
     fitEditorProofToCanvasSoon();
-    ensureEditorPreviewPanelOpen();
-    attachEditorPreviewDockSoon();
     refreshEditorPreviewForCurrentHeadingSoon();
   }
 
   function hideEditorOverlayForNativePopup() {
-    closeEditorPreviewPanel();
-    $("#" + CFG.overlayId).hide();
+    editor.userSelectedNativeView = true;
+    showNativeSupplyingListView({ force: true });
+  }
+
+  function showProposalEditorView() {
+    var $host = ensureInlineEditorHost();
+    if (!$host.length) return;
+
+    hideNativeSupplyingListContent($host);
+    $host.show();
+    $("#" + CFG.overlayId).addClass("is-inline").removeClass("has-preview-dock").css("display", "flex");
+    editor.viewMode = "proposal";
+    updateProposalViewToggle();
+    sizeInlineEditorHost();
+    fitEditorProofToCanvasSoon();
+  }
+
+  function requestNativeSupplyingListView() {
+    if (editor.saving) return;
+
+    if (hasUnsavedEditorChanges()) {
+      var discard = window.confirm("Discard your unsaved page editor changes?");
+      if (!discard) return;
+    }
+
+    editor.userSelectedNativeView = true;
+    showNativeSupplyingListView({ force: true });
+  }
+
+  function showNativeSupplyingListView(options) {
+    options = options || {};
+    if (editor.saving && !options.force) return;
+
+    detachEditorPreviewDock();
+    var $host = $("#" + CFG.inlineHostId);
+    var $parent = $host.length ? $host.parent() : $();
+    if ($parent.length) $parent.children("." + CFG.nativeHiddenClass).removeClass(CFG.nativeHiddenClass);
+    $host.hide();
+    $("#" + CFG.overlayId).hide().removeClass("is-inline has-preview-dock");
+    editor.viewMode = "native";
+    updateProposalViewToggle();
+    updateToolbarCompression();
+  }
+
+  function ensureInlineEditorHost() {
+    ensureModal();
+
+    var $toolbar = findToolbarHost();
+    if (!$toolbar.length) return $();
+
+    var $parent = $toolbar.parent();
+    if (!$parent.length) return $();
+    $parent.addClass(CFG.inlineParentClass);
+
+    var $host = $("#" + CFG.inlineHostId);
+    if (!$host.length) {
+      $host = $('<div id="' + CFG.inlineHostId + '"></div>');
+      $host.insertAfter($toolbar);
+    } else if (!$host.parent().is($parent)) {
+      $host.detach().insertAfter($toolbar);
+    }
+
+    var $overlay = $("#" + CFG.overlayId);
+    if (!$overlay.parent().is($host)) $host.append($overlay.detach());
+    $overlay.addClass("is-inline");
+    return $host;
+  }
+
+  function hideNativeSupplyingListContent($host) {
+    if (!$host || !$host.length) return;
+    var hostEl = $host.get(0);
+    var toolbarEl = findToolbarHost().get(0);
+
+    $host.parent().children().each(function () {
+      if (this === hostEl || this === toolbarEl) return;
+      $(this).addClass(CFG.nativeHiddenClass);
+    });
+  }
+
+  function sizeInlineEditorHost() {
+    var $host = $("#" + CFG.inlineHostId);
+    if (!$host.length || !$host.is(":visible")) return;
+
+    var rect = $host.get(0).getBoundingClientRect();
+    var height = Math.max(420, Math.floor((window.innerHeight || document.documentElement.clientHeight || 720) - rect.top - 4));
+    $host.css("height", height + "px");
   }
 
   function attachEditorPreviewDockSoon() {
@@ -762,6 +912,7 @@
 
   function ensureEditorPreviewPanelOpen() {
     if (!$("#" + CFG.overlayId).is(":visible")) return;
+    if ($("#" + CFG.overlayId).hasClass("is-inline")) return;
     if (window.innerWidth < EDITOR_PREVIEW.minViewportWidth) return;
     if (editor.previewSuppressed) return;
 
@@ -780,6 +931,7 @@
     var $rightPane = $("#" + EDITOR_PREVIEW.previewRightPaneId);
 
     if (!$overlay.is(":visible") || !$dock.length) return;
+    if ($overlay.hasClass("is-inline")) return;
     if (window.innerWidth < EDITOR_PREVIEW.minViewportWidth || !$rightPane.length || !$rightPane.is(":visible")) {
       detachEditorPreviewDock();
       return;
@@ -2510,6 +2662,7 @@
   function logDepotDecision(decision, context) {
     var signature = decision + "|" + String((context && context.id) || "") + "|" + String((context && context.name) || "");
     if (signature === editor.depotSignature) return;
+    editor.userSelectedNativeView = false;
     editor.depotSignature = signature;
     log("Depot " + decision, context);
   }
@@ -2715,6 +2868,12 @@
       ".wise-supply-toolbar.is-wise-preview-tight [data-wise-native-edit='1'] .ui-button-text{display:inline-block!important;max-width:34px!important;}",
       ".wise-supply-toolbar.is-wise-preview-tight #wise-doc-preview-toggle{max-width:74px!important;min-width:38px!important;}",
       ".wise-supply-toolbar.is-wise-preview-tight #wise-doc-preview-toggle .ui-button-text{display:inline-block!important;max-width:42px!important;}",
+      ".wise-supply-toolbar #" + CFG.viewToggleId + "{flex:0 0 auto!important;margin-left:auto!important;min-width:132px!important;max-width:170px!important;position:relative!important;z-index:3!important;}",
+      ".wise-supply-toolbar #" + CFG.viewToggleId + ".is-active{border-color:#0D1226!important;background:#0D1226!important;color:#FFFDF9!important;}",
+      ".wise-supply-toolbar.is-wise-preview-tight #" + CFG.viewToggleId + "{max-width:132px!important;min-width:112px!important;}",
+      "." + CFG.inlineParentClass + "{display:flex!important;flex-direction:column!important;min-height:0!important;}",
+      "#" + CFG.inlineHostId + "{display:none;flex:1 1 auto;min-height:420px;width:100%;overflow:hidden;}",
+      "." + CFG.nativeHiddenClass + "{display:none!important;}",
       "." + CFG.defaultEditClass + "{box-shadow:none!important;}",
       "#" + CFG.buttonId + ",#" + CFG.nativeFallbackId + "{display:none!important;}",
       "#" + CFG.modalId + " .wpe-editor{display:grid;gap:7px;min-width:0;}",
@@ -2877,6 +3036,8 @@
       "#" + CFG.overlayId + "{align-items:stretch;justify-content:stretch;padding:0;background:rgba(13,18,38,.72);backdrop-filter:blur(10px);}",
       "#" + CFG.overlayId + ".has-preview-dock{justify-content:stretch;}",
       "#" + CFG.modalId + "{flex:1 1 auto;width:100vw;max-width:none;height:100vh;max-height:100vh;min-width:0;background:#FFFDF9;border:0;border-radius:0;box-shadow:none;font-family:'Segoe UI',Tahoma,Arial,sans-serif;color:#0D1226;font-size:15px;line-height:1.35;}",
+      "#" + CFG.overlayId + ".is-inline{position:relative;inset:auto;z-index:1;width:100%;height:100%;display:none;align-items:stretch;justify-content:stretch;padding:0;background:transparent;backdrop-filter:none;}",
+      "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + "{width:100%;height:100%;max-width:none;max-height:none;}",
       "#" + CFG.overlayId + ".has-preview-dock #" + CFG.modalId + "{width:auto;border-radius:0;}",
       "#" + EDITOR_PREVIEW.dockId + "{height:100vh;max-height:100vh;border-radius:0;box-shadow:none;}",
       "#" + CFG.modalId + " .weo-head{background:linear-gradient(135deg,rgba(255,253,249,.98) 0%,rgba(236,151,151,.18) 100%);border-bottom:1px solid rgba(236,151,151,.3);padding:10px 12px 8px;}",
@@ -2938,7 +3099,8 @@
     $("head").append('<style id="' + id + '">' + css + "</style>");
   }
 
-  function openEditor() {
+  function openEditor(options) {
+    options = options || {};
     ensureModal();
     injectGenericStyles();
     setStatus("", "");
@@ -2952,8 +3114,7 @@
         return;
       }
 
-      var selected = getSelectedTreeNode(tree);
-      var headingNode = selected && selected.data && Number(selected.data.kind) === 0 ? selected : getParentHeadingNode(tree, selected);
+      var headingNode = getDefaultEditorHeadingNode(tree);
 
       if (!headingNode) {
         showMessage("Select a proposal page", "Select a Section or Dept heading in the supplying list, then open the editor again.");
@@ -2970,6 +3131,25 @@
       showMessage("Could not open page editor", getErrorMessage(err, "The editor hit an unexpected error while reading the selected page."));
       showOverlay();
     }
+  }
+
+  function getDefaultEditorHeadingNode(tree) {
+    if (!tree) return null;
+
+    var selected = getSelectedTreeNode(tree);
+    if ((!selected || !selected.id) && editor.lastClickedNodeId) {
+      try { selected = tree.get_node(editor.lastClickedNodeId); } catch (e) { selected = null; }
+    }
+
+    var headingNode = selected && selected.data && Number(selected.data.kind) === 0 ? selected : getParentHeadingNode(tree, selected);
+    if (headingNode) return headingNode;
+
+    var headings = getAllHeadingNodes(tree);
+    for (var i = 0; i < headings.length; i++) {
+      if (canOpenVisualEditorForNode(headings[i])) return headings[i];
+    }
+
+    return null;
   }
 
   function setModalTitle(title, subtitle) {
@@ -6138,7 +6318,7 @@
   function describeProposalEditorArchitecture() {
     return {
       version: CFG.version,
-      role: "HireHop proposal authoring overlay that reads/writes supplying-list headings and metadata consumed by QTC-V2.html.",
+      role: "HireHop proposal authoring workspace that reads/writes supplying-list headings and metadata consumed by QTC-V2.html.",
       rendererReference: "QTC-V2.html",
       modes: [
         {
