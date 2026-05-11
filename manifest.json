@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-05-05.04",
+  "version": "2026-05-11.01",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -47,7 +47,7 @@
     {
       "file": "6-editor2.js",
       "status": "active-primary",
-      "cacheVersion": "0.9",
+      "cacheVersion": "1.0",
       "role": "Main proposal page editor and HireHop authoring layer.",
       "recommendedLoadOrder": 6
     }
