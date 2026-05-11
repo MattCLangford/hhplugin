@@ -2137,7 +2137,7 @@
     return m ? m[1].toLowerCase() : "";
   }
   function stripSideSuffix(title){
-    const stripped = String(title || "").replace(/\s*(?:-|\u2013|\u2014)\s*(left|right|none|dept|section)\s*$/i, "").trim();
+    const stripped = String(title || "").replace(/\s*(?:-|\u2013|\u2014)\s*(left|right|alt|none|dept|section)\s*$/i, "").trim();
     return stripped;
   }
   function toTitleCase(str){
@@ -2191,7 +2191,7 @@
     const originalTitle = String(node?.title || "").trim();
     if (!originalTitle) return { title: "", variant: "" };
 
-    const match = originalTitle.match(/^(.*?)(?:\s*-\s*(alt))\s*$/i);
+    const match = originalTitle.match(/^(.*?)(?:\s*(?:-|\u2013|\u2014)\s*(alt))\s*$/i);
     if (!match){
       return { title: originalTitle, variant: "" };
     }
@@ -3972,7 +3972,7 @@
 
   function extractSummaryMode(title){
     const s = String(title || "").trim();
-    const match = s.match(/\s*-\s*(none|dept|section)\s*$/i);
+    const match = s.match(/\s*(?:-|\u2013|\u2014)\s*(none|dept|section)\s*$/i);
     if (match){
       const mode = match[1].toLowerCase();
       if (["none", "dept", "section"].includes(mode)){
@@ -4329,7 +4329,9 @@
     const opts = options || {};
     const page = cloneTemplate("thankYouTemplate");
     page.classList.add("layout-thankyou", "on-dark");
-    if (opts.pageClass) page.classList.add(opts.pageClass);
+    if (opts.pageClass) {
+      String(opts.pageClass).split(/\s+/).filter(Boolean).forEach(cls => page.classList.add(cls));
+    }
 
     applyBg(page, deptNode.technical);
 
@@ -4368,7 +4370,7 @@
   function renderThankYouAlt(input){
     return renderThankYouPage(input, {
       titleHtml: "Thank you<br>for your<br>consideration",
-      pageClass: "layout-thankyou-alt"
+      pageClass: "layout-thankyou-alt layout-variant-alt"
     });
   }
 
