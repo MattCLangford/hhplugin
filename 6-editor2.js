@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-07.09-proof-container-isolation",
+    version: "2026-05-11.01-suffix-actions-topbar",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -335,6 +335,7 @@
       "#" + CFG.modalId + " .weo-btn:hover{background:#f9fafb;}",
       "#" + CFG.modalId + " .weo-btn.is-primary{border-color:#175cd3;background:#175cd3;color:#fff;}",
       "#" + CFG.modalId + " .weo-footer{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding-top:7px;border-top:1px solid #e4e8ef;}",
+      "#" + CFG.modalId + ".is-generic-editor .weo-footer{display:none;}",
       "#" + CFG.statusId + "{min-height:13px;font-size:10px;font-weight:700;padding-left:1px;}",
       "#" + CFG.statusId + ".is-error{color:#b42318;}",
       "#" + CFG.statusId + ".is-success{color:#027a48;}",
@@ -1138,6 +1139,7 @@
     state = normaliseVisualEditorState(state || blankState());
     editor.current = state;
     editor.selectedRegionId = "";
+    $("#" + CFG.modalId).removeClass("is-generic-editor");
 
     var html = '' +
       '<div class="weo-visual-editor">' +
@@ -2450,10 +2452,16 @@
     $("#" + CFG.bodyId).find("input,textarea,button,select").prop("disabled", !!isBusy);
     $("#" + CFG.closeId + ",#" + CFG.modalId + " .weo-x").prop("disabled", !!isBusy);
     $("#" + CFG.saveId).prop("disabled", !!isBusy).text(isBusy ? "Saving..." : "Save changes");
+    $("#" + CFG.bodyId).find('[data-weo-action="save-page"]').text(isBusy ? "Saving..." : "Save page");
+    if (!isBusy) {
+      var canSave = editor.mode !== MODE_GENERIC || !isGenericLockedLayout(normaliseGenericState(editor.current || {}).layoutId);
+      setSaveEnabled(canSave);
+    }
   }
 
   function setSaveEnabled(enabled) {
     $("#" + CFG.saveId).prop("disabled", !enabled || editor.saving);
+    $("#" + CFG.bodyId).find('[data-weo-action="save-page"]').prop("disabled", !enabled || editor.saving);
   }
 
   function setStatus(message, tone) {
@@ -2914,12 +2922,13 @@
       "#" + CFG.buttonId + ",#" + CFG.nativeFallbackId + "{display:none!important;}",
       "#" + CFG.modalId + " .wpe-editor{display:grid;gap:7px;min-width:0;}",
       "#" + CFG.modalId + " .wpe-topbar{display:flex;gap:7px;align-items:stretch;justify-content:space-between;}",
-      "#" + CFG.modalId + " .wpe-layout-card{border:1px solid #d6deea;border-radius:12px;background:#fff;padding:8px 9px;box-shadow:0 4px 12px rgba(15,23,42,.04);min-width:240px;}",
-      "#" + CFG.modalId + " .wpe-nav-card{display:grid;gap:6px;min-width:210px;border:1px solid #d6deea;border-radius:12px;background:#fff;padding:8px 9px;box-shadow:0 4px 12px rgba(15,23,42,.04);}",
+      "#" + CFG.modalId + " .wpe-layout-card{border:1px solid #d6deea;border-radius:12px;background:#fff;padding:8px 9px;box-shadow:0 4px 12px rgba(15,23,42,.04);min-width:240px;flex:1 1 auto;}",
+      "#" + CFG.modalId + " .wpe-nav-card,#" + CFG.modalId + " .wpe-command-card{display:grid;gap:6px;min-width:210px;border:1px solid #d6deea;border-radius:12px;background:#fff;padding:8px 9px;box-shadow:0 4px 12px rgba(15,23,42,.04);}",
+      "#" + CFG.modalId + " .wpe-command-card{min-width:160px;}",
       "#" + CFG.modalId + " .wpe-nav-head{display:flex;justify-content:space-between;gap:8px;align-items:center;font-size:10px;font-weight:900;color:#101828;}",
       "#" + CFG.modalId + " .wpe-nav-pos{font-size:9px;color:#667085;}",
       "#" + CFG.modalId + " .wpe-nav-actions{display:flex;gap:6px;}",
-      "#" + CFG.modalId + " .wpe-nav-card .wpe-mini-btn{flex:1 1 0;}",
+      "#" + CFG.modalId + " .wpe-nav-card .wpe-mini-btn,#" + CFG.modalId + " .wpe-command-card .wpe-mini-btn{flex:1 1 0;}",
       "#" + CFG.modalId + " .wpe-nav-caption{font-size:10px;line-height:1.3;color:#667085;}",
       "#" + CFG.modalId + " .wpe-layout-kicker{font-size:9px;font-weight:900;letter-spacing:.09em;text-transform:uppercase;color:#98a2b3;}",
       "#" + CFG.modalId + " .wpe-layout-title{margin-top:2px;font-size:12px;font-weight:900;color:#101828;line-height:1.15;}",
@@ -3082,7 +3091,7 @@
       "#" + CFG.modalId + " .weo-title,#" + CFG.modalId + " .wpe-layout-title,#" + CFG.modalId + " .wpe-costing-title,#" + CFG.modalId + " .wpe-nav-head span:first-child{font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-weight:700;letter-spacing:0;color:#0D1226;}",
       "#" + CFG.modalId + " .weo-subtitle,#" + CFG.modalId + " .weo-layout-note,#" + CFG.modalId + " .wpe-layout-note,#" + CFG.modalId + " .wpe-nav-caption,#" + CFG.modalId + " .wpe-costing-note,#" + CFG.modalId + " .wpe-page-actions span,#" + CFG.modalId + " .wpe-note-box,#" + CFG.modalId + " .wpe-dept-columns-note{font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-weight:400;color:rgba(13,18,38,.78);}",
       "#" + CFG.modalId + " .weo-canvas-shell,#" + CFG.modalId + " .wpe-canvas-shell{min-height:0;height:100%;max-height:none;display:flex;align-items:center;justify-content:center;overflow:auto;background:linear-gradient(160deg,rgba(13,18,38,.08) 0%,rgba(236,151,151,.17) 100%);border:1px solid rgba(13,18,38,.1);border-radius:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.5);padding:8px;}",
-      "#" + CFG.modalId + " .weo-layout-note,#" + CFG.modalId + " .wpe-layout-card,#" + CFG.modalId + " .wpe-nav-card,#" + CFG.modalId + " .wpe-costing-panel,#" + CFG.modalId + " .wpe-page-actions,#" + CFG.modalId + " .wpe-title-cover-option,#" + CFG.modalId + " .wpe-locked-panel,#" + CFG.modalId + " .wpe-native-items-note,#" + CFG.modalId + " .wpe-separator-note{background:rgba(255,253,249,.95);border:1px solid rgba(236,151,151,.32);box-shadow:0 18px 42px rgba(13,18,38,.08);}",
+      "#" + CFG.modalId + " .weo-layout-note,#" + CFG.modalId + " .wpe-layout-card,#" + CFG.modalId + " .wpe-nav-card,#" + CFG.modalId + " .wpe-command-card,#" + CFG.modalId + " .wpe-costing-panel,#" + CFG.modalId + " .wpe-page-actions,#" + CFG.modalId + " .wpe-title-cover-option,#" + CFG.modalId + " .wpe-locked-panel,#" + CFG.modalId + " .wpe-native-items-note,#" + CFG.modalId + " .wpe-separator-note{background:rgba(255,253,249,.95);border:1px solid rgba(236,151,151,.32);box-shadow:0 18px 42px rgba(13,18,38,.08);}",
       "#" + CFG.modalId + " .weo-layout-pill,#" + CFG.modalId + " .wpe-dept-layout-pill{background:rgba(255,253,249,.96);border:1px solid rgba(13,18,38,.12);box-shadow:0 10px 24px rgba(13,18,38,.06);}",
       "#" + CFG.modalId + " .weo-layout-pill.is-selected,#" + CFG.modalId + " .wpe-dept-layout-pill.is-selected{border-color:#EC9797;background:rgba(236,151,151,.14);box-shadow:inset 0 0 0 1px rgba(236,151,151,.16),0 14px 32px rgba(13,18,38,.09);}",
       "#" + CFG.modalId + " .weo-page-field,#" + CFG.modalId + " .wpe-field{border:1px solid rgba(236,151,151,.42);background:rgba(255,253,249,.92);color:#0D1226;font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-weight:400;box-shadow:0 8px 18px rgba(13,18,38,.05);}",
@@ -3090,8 +3099,8 @@
       "#" + CFG.modalId + " .weo-page-field:focus,#" + CFG.modalId + " .wpe-field:focus{border-color:#0D1226;background:#fff;box-shadow:0 0 0 3px rgba(236,151,151,.22);}",
       "#" + CFG.modalId + " .weo-btn,#" + CFG.modalId + " .wpe-mini-btn{border:1px solid rgba(13,18,38,.16);border-radius:999px;background:#FFFDF9;color:#0D1226;font-family:'Segoe UI',Tahoma,Arial,sans-serif;font-weight:700;box-shadow:0 10px 22px rgba(13,18,38,.08);}",
       "#" + CFG.modalId + " .weo-btn:hover,#" + CFG.modalId + " .wpe-mini-btn:hover{background:#EC9797;border-color:#EC9797;color:#0D1226;}",
-      "#" + CFG.modalId + " .weo-btn.is-primary{border-color:#0D1226;background:#0D1226;color:#FFFDF9;}",
-      "#" + CFG.modalId + " .weo-btn.is-primary:hover{background:#EC9797;border-color:#EC9797;color:#0D1226;}",
+      "#" + CFG.modalId + " .weo-btn.is-primary,#" + CFG.modalId + " .wpe-mini-btn.is-primary{border-color:#0D1226;background:#0D1226;color:#FFFDF9;}",
+      "#" + CFG.modalId + " .weo-btn.is-primary:hover,#" + CFG.modalId + " .wpe-mini-btn.is-primary:hover{background:#EC9797;border-color:#EC9797;color:#0D1226;}",
       "#" + CFG.modalId + " .wpe-mini-btn.is-danger{border-color:rgba(13,18,38,.2);background:rgba(13,18,38,.04);color:#0D1226;}",
       "#" + CFG.modalId + " .wpe-mini-btn.is-danger:hover{background:#0D1226;border-color:#0D1226;color:#FFFDF9;}",
       "#" + CFG.modalId + " .wpe-toggle-pill,#" + CFG.modalId + " .wpe-select-pill,#" + CFG.modalId + " .wpe-input-pill{background:rgba(255,253,249,.94);border:1px solid rgba(236,151,151,.32);color:#0D1226;}",
@@ -3143,9 +3152,10 @@
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-canvas-shell,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-canvas-shell{padding:5px;border-radius:10px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-canvas-shell{align-items:flex-start;overflow:auto;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-proof-page,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-proof{min-width:0;max-width:none;}",
-      "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-layout-note,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-layout-card,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-nav-card,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-costing-panel,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-page-actions,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-title-cover-option,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-locked-panel,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-native-items-note,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-separator-note{box-shadow:0 8px 20px rgba(13,18,38,.06);}",
+      "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-layout-note,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-layout-card,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-nav-card,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-command-card,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-costing-panel,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-page-actions,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-title-cover-option,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-locked-panel,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-native-items-note,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-separator-note{box-shadow:0 8px 20px rgba(13,18,38,.06);}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-layout-card{flex:1 1 auto;padding:6px 7px;min-width:205px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-nav-card{flex:0 0 185px;padding:6px 7px;gap:4px;min-width:185px;}",
+      "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-command-card{flex:0 0 150px;padding:6px 7px;gap:4px;min-width:150px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-page-actions{padding:5px 7px;gap:5px;border-radius:10px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-layout-options,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-dept-layout-options{gap:5px;}",
       "#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .weo-layout-pill,#" + CFG.overlayId + ".is-inline #" + CFG.modalId + " .wpe-dept-layout-pill{grid-template-columns:16px minmax(0,1fr);gap:5px;padding:5px 7px;border-radius:10px;}",
@@ -3685,9 +3695,20 @@
 
   function splitEditableTitleSuffix(title) {
     var raw = String(title || "").trim();
-    var match = raw.match(/^(.*?)(\s*(?:-|\u2013|\u2014)\s*(?:left|right|alt|none|dept|section))\s*$/i);
+    var match = raw.match(/^(.*?)(?:\s*(?:-|\u2013|\u2014)\s*(left|right|alt|none|dept|section))\s*$/i);
     if (!match) return { title: raw, suffix: "" };
-    return { title: $.trim(match[1] || raw), suffix: String(match[2] || "") };
+    return { title: $.trim(match[1] || raw), suffix: canonicalGenericTitleSuffix(match[2]) };
+  }
+
+  function canonicalGenericTitleSuffix(value) {
+    var token = normalizeGenericMatchText(value);
+    if (!token || token === "none" || token === "default") return "";
+    if (token === "left") return " - Left";
+    if (token === "right") return " - Right";
+    if (token === "alt") return " - Alt";
+    if (token === "dept") return " - Dept";
+    if (token === "section") return " - Section";
+    return "";
   }
 
   function titleForEditing(value) {
@@ -4228,7 +4249,7 @@
     var hidden = !!state.hidden;
     var additionalOptions = !!state.additionalOptions;
     var cascadeAdditionalOptions = !!state.cascadeAdditionalOptions;
-    var titleSuffix = String(state.titleSuffix || "");
+    var titleSuffix = canonicalGenericTitleSuffix(state.titleSuffix);
     if (isGenericManagedRowsLayout(layoutId) && !rows.length) rows.push(blankGenericRow(layoutId === GENERIC_LAYOUTS.CRITICAL_PATH ? "milestone" : "person"));
     if (layoutId === GENERIC_LAYOUTS.HERO && renderType === "section") {
       title = "Hero";
@@ -4414,6 +4435,7 @@
   function renderGenericEditor(state) {
     state = normaliseGenericState(state || editor.current || {});
     editor.current = state;
+    $("#" + CFG.modalId).addClass("is-generic-editor");
 
     var html = '' +
       '<div class="wpe-editor">' +
@@ -4446,6 +4468,7 @@
           genericModifierControlsHtml(state) +
         '</div>' +
         proposalNavigationCardHtml() +
+        genericPageCommandCardHtml(state) +
       '</div>';
   }
 
@@ -4514,6 +4537,18 @@
       '</div>';
   }
 
+  function genericPageCommandCardHtml(state) {
+    var canSave = !isGenericLockedLayout(state && state.layoutId);
+    return '' +
+      '<div class="wpe-command-card">' +
+        '<div class="wpe-nav-head"><span>Page actions</span></div>' +
+        '<div class="wpe-nav-actions">' +
+          '<button type="button" class="wpe-mini-btn" data-weo-action="cancel-page">Cancel</button>' +
+          '<button type="button" class="wpe-mini-btn is-primary" data-weo-action="save-page"' + (canSave ? '' : ' disabled') + '>Save page</button>' +
+        '</div>' +
+      '</div>';
+  }
+
   function genericNavigationCardHtml() {
     return proposalNavigationCardHtml();
   }
@@ -4549,11 +4584,12 @@
   }
 
   function genericSuffixSelectHtml(current, options) {
+    var selected = canonicalGenericTitleSuffix(current);
     var html = '<label class="wpe-select-pill">Suffix <select data-generic-field="titleSuffix">';
     for (var i = 0; i < options.length; i++) {
-      var value = options[i][0];
+      var value = canonicalGenericTitleSuffix(options[i][0]);
       var label = options[i][1];
-      html += '<option value="' + attr(value) + '"' + (String(current || '') === value ? ' selected' : '') + '>' + esc(label) + '</option>';
+      html += '<option value="' + attr(value) + '"' + (selected === value ? ' selected' : '') + '>' + esc(label) + '</option>';
     }
     html += '</select></label>';
     return html;
@@ -5118,7 +5154,7 @@
     if ($blurb.length) state.blurb = String($blurb.val() || "");
     if ($technical.length) state.technical = $.trim(String($technical.val() || ""));
     if ($renderType.length) state.renderType = String($renderType.val() || state.renderType || "dept");
-    if ($titleSuffix.length) state.titleSuffix = String($titleSuffix.val() || "");
+    if ($titleSuffix.length) state.titleSuffix = canonicalGenericTitleSuffix($titleSuffix.val());
     if ($deptLayout.length) state.deptLayout = normaliseLayout($deptLayout.val() || state.deptLayout);
     if ($hidden.length) state.hidden = !!$hidden.prop("checked");
     if ($additionalOptions.length) state.additionalOptions = !!$additionalOptions.prop("checked");
@@ -5251,6 +5287,16 @@
 
     if (action === "navigate-next") {
       navigateProposalEditor(1);
+      return;
+    }
+
+    if (action === "save-page") {
+      saveGenericEditor();
+      return;
+    }
+
+    if (action === "cancel-page") {
+      requestCloseEditor();
       return;
     }
 
@@ -5769,7 +5815,7 @@
     if (state.hidden) prefix += "// ";
     if (state.additionalOptions) prefix += "$ ";
     prefix += headingPrefixForRenderType(state.renderType);
-    return prefix + titleForStorage(state.title) + String(state.titleSuffix || "");
+    return prefix + titleForStorage(state.title) + canonicalGenericTitleSuffix(state.titleSuffix);
   }
 
   async function saveLabourDayFolders(jobId, tree, rootNode, state) {
