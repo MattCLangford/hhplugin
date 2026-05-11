@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-11.01-suffix-actions-topbar",
+    version: "2026-05-11.02-url-clear-buttons",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -314,7 +314,10 @@
       "#" + CFG.modalId + " .weo-proof-page.is-image-layout .weo-proof-image-panel img{width:100%;height:100%;object-fit:cover;display:block;}",
       "#" + CFG.modalId + " .weo-proof-page.is-image-layout .weo-image-url-card{position:absolute;left:7%;right:7%;top:8%;z-index:4;border:1px solid rgba(255,255,255,.28);border-radius:12px;background:rgba(13,18,38,.58);backdrop-filter:blur(3px);padding:8px;color:#fff;}",
       "#" + CFG.modalId + " .weo-proof-page.is-image-layout .weo-image-url-card label{display:block;margin-bottom:4px;font-size:9px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.82);}",
+      "#" + CFG.modalId + " .weo-url-input-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px;align-items:center;}",
       "#" + CFG.modalId + " .weo-proof-page.is-image-layout .weo-image-url-card input{width:100%;border:1px solid rgba(255,255,255,.3);border-radius:8px;background:rgba(255,255,255,.93);font-size:11px;padding:6px 7px;color:#0d1226;}",
+      "#" + CFG.modalId + " .weo-url-clear-btn{border:1px solid rgba(255,255,255,.34);border-radius:8px;background:rgba(255,255,255,.12);color:#fff;cursor:pointer;font-size:10px;font-weight:800;line-height:1.1;padding:6px 8px;white-space:nowrap;}",
+      "#" + CFG.modalId + " .weo-url-clear-btn:hover{background:rgba(255,255,255,.22);}",
       "#" + CFG.modalId + " .weo-proof-page.is-image-layout .weo-page-title-fixed{right:5.2%;bottom:11%;width:40%;text-align:right;color:rgba(255,253,249,.94);text-shadow:0 2px 16px rgba(0,0,0,.24);}",
       "#" + CFG.modalId + " .weo-proof-page.is-image-layout .weo-proof-copy-pane{position:absolute;left:5.1%;top:21%;bottom:13%;width:34.5%;z-index:4;display:flex;flex-direction:column;min-height:0;}",
       "#" + CFG.modalId + " .weo-proof-page.is-image-layout .weo-day-blurb{margin-bottom:10px;}",
@@ -432,8 +435,29 @@
     $("#" + CFG.bodyId).on("click", "[data-weo-action]", function (e) {
       e.preventDefault();
       if (editor.saving) return;
-      runEditorAction($(this));
+      var $btn = $(this);
+      if (String($btn.attr("data-weo-action") || "") === "clear-url-input") {
+        clearEditorUrlInput($btn);
+        return;
+      }
+      runEditorAction($btn);
     });
+  }
+
+  function clearEditorUrlInput($btn) {
+    var $scope = $btn.closest(".weo-url-input-row,.wpe-url-input-row,.weo-image-url-card,.wpe-image-url,.wpe-person-card");
+    var $input = $scope.find([
+      'input[data-field="imageUrl"]',
+      'input[data-generic-field="technical"]',
+      'input[data-generic-row-field="imageUrl"]'
+    ].join(",")).first();
+
+    if (!$input.length) return;
+
+    $input.val("");
+    $input.trigger("input");
+    if ($input.get(0) && typeof $input.get(0).focus === "function") $input.get(0).focus();
+    setStatus("URL box cleared. Paste a new URL, then Save page when ready.", "info");
   }
 
   function addToolbarButton() {
@@ -1216,7 +1240,10 @@
           '<div class="weo-image-placeholder">Image shown in document preview</div>' +
           '<div class="weo-image-url-card">' +
             '<label>Feature image URL</label>' +
-            '<input type="text" data-field="imageUrl" value="' + attr(imageUrl) + '" placeholder="https://...">' +
+            '<div class="weo-url-input-row">' +
+              '<input type="text" data-field="imageUrl" value="' + attr(imageUrl) + '" placeholder="https://...">' +
+              '<button type="button" class="weo-url-clear-btn" data-weo-action="clear-url-input">Clear</button>' +
+            '</div>' +
           '</div>' +
         '</div>' +
         '<div class="weo-page-title-fixed">Event Overview<br>&amp; Schedule</div>' +
@@ -2959,6 +2986,9 @@
       "#" + CFG.modalId + " .wpe-image-url{position:absolute;left:12px;right:12px;top:12px;z-index:8;border:1px solid rgba(255,255,255,.28);border-radius:12px;background:rgba(13,18,38,.56);backdrop-filter:blur(3px);padding:7px;color:#fff;}",
       "#" + CFG.modalId + " .wpe-image-url label{display:block;margin-bottom:4px;font-size:9px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.84);}",
       "#" + CFG.modalId + " .wpe-image-url input{width:100%;border:1px solid rgba(255,255,255,.3);border-radius:8px;background:rgba(255,255,255,.93);font-size:10px;padding:5px 6px;color:#0d1226;}",
+      "#" + CFG.modalId + " .wpe-url-input-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:5px;align-items:center;}",
+      "#" + CFG.modalId + " .wpe-url-clear-btn{border:1px solid rgba(255,255,255,.34);border-radius:8px;background:rgba(255,255,255,.12);color:#fff;cursor:pointer;font-size:10px;font-weight:900;line-height:1.1;padding:5px 8px;white-space:nowrap;}",
+      "#" + CFG.modalId + " .wpe-url-clear-btn:hover{background:rgba(255,255,255,.22);}",
       "#" + CFG.modalId + " .wpe-left-copy{position:absolute;left:5.1%;top:21%;bottom:13%;width:35%;z-index:5;display:flex;flex-direction:column;gap:7px;}",
       "#" + CFG.modalId + " .wpe-half-image{position:absolute;right:0;top:0;bottom:0;width:50%;z-index:1;border-radius:0;}",
       "#" + CFG.modalId + " .wpe-half-image .wpe-image-preview{height:100%;border:0;border-radius:0;}",
@@ -2991,6 +3021,8 @@
       "#" + CFG.modalId + " .wpe-person-card{display:grid;gap:5px;min-width:0;}",
       "#" + CFG.modalId + " .wpe-avatar{width:64px;height:64px;border-radius:999px;margin:0 auto 2px;}",
       "#" + CFG.modalId + " .wpe-person-card .wpe-field{text-align:center;font-size:10px;padding:4px 5px;}",
+      "#" + CFG.modalId + " .wpe-person-card .wpe-url-clear-btn{border-color:rgba(13,18,38,.16);background:#fffdf9;color:#0d1226;box-shadow:0 8px 18px rgba(13,18,38,.05);}",
+      "#" + CFG.modalId + " .wpe-person-card .wpe-url-clear-btn:hover{background:#f9fafb;}",
       "#" + CFG.modalId + " .wpe-person-card textarea.wpe-field{min-height:36px;}",
       "#" + CFG.modalId + " .wpe-timeline-title{position:absolute;left:3%;right:3%;top:12%;z-index:5;}",
       "#" + CFG.modalId + " .wpe-timeline{position:absolute;left:3%;right:3%;top:44%;bottom:14%;z-index:5;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;align-items:start;border-top:5px solid #EC9797;padding-top:10px;}",
@@ -4697,7 +4729,10 @@
     return '' +
       '<div class="wpe-image-url">' +
         '<label>' + esc(label || "Image / technical URL") + '</label>' +
-        '<input type="text" data-generic-field="technical" value="' + attr(value) + '" placeholder="' + attr(placeholder || "https://...") + '">' +
+        '<div class="wpe-url-input-row">' +
+          '<input type="text" data-generic-field="technical" value="' + attr(value) + '" placeholder="' + attr(placeholder || "https://...") + '">' +
+          '<button type="button" class="wpe-url-clear-btn" data-weo-action="clear-url-input">Clear</button>' +
+        '</div>' +
       '</div>';
   }
 
@@ -5038,7 +5073,10 @@
     return '' +
       '<div class="wpe-person-card" data-generic-row-uid="' + attr(person.uid) + '" data-row-id="' + attr(person.id) + '" data-row-kind="person" data-row-index="' + index + '">' +
         imagePreviewHtml(person.imageUrl, "wpe-avatar") +
-        '<input class="wpe-field" data-generic-row-field="imageUrl" value="' + attr(person.imageUrl) + '" placeholder="Image URL">' +
+        '<div class="wpe-url-input-row">' +
+          '<input class="wpe-field" data-generic-row-field="imageUrl" value="' + attr(person.imageUrl) + '" placeholder="Image URL">' +
+          '<button type="button" class="wpe-url-clear-btn" data-weo-action="clear-url-input">Clear</button>' +
+        '</div>' +
         '<input class="wpe-field" data-generic-row-field="altName" value="' + attr(person.altName || person.additional) + '" placeholder="Role">' +
         '<input class="wpe-field" data-generic-row-field="name" value="' + attr(person.name) + '" placeholder="Name">' +
         '<textarea class="wpe-field" data-generic-row-field="technical" placeholder="Short bio">' + esc(person.technical) + '</textarea>' +
