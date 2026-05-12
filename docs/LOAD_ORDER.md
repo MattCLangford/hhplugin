@@ -11,6 +11,12 @@ Use this order for the live HireHop scripts.
 
 For the full paste-ready company config string, use `docs/HIREHOP_PLUGIN_STRING.md`.
 
+After changing runtime files or cache versions in `manifest.json`, regenerate the string with:
+
+```powershell
+.\tools\build-plugin-string.ps1
+```
+
 ## Keep Off In Normal Production
 
 `wise-headingedit-ui.js`
