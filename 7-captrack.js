@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-12.02",
+    version: "2026-05-12.04",
     title: "Capacity Tracker",
     subtitle: "Open project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -45,6 +45,10 @@
     searchDebounceMs: 180,
     searchEndpointFallback: "/php_functions/search_list.php",
     debugUseMock: false,
+    targetDepotIds: [],
+    targetDepotNames: [
+      "Wise Productions YES Events"
+    ],
     closedStatusNames: [
       "Completed",
       "Completed & Invoiced",
@@ -142,6 +146,7 @@
       endpoint: getHireHopEndpoint("searchList", CFG.searchEndpointFallback),
       defaultZoom: CFG.defaultZoom,
       projectsLoaded: state.projects.length,
+      targetDepot: getTargetDepotSummary(),
       customFieldKeys: $.extend({}, CFG.customFieldKeys)
     };
   }
@@ -274,6 +279,12 @@
     if (!endpoint) return Promise.reject(new Error("HireHop project search endpoint is not configured."));
 
     var range = buildFetchDateRange();
+    var depotFilter = resolveTargetDepots();
+    if (!depotFilter.ids.length) {
+      return Promise.reject(new Error("Target depot not found: " + CFG.targetDepotNames.join(", ") + ". The tracker will not load unfiltered project data."));
+    }
+    log("Using target depot filter", depotFilter);
+
     var allRows = [];
 
     /*
@@ -304,7 +315,9 @@
         include_project_custom_fields: 1,
         include_custom_fields: 1,
         project_custom_fields: getCustomFieldKeyList().join(","),
-        custom_fields: getCustomFieldKeyList().join(",")
+        custom_fields: getCustomFieldKeyList().join(","),
+        DEPOT: depotFilter.ids,
+        pq_filter: buildDepotFilter(depotFilter.ids)
       };
 
       var url = endpoint + (endpoint.indexOf("?") === -1 ? "?" : "&") + $.param(params);
@@ -343,6 +356,54 @@
     return {
       from: startOfDay(addMonths(today, -Math.max(0, Number(state.monthsBack) || 0))),
       to: endOfDay(addMonths(today, Math.max(1, Number(state.monthsAhead) || 1)))
+    };
+  }
+
+  function resolveTargetDepots() {
+    var ids = [];
+    var labels = [];
+
+    for (var c = 0; c < CFG.targetDepotIds.length; c++) {
+      var configuredId = normaliseDepotId(CFG.targetDepotIds[c]);
+      if (configuredId && ids.indexOf(configuredId) === -1) ids.push(configuredId);
+    }
+
+    var depotRows = window.depots && typeof window.depots === "object" ? window.depots : null;
+    if (depotRows) {
+      $.each(depotRows, function (key, depot) {
+        var id = normaliseDepotId(firstValue(depot, ["ID", "id", "DEPOT_ID", "depot_id"]) || key);
+        var name = cleanDepotName(firstValue(depot, ["DEPOT", "depot", "NAME", "name"]));
+        if (!id || !name) return;
+        if (matchesTargetDepotName(name) && ids.indexOf(id) === -1) ids.push(id);
+        if (ids.indexOf(id) !== -1 && labels.indexOf(name) === -1) labels.push(name);
+      });
+    }
+
+    return {
+      ids: ids,
+      labels: labels
+    };
+  }
+
+  function buildDepotFilter(depotIds) {
+    var numericIds = depotIds.map(function (id) { return Number(id); }).filter(function (id) { return isFinite(id) && id > 0; });
+    return {
+      mode: "AND",
+      data: [{
+        condition: "range",
+        dataIndx: "DEPOT",
+        dataType: "integer",
+        value: numericIds
+      }]
+    };
+  }
+
+  function getTargetDepotSummary() {
+    var depots = resolveTargetDepots();
+    return {
+      names: CFG.targetDepotNames.slice(),
+      ids: depots.ids,
+      resolvedNames: depots.labels
     };
   }
 
@@ -1396,6 +1457,27 @@
 
   function normaliseKeyName(value) {
     return asText(value).toLowerCase().replace(/^~?_*|[\s_-]+/g, "");
+  }
+
+  function normaliseDepotId(value) {
+    var text = asText(value).replace(/[^\d]/g, "");
+    return text || "";
+  }
+
+  function cleanDepotName(value) {
+    return asText(value).replace(/\s+/g, " ");
+  }
+
+  function normaliseDepotName(value) {
+    return cleanDepotName(value).toLowerCase().replace(/&/g, "and").replace(/[^a-z0-9]+/g, "");
+  }
+
+  function matchesTargetDepotName(name) {
+    var normalised = normaliseDepotName(name);
+    for (var i = 0; i < CFG.targetDepotNames.length; i++) {
+      if (normalised === normaliseDepotName(CFG.targetDepotNames[i])) return true;
+    }
+    return false;
   }
 
   function normaliseStatus(value) {
