@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-12.04",
+    version: "2026-05-12.05",
     title: "Capacity Tracker",
     subtitle: "Open project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -278,7 +278,6 @@
     var endpoint = getHireHopEndpoint("searchList", CFG.searchEndpointFallback);
     if (!endpoint) return Promise.reject(new Error("HireHop project search endpoint is not configured."));
 
-    var range = buildFetchDateRange();
     var depotFilter = resolveTargetDepots();
     if (!depotFilter.ids.length) {
       return Promise.reject(new Error("Target depot not found: " + CFG.targetDepotNames.join(", ") + ". The tracker will not load unfiltered project data."));
@@ -286,6 +285,7 @@
     log("Using target depot filter", depotFilter);
 
     var allRows = [];
+    var useJsonDepotFilter = false;
 
     /*
      * HireHop's native hh_search_results_dialog posts to search_list.php for jobs/projects.
@@ -294,61 +294,102 @@
      * HireHop prefixes them with "~", for example "~_PM".
      */
     function fetchPage(page) {
-      var params = {
-        local: formatServerDateTime(new Date()),
-        tz: getTimezone(),
-        page: page,
-        rows: CFG.fetchPageSize,
-        jobs: 0,
-        projects: 1,
-        open: 1,
-        closed: state.hideClosed ? 0 : 1,
-        money_owed: 0,
-        is_late: 0,
-        mine: 0,
-        no_user: 0,
-        needs_bill: 0,
-        only_open_ended: 0,
-        status: "",
-        from_date: formatServerDateTime(range.from),
-        to_date: formatServerDateTime(range.to),
-        include_project_custom_fields: 1,
-        include_custom_fields: 1,
-        project_custom_fields: getCustomFieldKeyList().join(","),
-        custom_fields: getCustomFieldKeyList().join(","),
-        DEPOT: depotFilter.ids,
-        pq_filter: buildDepotFilter(depotFilter.ids)
-      };
+      var params = buildSearchParams(page, depotFilter.ids, useJsonDepotFilter);
 
-      var url = endpoint + (endpoint.indexOf("?") === -1 ? "?" : "&") + $.param(params);
+      return requestProjectPage(endpoint, params)
+        .then(null, function (error) {
+          if (!useJsonDepotFilter && error && error.status >= 500) {
+            useJsonDepotFilter = true;
+            logWarn("Retrying HireHop project search with JSON encoded depot filter", {
+              status: error.status,
+              depotIds: depotFilter.ids
+            });
+            return requestProjectPage(endpoint, buildSearchParams(page, depotFilter.ids, true));
+          }
+          throw error;
+        })
+        .then(function (json) {
+          var pageRows = extractRows(json);
+          appendRows(allRows, pageRows);
 
-      return window.fetch(url, {
-        method: "GET",
-        credentials: "same-origin",
-        headers: {
-          Accept: "application/json, text/javascript, */*; q=0.01"
-        }
-      }).then(function (response) {
-        return response.text().then(function (text) {
-          var json = tryParseJson(text);
-          if (!response.ok) throw new Error("HireHop returned HTTP " + response.status + ".");
-          if (!json) throw new Error("HireHop did not return JSON from project search.");
-          return json;
+          var totalRecords = Number(json.totalRecords || json.total || json.records || 0);
+          var pageCount = totalRecords > 0 ? Math.ceil(totalRecords / CFG.fetchPageSize) : 0;
+          var shouldContinue = page < CFG.fetchMaxPages && pageRows.length >= CFG.fetchPageSize;
+          if (pageCount > 0) shouldContinue = page < Math.min(pageCount, CFG.fetchMaxPages);
+
+          return shouldContinue ? fetchPage(page + 1) : allRows;
         });
-      }).then(function (json) {
-        var pageRows = extractRows(json);
-        appendRows(allRows, pageRows);
-
-        var totalRecords = Number(json.totalRecords || json.total || json.records || 0);
-        var pageCount = totalRecords > 0 ? Math.ceil(totalRecords / CFG.fetchPageSize) : 0;
-        var shouldContinue = page < CFG.fetchMaxPages && pageRows.length >= CFG.fetchPageSize;
-        if (pageCount > 0) shouldContinue = page < Math.min(pageCount, CFG.fetchMaxPages);
-
-        return shouldContinue ? fetchPage(page + 1) : allRows;
-      });
     }
 
     return fetchPage(1);
+  }
+
+  function buildSearchParams(page, depotIds, jsonEncodeFilter) {
+    var range = buildFetchDateRange();
+    var filter = buildDepotFilter(depotIds);
+    return {
+      local: formatServerDateTime(new Date()),
+      tz: getTimezone(),
+      page: page,
+      rows: CFG.fetchPageSize,
+      jobs: 0,
+      projects: 1,
+      open: 1,
+      closed: state.hideClosed ? 0 : 1,
+      money_owed: 0,
+      is_late: 0,
+      mine: 0,
+      no_user: 0,
+      needs_bill: 0,
+      only_open_ended: 0,
+      status: "",
+      from_date: formatServerDateTime(range.from),
+      to_date: formatServerDateTime(range.to),
+      include_project_custom_fields: 1,
+      include_custom_fields: 1,
+      project_custom_fields: getCustomFieldKeyList().join(","),
+      custom_fields: getCustomFieldKeyList().join(","),
+      pq_filter: jsonEncodeFilter ? JSON.stringify(filter) : filter
+    };
+  }
+
+  function requestProjectPage(endpoint, params) {
+    var url = endpoint + (endpoint.indexOf("?") === -1 ? "?" : "&") + $.param(params);
+
+    return window.fetch(url, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json, text/javascript, */*; q=0.01"
+      }
+    }).then(function (response) {
+      return response.text().then(function (text) {
+        var json = tryParseJson(text);
+        if (!response.ok) {
+          var error = new Error("HireHop returned HTTP " + response.status + ".");
+          error.status = response.status;
+          error.responseText = text ? text.substr(0, 500) : "";
+          error.searchParams = summariseSearchParams(params);
+          throw error;
+        }
+        if (!json) throw new Error("HireHop did not return JSON from project search.");
+        return json;
+      });
+    });
+  }
+
+  function summariseSearchParams(params) {
+    return {
+      page: params.page,
+      rows: params.rows,
+      jobs: params.jobs,
+      projects: params.projects,
+      open: params.open,
+      closed: params.closed,
+      from_date: params.from_date,
+      to_date: params.to_date,
+      pq_filter_type: typeof params.pq_filter
+    };
   }
 
   function buildFetchDateRange() {

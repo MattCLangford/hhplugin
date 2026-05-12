@@ -7,7 +7,7 @@ Do not hand-edit the current string or source table. Update `manifest.json` firs
 ## Current String
 
 ```text
-https://mattclangford.github.io/hhplugin/1-docprev.js?v=0.1; https://mattclangford.github.io/hhplugin/2-apselall.js?v=0.1; https://mattclangford.github.io/hhplugin/3-meta.js?v=0.1; https://mattclangford.github.io/hhplugin/4-layout.js?v=0.1; https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.3; https://mattclangford.github.io/hhplugin/6-editor2.js?v=1.1; https://mattclangford.github.io/hhplugin/7-captrack.js?v=0.4;
+https://mattclangford.github.io/hhplugin/1-docprev.js?v=0.1; https://mattclangford.github.io/hhplugin/2-apselall.js?v=0.1; https://mattclangford.github.io/hhplugin/3-meta.js?v=0.1; https://mattclangford.github.io/hhplugin/4-layout.js?v=0.1; https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.3; https://mattclangford.github.io/hhplugin/6-editor2.js?v=1.1; https://mattclangford.github.io/hhplugin/7-captrack.js?v=0.5;
 ```
 
 ## Source Table
@@ -20,7 +20,7 @@ https://mattclangford.github.io/hhplugin/1-docprev.js?v=0.1; https://mattclangfo
 | 4 | `4-layout.js` | `0.1` |
 | 5 | `5-hirehop.js` | `0.3` |
 | 6 | `6-editor2.js` | `1.1` |
-| 7 | `7-captrack.js` | `0.4` |
+| 7 | `7-captrack.js` | `0.5` |
 
 ## Maintenance Rule
 
