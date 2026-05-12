@@ -8,10 +8,10 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-12.01",
+    version: "2026-05-12.02",
     title: "Capacity Tracker",
-    subtitle: "Open project timeline by assigned PM, Designer, TPM and Production Manager",
-    buttonLabel: "Capacity",
+    subtitle: "Open project timeline by Project, Designer, Technical and Production assignment",
+    buttonLabel: "Capacity Tracker",
     buttonTitle: "Open Capacity Tracker",
     buttonId: "wise-capacity-tracker-button",
     stylesId: "wise-capacity-tracker-styles",
@@ -26,14 +26,16 @@
     timelineHeaderId: "wise-capacity-tracker-timeline-header",
     timelineBodyId: "wise-capacity-tracker-timeline-body",
     popoverId: "wise-capacity-tracker-popover",
-    defaultZoom: "month",
+    defaultZoom: "week",
     pixelsPerDay: {
-      week: 18,
-      month: 7,
-      quarter: 3
+      week: 26,
+      month: 12,
+      quarter: 5
     },
-    rowHeight: 34,
-    groupHeaderHeight: 38,
+    personRowMinHeight: 38,
+    barHeight: 22,
+    laneGap: 4,
+    lanePadding: 6,
     timelinePaddingMonthsBefore: 2,
     timelinePaddingMonthsAfter: 2,
     defaultMonthsBack: 18,
@@ -72,11 +74,10 @@
   };
 
   var ROLE_MODES = {
-    pm: { field: "pm", label: "PM", groupLabel: "Group by PM", unassigned: "Unassigned PM" },
-    designer: { field: "designer", label: "Designer", groupLabel: "Group by Designer", unassigned: "Unassigned Designer" },
-    tpm: { field: "tpm", label: "TPM", groupLabel: "Group by TPM", unassigned: "Unassigned TPM" },
-    production: { field: "production", label: "Production", groupLabel: "Group by Production", unassigned: "Unassigned Production" },
-    project: { field: "project", label: "Project", groupLabel: "Group by Project", unassigned: "Unassigned" }
+    project: { field: "pm", label: "Project", groupLabel: "Project", unassigned: "Unassigned Project" },
+    designer: { field: "designer", label: "Designer", groupLabel: "Designer", unassigned: "Unassigned Designer" },
+    technical: { field: "tpm", label: "Technical", groupLabel: "Technical", unassigned: "Unassigned Technical" },
+    production: { field: "production", label: "Production", groupLabel: "Production", unassigned: "Unassigned Production" }
   };
 
   var state = {
@@ -91,9 +92,8 @@
     rows: [],
     projectMap: {},
     timeline: null,
-    dateWindowTouched: false,
     zoom: CFG.defaultZoom,
-    groupMode: "pm",
+    groupMode: "project",
     search: "",
     hideClosed: true,
     showUnassignedOnly: false,
@@ -147,7 +147,12 @@
   }
 
   function installEntryPoint() {
-    var $host = findToolbarHost();
+    if (!isHomePage()) {
+      $("#" + CFG.buttonId).remove();
+      return;
+    }
+
+    var $host = findHomeTabsHost();
 
     if (!$host.length) {
       if (!buttonRetryTimer) {
@@ -162,44 +167,44 @@
     if ($("#" + CFG.buttonId).length) return;
 
     var $btn = $(
-      '<button id="' + CFG.buttonId + '" type="button" ' +
-        'class="items_func_btn ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-primary" ' +
-        'role="button" title="' + escapeAttr(CFG.buttonTitle) + '">' +
-        '<span class="ui-button-icon-primary ui-icon ui-icon-calendar"></span>' +
-        '<span class="ui-button-text">' + escapeHtml(CFG.buttonLabel) + '</span>' +
-      '</button>'
+      '<li id="' + CFG.buttonId + '" class="wise-capacity-home-tab ui-state-default ui-corner-top" role="tab">' +
+        '<a href="#wise-capacity-tracker-open" title="' + escapeAttr(CFG.buttonTitle) + '">' +
+          '<span class="ui-icon ui-icon-calendar"></span>' +
+          '<span>' + escapeHtml(CFG.buttonLabel) + '</span>' +
+        '</a>' +
+      '</li>'
     );
 
     $btn.on("click", function (event) {
       event.preventDefault();
+      event.stopImmediatePropagation();
       openTracker();
     });
 
-    var $gear = $host.children("button.fixed_width").first();
-    if ($gear.length) $btn.insertBefore($gear);
-    else $host.append($btn);
+    $host.append($btn);
   }
 
-  function findToolbarHost() {
-    var $capacity = $("#" + CFG.buttonId);
-    if ($capacity.length && $capacity.parent().length) return $capacity.parent();
-
-    var $editor = $("#wise-proposal-view-toggle,#wise-doc-preview-toggle").first();
-    if ($editor.length && $editor.parent().length) return $editor.parent();
-
-    var selector = getHireHopSelector("toolbarHost", "#items_tab > div:first-child");
-    var $host = $(selector).first();
-    if ($host.length) return $host;
-
-    return findToolbarActionButton(/^edit\b/i).parent();
+  function isHomePage() {
+    return /\/home\.php(?:[?#]|$)/i.test(window.location.pathname + window.location.search);
   }
 
-  function findToolbarActionButton(pattern) {
-    var selector = getHireHopSelector("toolbarHost", "#items_tab > div:first-child");
-    return $(selector).find('button,a,[role="button"],input[type="button"],input[type="submit"]').filter(":visible").filter(function () {
-      var text = $.trim($(this).text() || $(this).val() || $(this).attr("title") || $(this).attr("aria-label") || "");
-      return pattern.test(text);
-    }).first();
+  function findHomeTabsHost() {
+    var selectors = [
+      "#tabs > ul.ui-tabs-nav:first",
+      "#tabs > ul:first",
+      ".hh-framework_tabs > ul.ui-tabs-nav:first",
+      ".hh-framework_tabs > ul:first",
+      "ul.ui-tabs-nav:first"
+    ];
+
+    for (var i = 0; i < selectors.length; i++) {
+      var $host = $(selectors[i]).filter(function () {
+        return !$(this).closest("#items_tab,#" + CFG.modalId).length;
+      }).first();
+      if ($host.length) return $host;
+    }
+
+    return $();
   }
 
   function openTracker() {
@@ -294,8 +299,8 @@
         needs_bill: 0,
         only_open_ended: 0,
         status: "",
-        from_date: state.dateWindowTouched ? formatServerDateTime(range.from) : null,
-        to_date: state.dateWindowTouched ? formatServerDateTime(range.to) : null,
+        from_date: formatServerDateTime(range.from),
+        to_date: formatServerDateTime(range.to),
         include_project_custom_fields: 1,
         include_custom_fields: 1,
         project_custom_fields: getCustomFieldKeyList().join(","),
@@ -591,16 +596,7 @@
   }
 
   function groupProjects(projects, groupMode) {
-    if (groupMode === "project") {
-      return [{
-        key: "projects",
-        label: "Projects",
-        projects: projects.slice().sort(sortProjectsByStart),
-        isProjectMode: true
-      }];
-    }
-
-    var role = ROLE_MODES[groupMode] || ROLE_MODES.pm;
+    var role = ROLE_MODES[groupMode] || ROLE_MODES.project;
     var groups = {};
 
     for (var i = 0; i < projects.length; i++) {
@@ -646,6 +642,7 @@
     state.timeline = view.timeline;
     state.projectMap = view.projectMap;
 
+    $(".wct-left-head").text((ROLE_MODES[state.groupMode] || ROLE_MODES.project).label + " team");
     renderSummary(view);
     renderMissingDates(view.missingDateProjects);
 
@@ -692,7 +689,10 @@
     var rows = buildRows(groupProjects(dated, state.groupMode));
     var projectMap = {};
     for (var r = 0; r < rows.length; r++) {
-      if (rows[r].project) projectMap[rows[r].project.uid] = rows[r].project;
+      var rowProjects = rows[r].projects || [];
+      for (var p = 0; p < rowProjects.length; p++) {
+        projectMap[rowProjects[p].uid] = rowProjects[p];
+      }
     }
 
     return {
@@ -712,33 +712,51 @@
 
     for (var g = 0; g < groups.length; g++) {
       var group = groups[g];
+      assignProjectLanes(group);
 
-      if (state.groupMode !== "project") {
-        rows.push({
-          type: "group",
-          key: group.key,
-          label: group.label,
-          count: group.projects.length,
-          activeToday: group.activeToday || 0,
-          top: top,
-          height: CFG.groupHeaderHeight
-        });
-        top += CFG.groupHeaderHeight;
-      }
+      var lanes = Math.max(1, group.laneCount || 1);
+      var height = Math.max(
+        CFG.personRowMinHeight,
+        (CFG.lanePadding * 2) + (lanes * CFG.barHeight) + ((lanes - 1) * CFG.laneGap)
+      );
 
-      for (var p = 0; p < group.projects.length; p++) {
-        rows.push({
-          type: "project",
-          key: group.projects[p].uid,
-          project: group.projects[p],
-          top: top,
-          height: CFG.rowHeight
-        });
-        top += CFG.rowHeight;
-      }
+      rows.push({
+        type: "person",
+        key: group.key,
+        label: group.label,
+        count: group.projects.length,
+        activeToday: group.activeToday || 0,
+        projects: group.projects,
+        lanes: group.lanes || {},
+        laneCount: lanes,
+        unassigned: group.unassigned,
+        top: top,
+        height: height
+      });
+      top += height;
     }
 
     return rows;
+  }
+
+  function assignProjectLanes(group) {
+    var laneEnds = [];
+    var lanes = {};
+    var projects = group.projects || [];
+
+    for (var i = 0; i < projects.length; i++) {
+      var project = projects[i];
+      var start = dayNumber(getProjectStart(project));
+      var end = dayNumber(getProjectEnd(project) || getProjectStart(project));
+      var lane = 0;
+
+      while (laneEnds[lane] != null && start <= laneEnds[lane]) lane++;
+      laneEnds[lane] = end;
+      lanes[project.uid] = lane;
+    }
+
+    group.lanes = lanes;
+    group.laneCount = Math.max(1, laneEnds.length);
   }
 
   function renderSummary(view) {
@@ -762,9 +780,9 @@
       ["Open projects", totalOpen],
       ["Shown", view.visibleProjects.length],
       ["Missing dates", view.missingDateProjects.length],
-      ["No PM", noPm],
+      ["No Project", noPm],
       ["No Designer", noDesigner],
-      ["No TPM", noTpm],
+      ["No Technical", noTpm],
       ["No Production", noProduction],
       ["Visible range", '<span id="wise-capacity-tracker-visible-range">' + escapeHtml(getVisibleRangeLabel(view.timeline)) + '</span>']
     ];
@@ -813,8 +831,7 @@
       cursor = next;
     }
 
-    if (state.zoom === "week") appendWeekTicks(html, timeline, width);
-    else appendMonthGridTicks(html, timeline, width);
+    appendDayTicks(html, timeline, width);
 
     $("#" + CFG.timelineHeaderId).css("width", width + "px").html(html.join(""));
   }
@@ -831,6 +848,7 @@
       html.push('<div class="wct-row-line is-' + row.type + '" style="top:' + row.top + 'px;height:' + row.height + 'px;"></div>');
     }
     html.push('</div>');
+    appendBodyDayGrid(html, timeline, width, height);
 
     var todayLeft = daysBetween(timeline.start, startOfDay(new Date())) * timeline.pixelsPerDay;
     if (todayLeft >= 0 && todayLeft <= width) {
@@ -839,8 +857,11 @@
 
     for (var r = 0; r < view.rows.length; r++) {
       var rowModel = view.rows[r];
-      if (rowModel.type !== "project") continue;
-      html.push(renderProjectBar(rowModel, timeline));
+      if (rowModel.type !== "person") continue;
+      for (var p = 0; p < rowModel.projects.length; p++) {
+        var project = rowModel.projects[p];
+        html.push(renderProjectBar(rowModel, project, rowModel.lanes[project.uid] || 0, timeline));
+      }
     }
 
     $("#" + CFG.timelineBodyId)
@@ -855,75 +876,76 @@
 
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i];
-      if (row.type === "group") {
-        html.push(
-          '<div class="wct-left-row is-group" style="top:' + row.top + 'px;height:' + row.height + 'px;">' +
-            '<strong>' + escapeHtml(row.label) + '</strong>' +
-            '<span>' + row.count + ' project' + (row.count === 1 ? "" : "s") + (row.activeToday ? " | " + row.activeToday + " active today" : "") + '</span>' +
-          '</div>'
-        );
-      } else {
-        html.push(
-          '<div class="wct-left-row is-project" style="top:' + row.top + 'px;height:' + row.height + 'px;">' +
-            '<span class="wct-project-name">' + escapeHtml(getProjectLabel(row.project)) + '</span>' +
-            '<span class="wct-project-meta">' + escapeHtml(getProjectMeta(row.project)) + '</span>' +
-          '</div>'
-        );
-      }
+      html.push(
+        '<div class="wct-left-row is-person' + (row.unassigned ? " is-unassigned" : "") + '" style="top:' + row.top + 'px;height:' + row.height + 'px;">' +
+          '<strong>' + escapeHtml(row.label) + '</strong>' +
+          '<span>' + row.count + ' event' + (row.count === 1 ? "" : "s") + (row.activeToday ? " | " + row.activeToday + " active today" : "") + '</span>' +
+        '</div>'
+      );
     }
 
     html.push("</div>");
     $("#" + CFG.leftBodyId).html(html.join(""));
   }
 
-  function renderProjectBar(row, timeline) {
-    var project = row.project;
+  function renderProjectBar(row, project, lane, timeline) {
     var start = getProjectStart(project);
     var end = getProjectEnd(project) || start;
     var left = Math.max(0, daysBetween(timeline.start, start) * timeline.pixelsPerDay);
     var durationDays = Math.max(1, daysBetween(start, end) + 1);
-    var width = Math.max(state.zoom === "quarter" ? 8 : 18, durationDays * timeline.pixelsPerDay);
+    var minWidth = state.zoom === "quarter" ? 8 : Math.max(10, timeline.pixelsPerDay);
+    var width = Math.max(minWidth, durationDays * timeline.pixelsPerDay);
     var maxWidth = timeline.days * timeline.pixelsPerDay - left;
     if (maxWidth > 0) width = Math.min(width, maxWidth);
 
     var color = project.colour || "#2563eb";
     var textColor = getReadableTextColor(color);
-    var top = row.top + 6;
-    var height = Math.max(20, row.height - 12);
+    var top = row.top + CFG.lanePadding + (lane * (CFG.barHeight + CFG.laneGap));
 
     return (
       '<button type="button" class="wct-project-bar" data-project-uid="' + escapeAttr(project.uid) + '" ' +
-        'style="left:' + left + 'px;top:' + top + 'px;width:' + width + 'px;height:' + height + 'px;background:' + escapeAttr(color) + ';color:' + textColor + ';" ' +
+        'style="left:' + left + 'px;top:' + top + 'px;width:' + width + 'px;height:' + CFG.barHeight + 'px;background:' + escapeAttr(color) + ';color:' + textColor + ';" ' +
         'title="' + escapeAttr(getProjectLabel(project)) + '">' +
         '<span>' + escapeHtml(getShortBarLabel(project)) + '</span>' +
       '</button>'
     );
   }
 
-  function appendWeekTicks(html, timeline, width) {
+  function appendDayTicks(html, timeline, width) {
     var cursor = startOfDay(timeline.start);
-    while (cursor.getDay() !== 1) cursor = addDays(cursor, 1);
 
     while (dayNumber(cursor) <= dayNumber(timeline.end)) {
       var left = daysBetween(timeline.start, cursor) * timeline.pixelsPerDay;
+      var dayWidth = Math.max(1, Math.min(timeline.pixelsPerDay, width - left));
       if (left >= 0 && left <= width) {
         html.push(
-          '<div class="wct-week-tick" style="left:' + left + 'px;">' +
-            '<span>' + escapeHtml(formatDateShort(cursor)) + '</span>' +
+          '<div class="wct-day-cell' + getDayCellClasses(cursor) + '" style="left:' + left + 'px;width:' + dayWidth + 'px;">' +
+            '<span>' + escapeHtml(String(cursor.getDate())) + '</span>' +
           '</div>'
         );
       }
-      cursor = addDays(cursor, 7);
+      cursor = addDays(cursor, 1);
     }
   }
 
-  function appendMonthGridTicks(html, timeline, width) {
-    var cursor = startOfMonth(timeline.start);
+  function appendBodyDayGrid(html, timeline, width, height) {
+    var cursor = startOfDay(timeline.start);
     while (dayNumber(cursor) <= dayNumber(timeline.end)) {
       var left = daysBetween(timeline.start, cursor) * timeline.pixelsPerDay;
-      if (left >= 0 && left <= width) html.push('<div class="wct-month-tick" style="left:' + left + 'px;"></div>');
-      cursor = addMonths(cursor, 1);
+      var dayWidth = Math.max(1, Math.min(timeline.pixelsPerDay, width - left));
+      if (left >= 0 && left <= width) {
+        html.push('<div class="wct-day-gridline' + getDayCellClasses(cursor) + '" style="left:' + left + 'px;width:' + dayWidth + 'px;height:' + height + 'px;"></div>');
+      }
+      cursor = addDays(cursor, 1);
     }
+  }
+
+  function getDayCellClasses(date) {
+    var classes = [];
+    var day = date.getDay();
+    if (day === 0 || day === 6) classes.push(" is-weekend");
+    if (dayNumber(date) === dayNumber(startOfDay(new Date()))) classes.push(" is-today");
+    return classes.join("");
   }
 
   function scrollToToday(options) {
@@ -1005,9 +1027,9 @@
         detailItem("Kit end", formatDate(project.kitEnd)),
       '</div>',
       '<div class="wct-role-strip">',
-        roleChip("PM", project.roles.pm),
+        roleChip("Project", project.roles.pm),
         roleChip("Designer", project.roles.designer),
-        roleChip("TPM", project.roles.tpm),
+        roleChip("Technical", project.roles.tpm),
         roleChip("Production", project.roles.production),
       '</div>'
     ].join("");
@@ -1072,15 +1094,14 @@
               ["month", "Month"],
               ["quarter", "Quarter"]
             ]) +
-            controlSelect("wise-capacity-tracker-group", "Group", [
-              ["pm", "Group by PM"],
-              ["designer", "Group by Designer"],
-              ["tpm", "Group by TPM"],
-              ["production", "Group by Production"],
-              ["project", "Group by Project"]
+            controlSelect("wise-capacity-tracker-group", "Team", [
+              ["project", "Project"],
+              ["designer", "Designer"],
+              ["technical", "Technical"],
+              ["production", "Production"]
             ]) +
             '<label class="wct-control wct-search"><span>Search</span><input id="wise-capacity-tracker-search" type="search" autocomplete="off" placeholder="Project, client, venue or person"></label>' +
-            '<label class="wct-check"><input id="wise-capacity-tracker-hide-closed" type="checkbox"> Hide closed/lost</label>' +
+            '<label class="wct-check"><input id="wise-capacity-tracker-hide-closed" type="checkbox"> Open only</label>' +
             '<label class="wct-check"><input id="wise-capacity-tracker-unassigned" type="checkbox"> Unassigned only</label>' +
             '<label class="wct-control wct-number"><span>Months back</span><input id="wise-capacity-tracker-months-back" type="number" min="0" max="84" step="1"></label>' +
             '<label class="wct-control wct-number"><span>Months ahead</span><input id="wise-capacity-tracker-months-ahead" type="number" min="1" max="84" step="1"></label>' +
@@ -1089,7 +1110,7 @@
           '<div id="' + CFG.summaryId + '" class="wct-summary"></div>' +
           '<div id="' + CFG.missingId + '" class="wct-missing" style="display:none;"></div>' +
           '<div class="wct-grid">' +
-            '<div class="wct-left-head">Assignments</div>' +
+            '<div class="wct-left-head">Project team</div>' +
             '<div id="' + CFG.headerScrollId + '" class="wct-header-scroll"><div id="' + CFG.timelineHeaderId + '" class="wct-timeline-header"></div></div>' +
             '<div id="' + CFG.leftBodyId + '" class="wct-left-body"></div>' +
             '<div id="' + CFG.timelineScrollId + '" class="wct-timeline-scroll"><div id="' + CFG.timelineBodyId + '" class="wct-timeline-body"></div></div>' +
@@ -1133,7 +1154,6 @@
     });
 
     $("#wise-capacity-tracker-months-back,#wise-capacity-tracker-months-ahead").on("change.wiseCapacityTracker", function () {
-      state.dateWindowTouched = true;
       state.monthsBack = clamp(Number($("#wise-capacity-tracker-months-back").val()) || CFG.defaultMonthsBack, 0, 84);
       state.monthsAhead = clamp(Number($("#wise-capacity-tracker-months-ahead").val()) || CFG.defaultMonthsAhead, 1, 84);
       refreshProjects();
@@ -1187,6 +1207,9 @@
 
     $("head").append(
       '<style id="' + CFG.stylesId + '">' +
+      "#wise-capacity-tracker-button.wise-capacity-home-tab a{display:flex;align-items:center;gap:5px;cursor:pointer;}" +
+      "#wise-capacity-tracker-button.wise-capacity-home-tab .ui-icon{display:inline-block;position:static;margin:0;}" +
+      "#wise-capacity-tracker-button.wise-capacity-home-tab:hover{background:#eef6ff;border-color:#9fc5ef;}" +
       ".wise-capacity-tracker-open{overflow:hidden;}" +
       ".wct-overlay{position:fixed;inset:0;z-index:100200;background:rgba(16,24,40,.48);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;}" +
       ".wct-overlay.is-visible{display:flex!important;}" +
@@ -1211,21 +1234,20 @@
       ".wct-summary-pill{display:flex;align-items:baseline;gap:7px;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:6px 9px;min-height:30px;}" +
       ".wct-summary-pill span{font-size:11px;text-transform:uppercase;color:#667085;font-weight:700;letter-spacing:0;}.wct-summary-pill strong{font-size:13px;color:#1f2937;font-weight:700;}" +
       ".wct-missing{margin:0 18px 8px;padding:8px 10px;border:1px solid #f0d38a;background:#fff8e6;border-radius:6px;color:#6b4e00;font-size:12px;display:flex;gap:10px;align-items:center;}.wct-missing span{color:#725c23;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}" +
-      ".wct-grid{flex:1 1 auto;min-height:240px;display:grid;grid-template-columns:310px minmax(0,1fr);grid-template-rows:42px minmax(0,1fr);border-top:1px solid #d9e2ec;background:#fff;}" +
+      ".wct-grid{flex:1 1 auto;min-height:240px;display:grid;grid-template-columns:310px minmax(0,1fr);grid-template-rows:56px minmax(0,1fr);border-top:1px solid #d9e2ec;background:#fff;}" +
       ".wct-left-head{grid-column:1;grid-row:1;display:flex;align-items:center;padding:0 14px;border-right:1px solid #d9e2ec;border-bottom:1px solid #d9e2ec;background:#f8fafc;font-weight:700;font-size:12px;text-transform:uppercase;color:#526071;letter-spacing:0;}" +
       ".wct-header-scroll{grid-column:2;grid-row:1;overflow:hidden;border-bottom:1px solid #d9e2ec;background:#f8fafc;}" +
-      ".wct-timeline-header{position:relative;height:42px;min-width:100%;}" +
+      ".wct-timeline-header{position:relative;height:56px;min-width:100%;}" +
       ".wct-left-body{grid-column:1;grid-row:2;position:relative;overflow:hidden;border-right:1px solid #d9e2ec;background:#fbfdff;}" +
       ".wct-left-inner{position:relative;min-height:100%;}" +
-      ".wct-left-row{position:absolute;left:0;right:0;display:flex;flex-direction:column;justify-content:center;padding:0 12px;border-bottom:1px solid #edf1f5;overflow:hidden;}" +
-      ".wct-left-row.is-group{background:#eaf2f8;border-bottom:1px solid #d6e4f0;}.wct-left-row.is-group strong{font-size:13px;color:#102033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.wct-left-row.is-group span{font-size:11px;color:#667085;}" +
-      ".wct-left-row.is-project{background:#fff;}.wct-project-name{font-size:12px;color:#243244;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.wct-project-meta{font-size:11px;color:#667085;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
+      ".wct-left-row{position:absolute;left:0;right:0;display:flex;flex-direction:column;justify-content:center;padding:0 12px;border-bottom:1px solid #edf1f5;overflow:hidden;background:#fff;}" +
+      ".wct-left-row.is-person strong{font-size:13px;color:#102033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}.wct-left-row.is-person span{font-size:11px;color:#667085;}.wct-left-row.is-unassigned{background:#fff8e6;}" +
       ".wct-timeline-scroll{grid-column:2;grid-row:2;overflow:auto;position:relative;background:#fff;}" +
       ".wct-timeline-body{position:relative;min-width:100%;min-height:100%;}" +
-      ".wct-month-segment{position:absolute;top:0;height:23px;border-right:1px solid #d9e2ec;padding:5px 7px 0;font-size:12px;font-weight:700;color:#253244;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
-      ".wct-week-tick{position:absolute;top:23px;height:19px;border-left:1px solid #dbe3ec;padding-left:4px;font-size:10px;color:#667085;}.wct-week-tick span{position:relative;top:2px;}" +
-      ".wct-month-tick{position:absolute;top:23px;bottom:0;border-left:1px solid #dbe3ec;}" +
-      ".wct-row-backdrop{position:absolute;left:0;top:0;}.wct-row-line{position:absolute;left:0;right:0;border-bottom:1px solid #edf1f5;}.wct-row-line.is-group{background:#f0f6fb;border-bottom:1px solid #d6e4f0;}.wct-row-line.is-project:nth-child(even){background:#fcfdff;}" +
+      ".wct-month-segment{position:absolute;top:0;height:24px;border-right:1px solid #d9e2ec;padding:5px 7px 0;font-size:12px;font-weight:700;color:#253244;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
+      ".wct-day-cell{position:absolute;top:24px;height:32px;border-left:1px solid #dbe3ec;display:flex;align-items:center;justify-content:center;font-size:10px;color:#526071;overflow:hidden;}.wct-day-cell.is-weekend{background:#eef3f8;}.wct-day-cell.is-today{background:#fff1f1;color:#b42318;font-weight:700;}" +
+      ".wct-row-backdrop{position:absolute;left:0;top:0;}.wct-row-line{position:absolute;left:0;right:0;border-bottom:1px solid #edf1f5;}.wct-row-line.is-person:nth-child(even){background:#fcfdff;}" +
+      ".wct-day-gridline{position:absolute;top:0;border-left:1px solid #edf1f5;z-index:1;pointer-events:none;}.wct-day-gridline.is-weekend{background:rgba(238,243,248,.55);}.wct-day-gridline.is-today{background:rgba(217,45,32,.06);}" +
       ".wct-today-line{position:absolute;top:0;width:0;border-left:2px solid #d92d20;z-index:5;pointer-events:none;}.wct-today-line span{position:absolute;top:4px;left:5px;background:#d92d20;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700;}" +
       ".wct-project-bar{position:absolute;z-index:4;border:1px solid rgba(15,23,42,.22);border-radius:5px;box-shadow:0 1px 2px rgba(15,23,42,.14);padding:0 7px;text-align:left;cursor:pointer;overflow:hidden;}" +
       ".wct-project-bar span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;line-height:18px;}" +
@@ -1301,11 +1323,7 @@
   }
 
   function isProjectUnassignedForCurrentMode(project) {
-    if (state.groupMode === "project") {
-      return !project.roles.pm || !project.roles.designer || !project.roles.tpm || !project.roles.production;
-    }
-
-    var role = ROLE_MODES[state.groupMode] || ROLE_MODES.pm;
+    var role = ROLE_MODES[state.groupMode] || ROLE_MODES.project;
     return !project.roles[role.field];
   }
 
