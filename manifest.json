@@ -1,7 +1,7 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-05-11.02",
-  "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, and QTC renderer alignment.",
+  "version": "2026-05-12.01",
+  "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
     "baseUrl": "https://mattclangford.github.io/hhplugin/",
@@ -40,8 +40,8 @@
     {
       "file": "5-hirehop.js",
       "status": "active-module",
-      "cacheVersion": "0.2",
-      "role": "Shared HireHop selectors, endpoint paths, depot rules, retry timings, and tree item prefixes consumed by the section builder.",
+      "cacheVersion": "0.3",
+      "role": "Shared HireHop selectors, endpoint paths, depot rules, retry timings, search helpers, and tree item prefixes consumed by the section builder and capacity tracker.",
       "recommendedLoadOrder": 5
     },
     {
@@ -50,6 +50,13 @@
       "cacheVersion": "1.1",
       "role": "Main proposal page editor and HireHop authoring layer.",
       "recommendedLoadOrder": 6
+    },
+    {
+      "file": "7-captrack.js",
+      "status": "active",
+      "cacheVersion": "0.1",
+      "role": "Standalone open-project capacity timeline viewer using HireHop project search data and Wise role custom fields.",
+      "recommendedLoadOrder": 7
     }
   ],
   "referenceFiles": [

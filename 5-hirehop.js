@@ -6,8 +6,8 @@
    * This module names the HireHop UI surfaces and endpoints the editor depends on.
    */
   var hirehop = {
-    version: "2026-05-07.01",
-    purpose: "Centralises HireHop selectors, endpoints, depot gating, retry timings, and tree item prefixes.",
+    version: "2026-05-12.01",
+    purpose: "Centralises HireHop selectors, endpoints, depot gating, retry timings, search helpers, and tree item prefixes.",
 
     selectors: {
       itemsTab: "#items_tab",
@@ -21,7 +21,8 @@
 
     endpoints: {
       itemsSave: "/php_functions/items_save.php",
-      itemsDelete: "/php_functions/items_delete.php"
+      itemsDelete: "/php_functions/items_delete.php",
+      searchList: "/php_functions/search_list.php"
     },
 
     depot: {

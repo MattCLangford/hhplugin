@@ -8,6 +8,7 @@ Use this order for the live HireHop scripts.
 4. `4-layout.js`
 5. `5-hirehop.js`
 6. `6-editor2.js`
+7. `7-captrack.js`
 
 For the full paste-ready company config string, use `docs/HIREHOP_PLUGIN_STRING.md`.
 
