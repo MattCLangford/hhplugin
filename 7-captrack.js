@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-12.05",
+    version: "2026-05-13.01",
     title: "Capacity Tracker",
     subtitle: "Open project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -28,9 +28,9 @@
     popoverId: "wise-capacity-tracker-popover",
     defaultZoom: "week",
     pixelsPerDay: {
-      week: 26,
-      month: 12,
-      quarter: 5
+      week: 56,
+      month: 28,
+      quarter: 12
     },
     personRowMinHeight: 38,
     barHeight: 22,
@@ -73,7 +73,9 @@
       pm: "_PM",
       designer: "_Designer",
       tpm: "_TPM",
-      production: "_Production"
+      production: "_Production",
+      revenue: "_revenue",
+      tier: "_tier"
     }
   };
 
@@ -499,6 +501,8 @@
       created: created,
       start: start,
       end: end,
+      revenue: asText(getCustomField(raw, CFG.customFieldKeys.revenue)),
+      tier: asText(getCustomField(raw, CFG.customFieldKeys.tier)),
       roles: {
         pm: cleanRoleValue(getCustomField(raw, CFG.customFieldKeys.pm)),
         designer: cleanRoleValue(getCustomField(raw, CFG.customFieldKeys.designer)),
@@ -1123,6 +1127,8 @@
         detailItem("Client", project.client),
         detailItem("Venue", project.venue),
         detailItem("Status", project.status),
+        detailItem("Revenue", project.revenue),
+        detailItem("Tier", project.tier),
         detailItem("Onsite start", formatDate(project.onsiteStart)),
         detailItem("Onsite end", formatDate(project.onsiteEnd)),
         detailItem("Kit start", formatDate(project.kitStart)),
@@ -1417,6 +1423,8 @@
       project.client,
       project.venue,
       project.status,
+      project.revenue,
+      project.tier,
       project.roles.pm,
       project.roles.designer,
       project.roles.tpm,
@@ -1561,7 +1569,9 @@
       CFG.customFieldKeys.pm,
       CFG.customFieldKeys.designer,
       CFG.customFieldKeys.tpm,
-      CFG.customFieldKeys.production
+      CFG.customFieldKeys.production,
+      CFG.customFieldKeys.revenue,
+      CFG.customFieldKeys.tier
     ];
   }
 
