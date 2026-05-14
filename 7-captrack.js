@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.08",
+    version: "2026-05-14.10",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -25,8 +25,11 @@
     leftBodyId: "wise-capacity-tracker-left-body",
     headerScrollId: "wise-capacity-tracker-header-scroll",
     timelineScrollId: "wise-capacity-tracker-timeline-scroll",
+    totalsLabelId: "wise-capacity-tracker-totals-label",
+    totalsScrollId: "wise-capacity-tracker-totals-scroll",
     timelineHeaderId: "wise-capacity-tracker-timeline-header",
     timelineBodyId: "wise-capacity-tracker-timeline-body",
+    timelineTotalsId: "wise-capacity-tracker-timeline-totals",
     popoverId: "wise-capacity-tracker-popover",
     defaultZoom: "week",
     pixelsPerDay: {
@@ -1011,6 +1014,7 @@
     setStatus("", "");
     renderTimelineHeader(view.timeline, view.capacity);
     renderProjectBars(view);
+    renderTimelineTotals(view);
     syncTimelineScroll();
     updateVisibleRangeText();
   }
@@ -1392,6 +1396,160 @@
     );
   }
 
+  function renderTimelineTotals(view) {
+    var timeline = view.timeline;
+    var width = timeline.days * timeline.pixelsPerDay;
+    var mode = getDayTotalMode();
+    var html = [];
+    var cursor = startOfDay(timeline.start);
+
+    $("#" + CFG.totalsLabelId).text(getDayTotalLabel(mode));
+
+    while (dayNumber(cursor) <= dayNumber(timeline.end)) {
+      var left = daysBetween(timeline.start, cursor) * timeline.pixelsPerDay;
+      var dayWidth = Math.max(1, Math.min(timeline.pixelsPerDay, width - left));
+      var total = calculateDayTotal(view.datedProjects, cursor, mode);
+      var title = getDayTotalTitle(cursor, total, mode);
+
+      html.push(
+        '<div class="wct-total-cell is-' + escapeAttr(mode) + getDayCellClasses(cursor) + getCapacityClass(total.count) + '" style="left:' + left + 'px;width:' + dayWidth + 'px;" title="' + escapeAttr(title) + '">' +
+          formatDayTotalHtml(total, mode) +
+        '</div>'
+      );
+
+      cursor = addDays(cursor, 1);
+    }
+
+    $("#" + CFG.timelineTotalsId)
+      .css("width", width + "px")
+      .html(html.join(""));
+  }
+
+  function getDayTotalMode() {
+    if (state.cardLabelMode === "revenue") return "revenue";
+    if (state.cardLabelMode === "tier") return "tier";
+    return "count";
+  }
+
+  function getDayTotalLabel(mode) {
+    if (mode === "revenue") return "Daily revenue";
+    if (mode === "tier") return "Daily tier qty";
+    return "Daily qty";
+  }
+
+  function calculateDayTotal(projects, date, mode) {
+    var total = {
+      count: 0,
+      revenue: 0,
+      tiers: {}
+    };
+
+    for (var i = 0; i < projects.length; i++) {
+      var project = projects[i];
+      if (!projectOverlapsDay(project, date)) continue;
+
+      total.count++;
+
+      if (mode === "revenue") {
+        total.revenue += parseRevenueNumber(project.revenue) || 0;
+      } else if (mode === "tier") {
+        var tier = getTierTotalLabel(project.tier);
+        total.tiers[tier] = (total.tiers[tier] || 0) + 1;
+      }
+    }
+
+    return total;
+  }
+
+  function projectOverlapsDay(project, date) {
+    var start = getProjectStart(project);
+    var end = getProjectEnd(project) || start;
+    if (!start || !end) return false;
+
+    var dayStart = startOfDay(date);
+    var dayEnd = addDays(dayStart, 1);
+
+    if (end.getTime() === start.getTime()) {
+      return start.getTime() >= dayStart.getTime() && start.getTime() < dayEnd.getTime();
+    }
+
+    return start.getTime() < dayEnd.getTime() && end.getTime() > dayStart.getTime();
+  }
+
+  function formatDayTotalHtml(total, mode) {
+    if (mode === "revenue") {
+      return '<strong>' + escapeHtml(formatSterlingValue(total.revenue) || "\u00a30.00") + '</strong>';
+    }
+
+    if (mode === "tier") {
+      var tiers = getSortedTierTotalKeys(total.tiers);
+      if (!tiers.length) return '<strong>0</strong>';
+
+      var html = [];
+      var max = Math.min(tiers.length, 3);
+      for (var i = 0; i < max; i++) {
+        html.push('<span><strong>' + escapeHtml(tiers[i]) + '</strong> ' + escapeHtml(String(total.tiers[tiers[i]])) + '</span>');
+      }
+      if (tiers.length > max) html.push('<span>+' + escapeHtml(String(tiers.length - max)) + '</span>');
+      return html.join("");
+    }
+
+    return '<strong>' + escapeHtml(String(total.count || 0)) + '</strong>';
+  }
+
+  function getDayTotalTitle(date, total, mode) {
+    if (mode === "revenue") return formatDate(date) + " total revenue: " + (formatSterlingValue(total.revenue) || "\u00a30.00") + " across " + total.count + " event" + (total.count === 1 ? "" : "s");
+    if (mode === "tier") return formatDate(date) + " tier qty: " + formatTierTotalTitle(total.tiers);
+    return formatDate(date) + " total qty: " + total.count + " event" + (total.count === 1 ? "" : "s");
+  }
+
+  function formatTierTotalTitle(tiers) {
+    var keys = getSortedTierTotalKeys(tiers);
+    if (!keys.length) return "0";
+
+    var parts = [];
+    for (var i = 0; i < keys.length; i++) {
+      parts.push(keys[i] + " qty " + tiers[keys[i]]);
+    }
+    return parts.join(", ");
+  }
+
+  function getTierTotalLabel(value) {
+    var text = cleanRoleValue(value);
+    if (!text) return "No tier";
+
+    var compact = text.match(/^(?:tier\s*)?([0-9]+)$/i) || text.match(/^t\s*([0-9]+)$/i);
+    if (compact) return "T" + compact[1];
+
+    return text;
+  }
+
+  function getSortedTierTotalKeys(tiers) {
+    var keys = [];
+    $.each(tiers || {}, function (key, count) {
+      if (count > 0) keys.push(key);
+    });
+    keys.sort(compareTierTotalLabels);
+    return keys;
+  }
+
+  function compareTierTotalLabels(a, b) {
+    if (a === "No tier") return 1;
+    if (b === "No tier") return -1;
+
+    var aNumber = extractTierNumber(a);
+    var bNumber = extractTierNumber(b);
+    if (aNumber != null && bNumber != null && aNumber !== bNumber) return aNumber - bNumber;
+    if (aNumber != null && bNumber == null) return -1;
+    if (aNumber == null && bNumber != null) return 1;
+    return a.localeCompare(b);
+  }
+
+  function extractTierNumber(value) {
+    var match = asText(value).match(/^T\s*([0-9]+)$/i);
+    return match ? Number(match[1]) : null;
+  }
+
   function appendDayTicks(html, timeline, width, capacity) {
     var cursor = startOfDay(timeline.start);
 
@@ -1493,10 +1651,12 @@
     var $scroll = $("#" + CFG.timelineScrollId);
     var $left = $("#" + CFG.leftBodyId);
     var $header = $("#" + CFG.headerScrollId);
+    var $totals = $("#" + CFG.totalsScrollId);
     if (!$scroll.length) return;
 
     $left.scrollTop($scroll.scrollTop());
     $header.scrollLeft($scroll.scrollLeft());
+    $totals.scrollLeft($scroll.scrollLeft());
     updateVisibleRangeText();
   }
 
@@ -1519,7 +1679,7 @@
   function clearTimeline() {
     $("#" + CFG.summaryId).empty();
     $("#" + CFG.missingId).empty().hide();
-    $("#" + CFG.timelineHeaderId + ",#" + CFG.timelineBodyId + ",#" + CFG.leftBodyId).empty();
+    $("#" + CFG.timelineHeaderId + ",#" + CFG.timelineBodyId + ",#" + CFG.timelineTotalsId + ",#" + CFG.leftBodyId).empty();
   }
 
   function setStatus(message, type) {
@@ -1550,7 +1710,7 @@
         detailItem("Client", project.client),
         detailItem("Venue", project.venue),
         detailItem("Status", project.status || getWiseStatusByKey(project.statusKey).label),
-        detailItem("Revenue", project.revenue),
+        detailItem("Revenue", formatSterlingValue(project.revenue) || project.revenue),
         detailItem("Kit start", formatDateTime(project.kitStart)),
         detailItem("Onsite start", formatDateTime(project.onsiteStart)),
         detailItem("Onsite end", formatDateTime(project.onsiteEnd)),
@@ -1634,7 +1794,8 @@
               ["full", "Full"],
               ["name", "Name"],
               ["tier", "Tier"],
-              ["wise", "Wise ID"]
+              ["wise", "Wise ID"],
+              ["revenue", "Revenue \u00a3"]
             ]) +
             '<label class="wct-control wct-search"><span>Search</span><input id="wise-capacity-tracker-search" type="search" autocomplete="off" placeholder="Project, client, venue or person"></label>' +
             '<label class="wct-control wct-date"><span>Start</span><input id="wise-capacity-tracker-date-start" type="date"></label>' +
@@ -1651,6 +1812,8 @@
             '<div id="' + CFG.headerScrollId + '" class="wct-header-scroll"><div id="' + CFG.timelineHeaderId + '" class="wct-timeline-header"></div></div>' +
             '<div id="' + CFG.leftBodyId + '" class="wct-left-body"></div>' +
             '<div id="' + CFG.timelineScrollId + '" class="wct-timeline-scroll"><div id="' + CFG.timelineBodyId + '" class="wct-timeline-body"></div></div>' +
+            '<div id="' + CFG.totalsLabelId + '" class="wct-left-total">Daily qty</div>' +
+            '<div id="' + CFG.totalsScrollId + '" class="wct-total-scroll"><div id="' + CFG.timelineTotalsId + '" class="wct-timeline-totals"></div></div>' +
           '</div>' +
           '<div id="' + CFG.popoverId + '" class="wct-popover" style="display:none;"></div>' +
         '</div>' +
@@ -1839,7 +2002,7 @@
       "button.wct-summary-pill{font-family:inherit;cursor:pointer;}button.wct-summary-pill:hover{background:#eef6ff;border-color:#9fc5ef;}" +
       ".wct-summary-pill span{font-size:11px;text-transform:uppercase;color:#667085;font-weight:700;letter-spacing:0;}.wct-summary-pill strong{font-size:13px;color:#1f2937;font-weight:700;}" +
       ".wct-missing{margin:0 14px 6px;padding:7px 9px;border:1px solid #f0d38a;background:#fff8e6;border-radius:6px;color:#6b4e00;font-size:12px;display:flex;gap:10px;align-items:center;}.wct-missing span{color:#725c23;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}" +
-      ".wct-grid{flex:1 1 auto;min-height:240px;display:grid;grid-template-columns:210px minmax(0,1fr);grid-template-rows:50px minmax(0,1fr);border-top:1px solid #d9e2ec;background:#fff;}" +
+      ".wct-grid{flex:1 1 auto;min-height:240px;display:grid;grid-template-columns:210px minmax(0,1fr);grid-template-rows:50px minmax(0,1fr) 42px;border-top:1px solid #d9e2ec;background:#fff;}" +
       ".wct-left-head{grid-column:1;grid-row:1;display:flex;align-items:center;padding:0 10px;border-right:1px solid #d9e2ec;border-bottom:1px solid #d9e2ec;background:#f8fafc;font-weight:700;font-size:11px;text-transform:uppercase;color:#526071;letter-spacing:0;}" +
       ".wct-header-scroll{grid-column:2;grid-row:1;overflow:hidden;border-bottom:1px solid #d9e2ec;background:#f8fafc;}" +
       ".wct-timeline-header{position:relative;height:50px;min-width:100%;}" +
@@ -1852,6 +2015,11 @@
       ".wct-left-row.is-load-low .wct-load-badge{background:#ecfdf3;border-color:#86efac;color:#166534;}.wct-left-row.is-load-medium .wct-load-badge{background:#fff7ed;border-color:#fed7aa;color:#9a3412;}.wct-left-row.is-load-high .wct-load-badge{background:#fff1f2;border-color:#fecdd3;color:#9f1239;}" +
       ".wct-timeline-scroll{grid-column:2;grid-row:2;overflow:auto;position:relative;background:#fff;}" +
       ".wct-timeline-body{position:relative;min-width:100%;min-height:100%;}" +
+      ".wct-left-total{grid-column:1;grid-row:3;display:flex;align-items:center;padding:0 10px;border-top:1px solid #d9e2ec;border-right:1px solid #d9e2ec;background:#f8fafc;font-size:11px;text-transform:uppercase;font-weight:700;color:#526071;letter-spacing:0;}" +
+      ".wct-total-scroll{grid-column:2;grid-row:3;overflow:hidden;border-top:1px solid #d9e2ec;background:#f8fafc;}" +
+      ".wct-timeline-totals{position:relative;height:42px;min-width:100%;}" +
+      ".wct-total-cell{position:absolute;top:0;height:42px;border-left:1px solid #dbe3ec;display:flex;align-items:center;justify-content:center;gap:2px;padding:0 3px;text-align:center;font-size:10px;line-height:1.12;color:#253244;overflow:hidden;white-space:normal;}" +
+      ".wct-total-cell strong{font-weight:700;}.wct-total-cell.is-revenue{white-space:nowrap;font-size:10px;}.wct-total-cell.is-tier{flex-direction:column;align-items:center;}.wct-total-cell.is-tier span{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.wct-total-cell.is-weekend{background:#eef3f8;}.wct-total-cell.is-load-low{background:#f0fdf4;color:#166534;}.wct-total-cell.is-load-medium{background:#fff7ed;color:#9a3412;}.wct-total-cell.is-load-high{background:#fff1f2;color:#9f1239;}" +
       ".wct-month-segment{position:absolute;top:0;height:22px;border-right:1px solid #d9e2ec;padding:4px 7px 0;font-size:12px;font-weight:700;color:#253244;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
       ".wct-day-cell{position:absolute;top:22px;height:28px;border-left:1px solid #dbe3ec;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;color:#526071;overflow:hidden;line-height:1.05;}.wct-day-cell em{font-style:normal;font-size:8px;text-transform:uppercase;color:inherit;opacity:.72;}.wct-day-cell span{font-size:11px;font-weight:700;}.wct-day-cell.is-weekend{background:#eef3f8;}.wct-day-cell.is-load-low{background:#f0fdf4;color:#166534;}.wct-day-cell.is-load-medium{background:#fff7ed;color:#9a3412;}.wct-day-cell.is-load-high{background:#fff1f2;color:#9f1239;font-weight:700;}.wct-day-cell.is-today{box-shadow:inset 0 0 0 2px rgba(217,45,32,.28);color:#b42318;font-weight:700;}" +
       ".wct-week-load{position:absolute;bottom:0;height:4px;border-radius:4px 4px 0 0;z-index:3;pointer-events:auto;opacity:.72;}.wct-week-load.is-load-low{background:#22c55e;}.wct-week-load.is-load-medium{background:#f59e0b;}.wct-week-load.is-load-high{background:#ef4444;}" +
@@ -1980,7 +2148,47 @@
       return project.wiseJobNumber || project.id || "No Wise ID";
     }
 
+    if (state.cardLabelMode === "revenue") {
+      return formatSterlingValue(project.revenue) || "No revenue";
+    }
+
     return getWiseStandardLabel(project) || getShortBarLabel(project);
+  }
+
+  function formatSterlingValue(value) {
+    var amount = parseRevenueNumber(value);
+    if (amount == null) return "";
+
+    if (typeof amount.toLocaleString === "function") {
+      return amount.toLocaleString("en-GB", {
+        style: "currency",
+        currency: "GBP",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+    }
+
+    return "\u00a3" + formatNumberWithCommas(amount.toFixed(2));
+  }
+
+  function parseRevenueNumber(value) {
+    var text = asText(value);
+    if (!text) return null;
+
+    var negative = /^\s*\(.*\)\s*$/.test(text) || /^\s*-/.test(text);
+    var cleaned = text.replace(/[^\d.]/g, "");
+    if (!cleaned) return null;
+
+    var amount = Number(cleaned);
+    if (!isFinite(amount)) return null;
+
+    return negative ? -amount : amount;
+  }
+
+  function formatNumberWithCommas(value) {
+    var parts = String(value).split(".");
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    return parts.join(".");
   }
 
   function getProjectMeta(project) {
