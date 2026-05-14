@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.05",
+    version: "2026-05-14.06",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -521,7 +521,7 @@
 
     var start = kitStart || onsiteStart;
     var end = kitEnd || onsiteEnd || start;
-    if (start && end && dayNumber(end) < dayNumber(start)) end = start;
+    if (start && end && end.getTime() < start.getTime()) end = start;
 
     var wiseStatus = normaliseWiseStatus(getCustomField(raw, CFG.customFieldKeys.status));
     var nativeStatus = readProjectStatusName(raw);
@@ -665,11 +665,11 @@
 
   function parseHireHopDate(value) {
     if (value == null || value === "") return null;
-    if (value instanceof Date) return isValidDate(value) ? startOfDay(value) : null;
+    if (value instanceof Date) return isValidDate(value) ? new Date(value.getTime()) : null;
 
     if (typeof value === "number") {
       var numericDate = new Date(value);
-      return isValidDate(numericDate) ? startOfDay(numericDate) : null;
+      return isValidDate(numericDate) ? numericDate : null;
     }
 
     var text = $.trim(String(value));
@@ -702,7 +702,7 @@
     }
 
     var parsed = new Date(text);
-    return isValidDate(parsed) ? startOfDay(parsed) : null;
+    return isValidDate(parsed) ? parsed : null;
   }
 
   function formatDate(value) {
@@ -717,6 +717,13 @@
     var date = value instanceof Date ? value : parseHireHopDate(value);
     if (!date) return "";
     return pad2(date.getDate()) + " " + getMonthName(date, true);
+  }
+
+  function formatDateTime(value) {
+    if (!value) return "";
+    var date = value instanceof Date ? value : parseHireHopDate(value);
+    if (!date) return "";
+    return formatDate(date) + " " + pad2(date.getHours()) + ":" + pad2(date.getMinutes());
   }
 
   function formatDateInput(value) {
@@ -1003,11 +1010,13 @@
 
     for (var i = 0; i < projects.length; i++) {
       var project = projects[i];
-      var start = dayNumber(getProjectStart(project));
-      var end = dayNumber(getProjectEnd(project) || getProjectStart(project));
+      var startDate = getProjectStart(project);
+      var endDate = getProjectEnd(project) || startDate;
+      var start = startDate ? startDate.getTime() : 0;
+      var end = endDate ? Math.max(endDate.getTime(), start) : start;
       var lane = 0;
 
-      while (laneEnds[lane] != null && start <= laneEnds[lane]) lane++;
+      while (laneEnds[lane] != null && start < laneEnds[lane]) lane++;
       laneEnds[lane] = end;
       lanes[project.uid] = lane;
     }
@@ -1221,7 +1230,7 @@
     html.push('</div>');
     appendBodyDayGrid(html, timeline, width, height, view.capacity);
 
-    var todayLeft = daysBetween(timeline.start, startOfDay(new Date())) * timeline.pixelsPerDay;
+    var todayLeft = getTimelineX(timeline, new Date());
     if (todayLeft >= 0 && todayLeft <= width) {
       html.push('<div class="wct-today-line" style="left:' + todayLeft + 'px;height:' + height + 'px;"><span>Today</span></div>');
     }
@@ -1263,23 +1272,26 @@
   function renderProjectBar(row, project, lane, timeline) {
     var start = getProjectStart(project);
     var end = getProjectEnd(project) || start;
-    var visibleStart = dayNumber(start) < dayNumber(timeline.start) ? timeline.start : start;
-    var visibleEnd = dayNumber(end) > dayNumber(timeline.end) ? timeline.end : end;
-    var left = Math.max(0, daysBetween(timeline.start, visibleStart) * timeline.pixelsPerDay);
-    var durationDays = Math.max(1, daysBetween(visibleStart, visibleEnd) + 1);
-    var minWidth = state.zoom === "quarter" ? 8 : Math.max(10, timeline.pixelsPerDay);
-    var width = Math.max(minWidth, durationDays * timeline.pixelsPerDay);
+    var clipEnd = getTimelineClipEnd(timeline);
+    var visibleStart = start.getTime() < timeline.start.getTime() ? timeline.start : start;
+    var visibleEnd = end.getTime() > clipEnd.getTime() ? clipEnd : end;
+    if (visibleEnd.getTime() < visibleStart.getTime()) visibleEnd = visibleStart;
+    var left = clamp(getTimelineX(timeline, visibleStart), 0, timeline.days * timeline.pixelsPerDay);
+    var right = clamp(getTimelineX(timeline, visibleEnd), 0, timeline.days * timeline.pixelsPerDay);
+    var minWidth = state.zoom === "quarter" ? 8 : 14;
+    var width = Math.max(minWidth, right - left);
     var maxWidth = timeline.days * timeline.pixelsPerDay - left;
     if (maxWidth > 0) width = Math.min(width, maxWidth);
 
     var color = project.statusColor || project.colour || "#2563eb";
     var textColor = getReadableTextColor(color);
     var top = row.top + CFG.lanePadding + (lane * (CFG.barHeight + CFG.laneGap));
+    var title = getProjectLabel(project) + " | Kit " + formatDateTime(project.kitStart || start) + " - " + formatDateTime(project.kitEnd || end);
 
     return (
       '<button type="button" class="wct-project-bar is-status-' + escapeAttr(project.statusKey || CFG.unknownStatusKey) + '" data-project-uid="' + escapeAttr(project.uid) + '" ' +
         'style="left:' + left + 'px;top:' + top + 'px;width:' + width + 'px;height:' + CFG.barHeight + 'px;background:' + escapeAttr(color) + ';color:' + textColor + ';" ' +
-        'title="' + escapeAttr(getProjectLabel(project)) + '">' +
+        'title="' + escapeAttr(title) + '">' +
         '<span>' + escapeHtml(getCardLabel(project)) + '</span>' +
       '</button>'
     );
@@ -1444,10 +1456,10 @@
         detailItem("Venue", project.venue),
         detailItem("Status", project.status || getWiseStatusByKey(project.statusKey).label),
         detailItem("Revenue", project.revenue),
-        detailItem("Kit start", formatDate(project.kitStart)),
-        detailItem("Onsite start", formatDate(project.onsiteStart)),
-        detailItem("Onsite end", formatDate(project.onsiteEnd)),
-        detailItem("Kit end", formatDate(project.kitEnd)),
+        detailItem("Kit start", formatDateTime(project.kitStart)),
+        detailItem("Onsite start", formatDateTime(project.onsiteStart)),
+        detailItem("Onsite end", formatDateTime(project.onsiteEnd)),
+        detailItem("Kit end", formatDateTime(project.kitEnd)),
       '</div>',
       '<div class="wct-role-strip">',
         roleChip("Project", project.roles.pm),
@@ -1919,7 +1931,7 @@
     var start = getProjectStart(project);
     var end = getProjectEnd(project) || start;
     if (!start || !end) return false;
-    return dayNumber(end) >= dayNumber(rangeStart) && dayNumber(start) <= dayNumber(rangeEnd);
+    return end.getTime() >= rangeStart.getTime() && start.getTime() <= endOfDay(rangeEnd).getTime();
   }
 
   function isProjectRecord(project) {
@@ -1947,9 +1959,14 @@
   }
 
   function sortProjectsByStart(a, b) {
-    var startDiff = dayNumber(getProjectStart(a) || new Date(8640000000000000)) - dayNumber(getProjectStart(b) || new Date(8640000000000000));
+    var startDiff = getProjectSortTime(a) - getProjectSortTime(b);
     if (startDiff !== 0) return startDiff;
     return getProjectLabel(a).localeCompare(getProjectLabel(b));
+  }
+
+  function getProjectSortTime(project) {
+    var start = getProjectStart(project);
+    return start ? start.getTime() : 8640000000000000;
   }
 
   function countActiveToday(projects) {
@@ -2278,6 +2295,20 @@
 
   function daysBetween(start, end) {
     return dayNumber(end) - dayNumber(start);
+  }
+
+  function getTimelineClipEnd(timeline) {
+    return addDays(timeline.end, 1);
+  }
+
+  function getTimelineX(timeline, date) {
+    if (!timeline || !date) return 0;
+    return (daysBetween(timeline.start, date) + getDayFraction(date)) * timeline.pixelsPerDay;
+  }
+
+  function getDayFraction(date) {
+    var seconds = (date.getHours() * 3600) + (date.getMinutes() * 60) + date.getSeconds() + (date.getMilliseconds() / 1000);
+    return seconds / 86400;
   }
 
   function formatServerDateTime(date) {
