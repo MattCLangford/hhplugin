@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.06",
+    version: "2026-05-14.07",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -121,6 +121,7 @@
     open: openTracker,
     refresh: refreshProjects,
     describe: describe,
+    debugDateFields: debugDateFields,
     _test: {
       normaliseProject: normaliseProject,
       getCustomField: getCustomField,
@@ -160,6 +161,18 @@
       wiseStatuses: CFG.wiseStatuses.map(function (status) { return status.label; }),
       customFieldKeys: $.extend({}, CFG.customFieldKeys)
     };
+  }
+
+  function debugDateFields(limit) {
+    var count = Math.max(1, Math.min(Number(limit) || 8, 25));
+    return state.projects.slice(0, count).map(function (project) {
+      return {
+        label: getProjectLabel(project),
+        kitStart: formatDateTime(project.kitStart),
+        kitEnd: formatDateTime(project.kitEnd),
+        rawDateTimeFields: collectDateTimeRawFields(project.raw)
+      };
+    });
   }
 
   function installEntryPoint() {
@@ -513,10 +526,10 @@
   function normaliseProject(raw, index) {
     raw = raw || {};
 
-    var onsiteStart = parseHireHopDate(firstValue(raw, ["JOB_DATE", "PROJECT_START", "ONSITE_START", "START_DATE", "START"]));
-    var onsiteEnd = parseHireHopDate(firstValue(raw, ["JOB_END", "PROJECT_END", "ONSITE_END", "END_DATE", "END"]));
-    var kitStart = parseHireHopDate(firstValue(raw, ["OUT_DATE", "KIT_BOOKING_START", "KIT_START", "OUT"]));
-    var kitEnd = parseHireHopDate(firstValue(raw, ["RETURN_DATE", "KIT_BOOKING_END", "KIT_END", "RETURN"]));
+    var onsiteStart = readHireHopDateTime(raw, ["JOB_DATE", "PROJECT_START", "ONSITE_START", "START_DATE", "START"], ["JOB_TIME", "PROJECT_START_TIME", "ONSITE_START_TIME", "START_TIME"], [["job", "date"], ["onsite", "start"]], [["job", "time"], ["onsite", "start", "time"]]);
+    var onsiteEnd = readHireHopDateTime(raw, ["JOB_END", "PROJECT_END", "ONSITE_END", "END_DATE", "END"], ["JOB_END_TIME", "PROJECT_END_TIME", "ONSITE_END_TIME", "END_TIME"], [["job", "end"], ["onsite", "end"]], [["job", "end", "time"], ["onsite", "end", "time"]]);
+    var kitStart = readHireHopDateTime(raw, ["OUT_DATE", "OUT_DATETIME", "OUT_DATE_TIME", "OUT_AT", "BOOK_OUT_DATE", "BOOKED_OUT_DATE", "BOOKING_START_DATE", "KIT_BOOKING_START", "KIT_BOOKING_START_DATE", "KIT_START", "KIT_START_DATE", "OUT"], ["OUT_TIME", "OUT_START_TIME", "OUT_HOUR", "DATE_OUT_TIME", "BOOK_OUT_TIME", "BOOKED_OUT_TIME", "BOOKING_START_TIME", "KIT_BOOKING_START_TIME", "KIT_START_TIME"], [["out", "date"], ["kit", "start"], ["booking", "start"]], [["out", "time"], ["time", "out"], ["kit", "start", "time"], ["booking", "start", "time"]]);
+    var kitEnd = readHireHopDateTime(raw, ["RETURN_DATE", "RETURN_DATETIME", "RETURN_DATE_TIME", "RETURN_AT", "IN_DATE", "BOOK_IN_DATE", "BOOKED_IN_DATE", "BOOKING_END_DATE", "KIT_RETURN", "KIT_RETURN_DATE", "KIT_BOOKING_END", "KIT_BOOKING_END_DATE", "KIT_END", "KIT_END_DATE", "RETURN"], ["RETURN_TIME", "RETURN_END_TIME", "RETURN_HOUR", "DATE_RETURN_TIME", "IN_TIME", "BOOK_IN_TIME", "BOOKED_IN_TIME", "BOOKING_END_TIME", "KIT_RETURN_TIME", "KIT_BOOKING_END_TIME", "KIT_END_TIME"], [["return", "date"], ["kit", "end"], ["kit", "return"], ["booking", "end"]], [["return", "time"], ["time", "return"], ["kit", "end", "time"], ["kit", "return", "time"], ["booking", "end", "time"]]);
     var created = parseHireHopDate(firstValue(raw, ["CREATE_DATE", "CREATED_DATE", "CREATED", "DATE_CREATED"]));
 
     var start = kitStart || onsiteStart;
@@ -663,12 +676,31 @@
     return asText(value);
   }
 
+  function readHireHopDateTime(raw, dateKeys, timeKeys, dateTokenGroups, timeTokenGroups) {
+    var exactValue = firstValue(raw, dateKeys);
+    var dateValue = exactValue !== "" ? exactValue : firstValueByNormalisedKey(raw, dateKeys);
+    if (dateValue === "") dateValue = firstValueByKeyTokens(raw, dateTokenGroups);
+    var date = parseHireHopDate(dateValue);
+    if (!date) return null;
+
+    var timeValue = firstValue(raw, timeKeys);
+    if (timeValue === "") timeValue = firstValueByNormalisedKey(raw, timeKeys);
+    if (timeValue === "") timeValue = firstValueByKeyTokens(raw, timeTokenGroups);
+    var time = parseHireHopTime(timeValue);
+
+    if (!time && hasExplicitTime(dateValue)) return date;
+    if (!time) return date;
+
+    return dateFromParts(date.getFullYear(), date.getMonth() + 1, date.getDate(), time.hours, time.minutes, time.seconds);
+  }
+
   function parseHireHopDate(value) {
     if (value == null || value === "") return null;
     if (value instanceof Date) return isValidDate(value) ? new Date(value.getTime()) : null;
 
     if (typeof value === "number") {
-      var numericDate = new Date(value);
+      var numericValue = Math.abs(value) < 100000000000 ? value * 1000 : value;
+      var numericDate = new Date(numericValue);
       return isValidDate(numericDate) ? numericDate : null;
     }
 
@@ -703,6 +735,69 @@
 
     var parsed = new Date(text);
     return isValidDate(parsed) ? parsed : null;
+  }
+
+  function parseHireHopTime(value) {
+    if (value == null || value === "") return null;
+    if (value instanceof Date && isValidDate(value)) {
+      return {
+        hours: value.getHours(),
+        minutes: value.getMinutes(),
+        seconds: value.getSeconds()
+      };
+    }
+
+    var text = $.trim(String(value));
+    if (!text || text === "00:00:00" || /^0+$/.test(text)) return null;
+
+    if (/^\d{3,4}$/.test(text)) {
+      var padded = text.length === 3 ? "0" + text : text;
+      var compactHours = Number(padded.substr(0, 2));
+      var compactMinutes = Number(padded.substr(2, 2));
+      if (compactHours > 23 || compactMinutes > 59) return null;
+      return {
+        hours: compactHours,
+        minutes: compactMinutes,
+        seconds: 0
+      };
+    }
+
+    if (hasExplicitTime(text) && /\d{1,4}[\/.-]\d{1,2}[\/.-]\d{1,4}/.test(text)) {
+      var date = parseHireHopDate(text);
+      if (date) {
+        return {
+          hours: date.getHours(),
+          minutes: date.getMinutes(),
+          seconds: date.getSeconds()
+        };
+      }
+    }
+
+    var time = text.match(/(\d{1,2})(?:[:.h](\d{2}))?(?:[:.](\d{2}))?\s*(am|pm)?/i);
+    if (!time) return null;
+
+    var hours = Number(time[1]);
+    var minutes = Number(time[2] || 0);
+    var seconds = Number(time[3] || 0);
+    var meridiem = asText(time[4]).toLowerCase();
+
+    if (meridiem === "pm" && hours < 12) hours += 12;
+    if (meridiem === "am" && hours === 12) hours = 0;
+    if (hours > 23 || minutes > 59 || seconds > 59) return null;
+
+    return {
+      hours: hours,
+      minutes: minutes,
+      seconds: seconds
+    };
+  }
+
+  function hasExplicitTime(value) {
+    if (value instanceof Date) {
+      return value.getHours() !== 0 || value.getMinutes() !== 0 || value.getSeconds() !== 0 || value.getMilliseconds() !== 0;
+    }
+    var text = asText(value);
+    return /(?:T|\s)\d{1,2}:\d{2}/.test(text);
   }
 
   function formatDate(value) {
@@ -1985,6 +2080,63 @@
       if (object && object[keys[i]] != null && object[keys[i]] !== "") return object[keys[i]];
     }
     return "";
+  }
+
+  function firstValueByNormalisedKey(object, keys) {
+    if (!object) return "";
+
+    var wanted = {};
+    for (var i = 0; i < keys.length; i++) {
+      wanted[normaliseKeyName(keys[i])] = true;
+    }
+
+    for (var key in object) {
+      if (!Object.prototype.hasOwnProperty.call(object, key)) continue;
+      if (!wanted[normaliseKeyName(key)]) continue;
+      if (object[key] != null && object[key] !== "") return object[key];
+    }
+
+    return "";
+  }
+
+  function firstValueByKeyTokens(object, tokenGroups) {
+    if (!object || !tokenGroups || !tokenGroups.length) return "";
+
+    for (var key in object) {
+      if (!Object.prototype.hasOwnProperty.call(object, key)) continue;
+      if (object[key] == null || object[key] === "") continue;
+
+      var normalised = normaliseKeyName(key);
+      for (var i = 0; i < tokenGroups.length; i++) {
+        if (keyContainsAllTokens(normalised, tokenGroups[i])) return object[key];
+      }
+    }
+
+    return "";
+  }
+
+  function keyContainsAllTokens(normalisedKey, tokens) {
+    if (!tokens || !tokens.length) return false;
+    for (var i = 0; i < tokens.length; i++) {
+      if (normalisedKey.indexOf(normaliseKeyName(tokens[i])) === -1) return false;
+    }
+    return true;
+  }
+
+  function collectDateTimeRawFields(raw) {
+    var result = {};
+    var usefulTokens = ["date", "time", "out", "return", "book", "kit", "start", "end", "in"];
+    for (var key in raw || {}) {
+      if (!Object.prototype.hasOwnProperty.call(raw, key)) continue;
+      var normalised = normaliseKeyName(key);
+      for (var i = 0; i < usefulTokens.length; i++) {
+        if (normalised.indexOf(usefulTokens[i]) !== -1) {
+          result[key] = raw[key];
+          break;
+        }
+      }
+    }
+    return result;
   }
 
   function asText(value) {
