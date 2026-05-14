@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.04",
+    version: "2026-05-14.05",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -21,6 +21,7 @@
     summaryId: "wise-capacity-tracker-summary",
     missingId: "wise-capacity-tracker-missing",
     statusFiltersId: "wise-capacity-tracker-status-filters",
+    nativeStatusFiltersId: "wise-capacity-tracker-native-status-filters",
     leftBodyId: "wise-capacity-tracker-left-body",
     headerScrollId: "wise-capacity-tracker-header-scroll",
     timelineScrollId: "wise-capacity-tracker-timeline-scroll",
@@ -104,6 +105,7 @@
     rowOrder: {},
     search: "",
     showUnassignedOnly: false,
+    nativeStatusFilters: createDefaultNativeStatusFilters(),
     statusFilters: createDefaultStatusFilters(),
     dateRangeStart: defaultDateRange.start,
     dateRangeEnd: defaultDateRange.end
@@ -153,6 +155,7 @@
       projectsLoaded: state.projects.length,
       targetDepot: getTargetDepotSummary(),
       dateRange: getSelectedDateRangeLabel(),
+      nativeHireHopStatus: getNativeStatusFilterLabel(),
       cardLabelMode: state.cardLabelMode,
       wiseStatuses: CFG.wiseStatuses.map(function (status) { return status.label; }),
       customFieldKeys: $.extend({}, CFG.customFieldKeys)
@@ -268,11 +271,13 @@
   }
 
   function refreshProjects() {
+    syncFetchControlsFromDom();
+
     var loadId = ++latestLoadId;
     var rangeKey = getSelectedRangeKey();
     state.loading = true;
     state.error = "";
-    setStatus("Loading Wise projects...", "loading");
+    setStatus("Loading Wise projects (" + getSelectedDateRangeLabel() + ", " + getNativeStatusFilterLabel() + ")...", "loading");
     clearTimeline();
 
     fetchProjectRows()
@@ -363,6 +368,7 @@
   function buildSearchParams(page, depotIds, jsonEncodeFilter) {
     var range = buildFetchDateRange();
     var filter = buildDepotFilter(depotIds);
+    var nativeStatus = getNativeStatusRequestFlags();
     return {
       local: formatServerDateTime(new Date()),
       tz: getTimezone(),
@@ -370,8 +376,8 @@
       rows: CFG.fetchPageSize,
       jobs: 0,
       projects: 1,
-      open: 1,
-      closed: 1,
+      open: nativeStatus.open,
+      closed: nativeStatus.closed,
       money_owed: 0,
       is_late: 0,
       mine: 0,
@@ -385,6 +391,7 @@
       include_custom_fields: 1,
       project_custom_fields: getCustomFieldKeyList().join(","),
       custom_fields: getCustomFieldKeyList().join(","),
+      wise_cache: Date.now(),
       pq_filter: jsonEncodeFilter ? JSON.stringify(filter) : filter
     };
   }
@@ -750,7 +757,13 @@
 
   function getSelectedRangeKey() {
     var range = getSelectedDateRange();
-    return formatDateInput(range.start) + "|" + formatDateInput(range.end);
+    var nativeStatus = getNativeStatusRequestFlags();
+    return [
+      formatDateInput(range.start),
+      formatDateInput(range.end),
+      nativeStatus.open ? "open" : "no-open",
+      nativeStatus.closed ? "closed" : "no-closed"
+    ].join("|");
   }
 
   function applyDateRangeFromControls() {
@@ -758,12 +771,26 @@
     var end = parseDateInput($("#wise-capacity-tracker-date-end").val());
     if (!start || !end) {
       updateControlsFromState();
-      return;
+      return false;
     }
     if (dayNumber(end) < dayNumber(start)) end = start;
+    start = startOfDay(start);
+    end = startOfDay(end);
+    var changed = dayNumber(start) !== dayNumber(state.dateRangeStart) || dayNumber(end) !== dayNumber(state.dateRangeEnd);
     state.dateRangeStart = start;
     state.dateRangeEnd = end;
     updateControlsFromState();
+    return changed;
+  }
+
+  function invalidateLoadedProjects() {
+    state.loaded = false;
+    state.loadedRangeKey = "";
+  }
+
+  function syncFetchControlsFromDom() {
+    if ($("#wise-capacity-tracker-date-start").length) applyDateRangeFromControls();
+    if ($("#" + CFG.nativeStatusFiltersId).length) applyNativeStatusFromControls("");
   }
 
   function isOpenProject(project) {
@@ -1505,6 +1532,7 @@
             '<label class="wct-control wct-search"><span>Search</span><input id="wise-capacity-tracker-search" type="search" autocomplete="off" placeholder="Project, client, venue or person"></label>' +
             '<label class="wct-control wct-date"><span>Start</span><input id="wise-capacity-tracker-date-start" type="date"></label>' +
             '<label class="wct-control wct-date"><span>End</span><input id="wise-capacity-tracker-date-end" type="date"></label>' +
+            '<div class="wct-native-filter" id="' + CFG.nativeStatusFiltersId + '" aria-label="HireHop native status filters">' + renderNativeStatusFilterControls() + '</div>' +
             '<div class="wct-status-filter" id="' + CFG.statusFiltersId + '" aria-label="Wise status filters">' + renderStatusFilterControls() + '</div>' +
             '<label class="wct-check"><input id="wise-capacity-tracker-unassigned" type="checkbox"> Unassigned only</label>' +
           '</div>' +
@@ -1556,8 +1584,17 @@
     });
 
     $("#wise-capacity-tracker-date-start,#wise-capacity-tracker-date-end").on("change.wiseCapacityTracker", function () {
-      applyDateRangeFromControls();
-      refreshProjects();
+      if (applyDateRangeFromControls()) {
+        invalidateLoadedProjects();
+        refreshProjects();
+      }
+    });
+
+    $("#" + CFG.nativeStatusFiltersId).on("change.wiseCapacityTracker", "input[type='checkbox']", function () {
+      if (applyNativeStatusFromControls($(this).attr("data-native-status"))) {
+        invalidateLoadedProjects();
+        refreshProjects();
+      }
     });
 
     $("#" + CFG.statusFiltersId)
@@ -1650,6 +1687,7 @@
     $("#wise-capacity-tracker-unassigned").prop("checked", state.showUnassignedOnly);
     $("#wise-capacity-tracker-date-start").val(formatDateInput(state.dateRangeStart));
     $("#wise-capacity-tracker-date-end").val(formatDateInput(state.dateRangeEnd));
+    updateNativeStatusControls();
     updateStatusFilterControls();
   }
 
@@ -1677,6 +1715,8 @@
       ".wct-date input{width:138px;min-width:138px;}" +
       ".wct-check{height:30px;display:flex;align-items:center;gap:6px;font-size:13px;color:#253244;white-space:nowrap;}" +
       ".wct-check input{margin:0;}" +
+      ".wct-native-filter{display:flex;align-items:center;gap:7px;min-height:30px;padding:0 2px;}" +
+      ".wct-native-filter-head{font-size:11px;text-transform:uppercase;color:#526071;font-weight:700;white-space:nowrap;}" +
       ".wct-status-filter{display:flex;align-items:center;gap:7px;min-height:30px;flex:1 1 560px;min-width:420px;}" +
       ".wct-status-filter-head{display:flex;align-items:center;gap:5px;font-size:11px;text-transform:uppercase;color:#526071;font-weight:700;white-space:nowrap;}" +
       ".wct-status-filter-head button{height:24px;border:1px solid #cbd5e1;background:#fff;border-radius:5px;padding:0 7px;font-size:11px;color:#253244;cursor:pointer;text-transform:none;font-weight:700;}" +
@@ -1740,6 +1780,14 @@
     return html.join("");
   }
 
+  function renderNativeStatusFilterControls() {
+    return [
+      '<span class="wct-native-filter-head">HireHop</span>',
+      '<label class="wct-check"><input type="checkbox" data-native-status="open"> Open</label>',
+      '<label class="wct-check"><input type="checkbox" data-native-status="closed"> Closed</label>'
+    ].join("");
+  }
+
   function renderStatusFilterControls() {
     var html = [
       '<div class="wct-status-filter-head">',
@@ -1760,6 +1808,14 @@
     }
     html.push("</div>");
     return html.join("");
+  }
+
+  function updateNativeStatusControls() {
+    var filters = state.nativeStatusFilters || createDefaultNativeStatusFilters();
+    $("#" + CFG.nativeStatusFiltersId + " input[type='checkbox']").each(function () {
+      var key = $(this).attr("data-native-status");
+      this.checked = filters[key] !== false;
+    });
   }
 
   function updateStatusFilterControls() {
@@ -2026,6 +2082,59 @@
       filters[statuses[i].key] = true;
     }
     return filters;
+  }
+
+  function createDefaultNativeStatusFilters() {
+    return {
+      open: true,
+      closed: true
+    };
+  }
+
+  function applyNativeStatusFromControls(changedKey) {
+    var previous = state.nativeStatusFilters || createDefaultNativeStatusFilters();
+    var next = {};
+
+    $("#" + CFG.nativeStatusFiltersId + " input[type='checkbox']").each(function () {
+      next[$(this).attr("data-native-status")] = this.checked;
+    });
+
+    if (!next.open && !next.closed) {
+      next[changedKey === "closed" ? "closed" : "open"] = true;
+      setStatus("Keep at least one HireHop status selected.", "empty");
+    }
+
+    state.nativeStatusFilters = {
+      open: next.open !== false,
+      closed: next.closed !== false
+    };
+    updateNativeStatusControls();
+
+    return previous.open !== state.nativeStatusFilters.open || previous.closed !== state.nativeStatusFilters.closed;
+  }
+
+  function getNativeStatusRequestFlags() {
+    var filters = state.nativeStatusFilters || createDefaultNativeStatusFilters();
+    var open = filters.open !== false;
+    var closed = filters.closed !== false;
+
+    if (!open && !closed) {
+      open = true;
+      closed = true;
+    }
+
+    return {
+      open: open ? 1 : 0,
+      closed: closed ? 1 : 0
+    };
+  }
+
+  function getNativeStatusFilterLabel() {
+    var nativeStatus = getNativeStatusRequestFlags();
+    if (nativeStatus.open && nativeStatus.closed) return "Open and Closed";
+    if (nativeStatus.open) return "Open only";
+    if (nativeStatus.closed) return "Closed only";
+    return "Open and Closed";
   }
 
   function applyStatusFilterPreset(preset) {
