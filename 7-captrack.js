@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.11",
+    version: "2026-05-14.12",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -1447,18 +1447,46 @@
     var maxWidth = timeline.days * timeline.pixelsPerDay - left;
     if (maxWidth > 0) width = Math.min(width, maxWidth);
 
-    var color = project.statusColor || project.colour || "#2563eb";
-    var textColor = getReadableTextColor(color);
+    var colors = getProjectBarColors(project);
     var top = row.top + CFG.lanePadding + (lane * (CFG.barHeight + CFG.laneGap));
     var title = getProjectLabel(project) + " | Kit " + formatDateTime(project.kitStart || start) + " - " + formatDateTime(project.kitEnd || end);
 
     return (
       '<button type="button" class="wct-project-bar is-status-' + escapeAttr(project.statusKey || CFG.unknownStatusKey) + '" data-project-uid="' + escapeAttr(project.uid) + '" ' +
-        'style="left:' + left + 'px;top:' + top + 'px;width:' + width + 'px;height:' + CFG.barHeight + 'px;background:' + escapeAttr(color) + ';color:' + textColor + ';" ' +
+        'style="left:' + left + 'px;top:' + top + 'px;width:' + width + 'px;height:' + CFG.barHeight + 'px;background:' + escapeAttr(colors.background) + ';border-color:' + escapeAttr(colors.border) + ';color:' + escapeAttr(colors.text) + ';" ' +
         'title="' + escapeAttr(title) + '">' +
         '<span>' + escapeHtml(getCardLabel(project)) + '</span>' +
       '</button>'
     );
+  }
+
+  function getProjectBarColors(project) {
+    var base = project.statusColor || project.colour || "#2563eb";
+    var colors = {
+      background: base,
+      border: "rgba(15,23,42,.22)",
+      text: getReadableTextColor(base)
+    };
+
+    if (state.cardLabelMode !== "tier") return colors;
+
+    var alpha = getTierBackgroundAlpha(project.tier);
+    var tierBackground = colorToRgba(base, alpha);
+    var tierBorder = colorToRgba(base, Math.min(1, alpha + 0.28));
+    if (!tierBackground) return colors;
+
+    colors.background = tierBackground;
+    colors.border = tierBorder || base;
+    colors.text = alpha < 0.76 ? "#102033" : getReadableTextColor(base);
+    return colors;
+  }
+
+  function getTierBackgroundAlpha(tier) {
+    var tierNumber = extractTierNumber(getTierTotalLabel(tier));
+    if (tierNumber === 1) return 0.36;
+    if (tierNumber === 2) return 0.64;
+    if (tierNumber >= 3) return 0.96;
+    return 0.52;
   }
 
   function renderTimelineTotals(view) {
@@ -2617,6 +2645,26 @@
     var b = parseInt(hex.substr(5, 2), 16);
     var luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
     return luminance > 0.62 ? "#172033" : "#ffffff";
+  }
+
+  function colorToRgba(color, alpha) {
+    var hex = normaliseColour(color);
+    if (/^#[0-9a-f]{3}$/i.test(hex)) {
+      hex = "#" + hex.charAt(1) + hex.charAt(1) + hex.charAt(2) + hex.charAt(2) + hex.charAt(3) + hex.charAt(3);
+    }
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) return "";
+
+    return [
+      "rgba(",
+      parseInt(hex.substr(1, 2), 16),
+      ",",
+      parseInt(hex.substr(3, 2), 16),
+      ",",
+      parseInt(hex.substr(5, 2), 16),
+      ",",
+      clamp(Number(alpha), 0, 1),
+      ")"
+    ].join("");
   }
 
   function getPixelsPerDay() {
