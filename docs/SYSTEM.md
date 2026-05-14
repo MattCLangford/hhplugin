@@ -18,6 +18,7 @@ Load these in HireHop:
 4. `4-layout.js`
 5. `5-hirehop.js`
 6. `6-editor2.js`
+7. `7-captrack.js`
 
 `1-docprev.js` is essential because it lets users see what their list edits do to the rendered proposal. Power users can work directly in HireHop's native list editing with that preview open.
 
@@ -30,6 +31,8 @@ Load these in HireHop:
 `5-hirehop.js` names the HireHop UI selectors, endpoint paths, depot rules, timings, and tree item prefixes that the editor depends on.
 
 `6-editor2.js` is the primary editor. It gives non-technical users a safer visual page editor for baseline QTC standards, while still handing native item editing back to HireHop where appropriate.
+
+`7-captrack.js` is the Wise capacity tracker. It opens as a full-page planning view and uses project-level Wise custom fields for event naming, status, revenue, tier, client, venue, and role allocation.
 
 ## Reference And Legacy Files
 
