@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.10",
+    version: "2026-05-14.11",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -46,6 +46,7 @@
     lanePadding: 0,
     defaultRangeMonthsBefore: 0,
     defaultRangeMonthsAfter: 1,
+    fetchChunkDays: 120,
     fetchPageSize: 500,
     fetchMaxPages: 20,
     searchDebounceMs: 180,
@@ -159,6 +160,7 @@
       projectsLoaded: state.projects.length,
       targetDepot: getTargetDepotSummary(),
       dateRange: getSelectedDateRangeLabel(),
+      fetchPlan: describeFetchPlan(),
       nativeHireHopStatus: getNativeStatusFilterLabel(),
       cardLabelMode: state.cardLabelMode,
       wiseStatuses: CFG.wiseStatuses.map(function (status) { return status.label; }),
@@ -341,8 +343,16 @@
     }
     log("Using target depot filter", depotFilter);
 
+    var selectedRange = buildFetchDateRange();
+    var rangeChunks = buildFetchDateRangeChunks(selectedRange);
     var allRows = [];
     var useJsonDepotFilter = false;
+    log("Using fetch date chunks", rangeChunks.map(function (chunk) {
+      return {
+        from: formatServerDateTime(chunk.from),
+        to: formatServerDateTime(chunk.to)
+      };
+    }));
 
     /*
      * HireHop's native hh_search_results_dialog posts to search_list.php for jobs/projects.
@@ -350,8 +360,15 @@
      * OUT_DATE, JOB_DATE, JOB_END and RETURN_DATE. When project custom fields are included,
      * HireHop prefixes them with "~", for example "~_PM".
      */
-    function fetchPage(page) {
-      var params = buildSearchParams(page, depotFilter.ids, useJsonDepotFilter);
+    function fetchChunk(chunkIndex) {
+      if (chunkIndex >= rangeChunks.length) return Promise.resolve(dedupeProjectRows(allRows));
+      return fetchPage(rangeChunks[chunkIndex], 1).then(function () {
+        return fetchChunk(chunkIndex + 1);
+      });
+    }
+
+    function fetchPage(range, page) {
+      var params = buildSearchParams(page, depotFilter.ids, useJsonDepotFilter, range);
 
       return requestProjectPage(endpoint, params)
         .then(null, function (error) {
@@ -361,7 +378,7 @@
               status: error.status,
               depotIds: depotFilter.ids
             });
-            return requestProjectPage(endpoint, buildSearchParams(page, depotFilter.ids, true));
+            return requestProjectPage(endpoint, buildSearchParams(page, depotFilter.ids, true, range));
           }
           throw error;
         })
@@ -374,15 +391,15 @@
           var shouldContinue = page < CFG.fetchMaxPages && pageRows.length >= CFG.fetchPageSize;
           if (pageCount > 0) shouldContinue = page < Math.min(pageCount, CFG.fetchMaxPages);
 
-          return shouldContinue ? fetchPage(page + 1) : allRows;
+          return shouldContinue ? fetchPage(range, page + 1) : allRows;
         });
     }
 
-    return fetchPage(1);
+    return fetchChunk(0);
   }
 
-  function buildSearchParams(page, depotIds, jsonEncodeFilter) {
-    var range = buildFetchDateRange();
+  function buildSearchParams(page, depotIds, jsonEncodeFilter, range) {
+    range = range || buildFetchDateRange();
     var filter = buildDepotFilter(depotIds);
     var nativeStatus = getNativeStatusRequestFlags();
     return {
@@ -459,6 +476,34 @@
     };
   }
 
+  function buildFetchDateRangeChunks(range) {
+    var chunks = [];
+    var cursor = startOfDay(range.from);
+    var finalDay = startOfDay(range.to);
+    var chunkDays = Math.max(14, Number(CFG.fetchChunkDays) || 120);
+
+    while (dayNumber(cursor) <= dayNumber(finalDay)) {
+      var chunkEndDay = addDays(cursor, chunkDays - 1);
+      if (dayNumber(chunkEndDay) > dayNumber(finalDay)) chunkEndDay = finalDay;
+
+      chunks.push({
+        from: startOfDay(cursor),
+        to: endOfDay(chunkEndDay)
+      });
+
+      cursor = addDays(chunkEndDay, 1);
+    }
+
+    return chunks.length ? chunks : [range];
+  }
+
+  function describeFetchPlan() {
+    var chunks = buildFetchDateRangeChunks(buildFetchDateRange());
+    return chunks.map(function (chunk) {
+      return formatDate(chunk.from) + " - " + formatDate(chunk.to);
+    });
+  }
+
   function resolveTargetDepots() {
     var ids = [];
     var labels = [];
@@ -524,6 +569,26 @@
       if (!row || row.pq_empty) continue;
       target.push(row);
     }
+  }
+
+  function dedupeProjectRows(rows) {
+    var seen = {};
+    var deduped = [];
+
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i] && rows[i].rowData ? rows[i].rowData : rows[i];
+      var key = getProjectRowKey(row, i);
+      if (seen[key]) continue;
+      seen[key] = true;
+      deduped.push(row);
+    }
+
+    return deduped;
+  }
+
+  function getProjectRowKey(row, index) {
+    var id = firstValue(row || {}, ["NUMBER", "PROJECT_ID", "PROJECT_NUMBER", "ID", "id", "project_id"]);
+    return id ? "project:" + asText(id) : "row:" + index + ":" + normaliseSearch(JSON.stringify(row || {})).substr(0, 120);
   }
 
   function normaliseProject(raw, index) {
@@ -2456,7 +2521,7 @@
     var filters = {};
     var statuses = getStatusFilterOptions();
     for (var i = 0; i < statuses.length; i++) {
-      filters[statuses[i].key] = true;
+      filters[statuses[i].key] = statuses[i].key !== "closed_lost";
     }
     return filters;
   }
@@ -2464,7 +2529,7 @@
   function createDefaultNativeStatusFilters() {
     return {
       open: true,
-      closed: true
+      closed: false
     };
   }
 
