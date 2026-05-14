@@ -8,14 +8,13 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.01",
+    version: "2026-05-14.02",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
     buttonTitle: "Open Capacity Tracker",
     buttonId: "wise-capacity-tracker-button",
     stylesId: "wise-capacity-tracker-styles",
-    standaloneHash: "wise-capacity-tracker",
     overlayId: "wise-capacity-tracker-overlay",
     modalId: "wise-capacity-tracker-modal",
     statusId: "wise-capacity-tracker-status",
@@ -136,10 +135,6 @@
 
     $(window).on("load.wiseCapacityTracker focus.wiseCapacityTracker", installEntryPoint);
     $(document).on("ajaxComplete.wiseCapacityTracker", installEntryPoint);
-
-    if (isStandaloneTrackerPage()) {
-      setTimeout(function () { openTracker({ inline: true }); }, 80);
-    }
   }
 
   function describe() {
@@ -177,10 +172,9 @@
     if ($("#" + CFG.buttonId).length) return;
 
     var $btn = $(
-      '<li id="' + CFG.buttonId + '" class="wise-capacity-home-tab ui-state-default ui-corner-top" role="tab">' +
+      '<li id="' + CFG.buttonId + '" class="ui-state-default ui-corner-top" role="tab">' +
         '<a href="#wise-capacity-tracker-open" title="' + escapeAttr(CFG.buttonTitle) + '">' +
-          '<span class="ui-icon ui-icon-calendar"></span>' +
-          '<span>' + escapeHtml(CFG.buttonLabel) + '</span>' +
+          escapeHtml(CFG.buttonLabel) +
         '</a>' +
       '</li>'
     );
@@ -217,17 +211,10 @@
     return $();
   }
 
-  function openTracker(options) {
-    options = options || {};
-    if (!options.inline && !isStandaloneTrackerPage()) {
-      openTrackerPage();
-      return;
-    }
-
+  function openTracker() {
     ensureModal();
     updateControlsFromState();
     $("#" + CFG.overlayId)
-      .toggleClass("is-standalone", isStandaloneTrackerPage())
       .addClass("is-visible")
       .show();
     $("body").addClass("wise-capacity-tracker-open");
@@ -243,29 +230,8 @@
 
   function closeTracker() {
     hidePopover();
-    if (isStandaloneTrackerPage()) {
-      window.close();
-    }
     $("#" + CFG.overlayId).removeClass("is-visible").hide();
     $("body").removeClass("wise-capacity-tracker-open");
-  }
-
-  function openTrackerPage() {
-    var win = window.open(buildStandaloneUrl(), "_blank");
-    if (win && typeof win.focus === "function") {
-      try { win.focus(); } catch (e) {}
-      return;
-    }
-    openTracker({ inline: true });
-  }
-
-  function buildStandaloneUrl() {
-    var base = window.location.href.replace(/#.*$/, "");
-    return base + "#" + CFG.standaloneHash;
-  }
-
-  function isStandaloneTrackerPage() {
-    return window.location.hash.replace(/^#/, "") === CFG.standaloneHash;
   }
 
   function refreshProjects() {
@@ -1435,16 +1401,12 @@
 
     $("head").append(
       '<style id="' + CFG.stylesId + '">' +
-      "#wise-capacity-tracker-button.wise-capacity-home-tab a{display:flex;align-items:center;gap:5px;cursor:pointer;}" +
-      "#wise-capacity-tracker-button.wise-capacity-home-tab .ui-icon{display:inline-block;position:static;margin:0;}" +
-      "#wise-capacity-tracker-button.wise-capacity-home-tab:hover{background:#eef6ff;border-color:#9fc5ef;}" +
+      "#" + CFG.buttonId + " a{cursor:pointer;}" +
       ".wise-capacity-tracker-open{overflow:hidden;}" +
-      ".wct-overlay{position:fixed;inset:0;z-index:100200;background:rgba(16,24,40,.48);display:flex;align-items:center;justify-content:center;padding:18px;box-sizing:border-box;}" +
+      ".wct-overlay{position:fixed;inset:0;z-index:100200;background:#eef3f8;display:flex;align-items:stretch;justify-content:stretch;padding:0;box-sizing:border-box;}" +
       ".wct-overlay.is-visible{display:flex!important;}" +
-      ".wct-overlay.is-standalone{padding:0;background:#eef3f8;}" +
       ".wct-overlay *{box-sizing:border-box;}" +
-      ".wct-modal{position:relative;width:min(1680px,calc(100vw - 36px));height:min(960px,calc(100vh - 36px));display:flex;flex-direction:column;background:#f7f9fc;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 22px 70px rgba(15,23,42,.28);color:#1f2937;font-family:Arial,Helvetica,sans-serif;overflow:hidden;}" +
-      ".wct-overlay.is-standalone .wct-modal{width:100vw;height:100vh;border:0;border-radius:0;box-shadow:none;}" +
+      ".wct-modal{position:relative;width:100vw;height:100vh;display:flex;flex-direction:column;background:#f7f9fc;border:0;border-radius:0;box-shadow:none;color:#1f2937;font-family:Arial,Helvetica,sans-serif;overflow:hidden;}" +
       ".wct-header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:12px 14px 10px;background:#ffffff;border-bottom:1px solid #d9e2ec;}" +
       ".wct-title-block h2{margin:0;font-size:20px;line-height:1.2;font-weight:700;color:#102033;letter-spacing:0;}" +
       ".wct-title-block p{margin:4px 0 0;font-size:13px;line-height:1.35;color:#526071;}" +
@@ -1495,7 +1457,7 @@
       ".wct-popover-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;}.wct-popover-head strong{font-size:15px;line-height:1.25;}.wct-popover-close{border:0;background:transparent;color:#667085;font-size:16px;line-height:1;cursor:pointer;}" +
       ".wct-popover-grid{display:grid;grid-template-columns:90px 1fr;gap:5px 10px;font-size:12px;}.wct-detail-label{color:#667085;font-weight:700;}.wct-detail-value{color:#243244;min-width:0;overflow:hidden;text-overflow:ellipsis;}" +
       ".wct-role-strip{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}.wct-role-chip{border:1px solid #d9e2ec;background:#f8fafc;border-radius:5px;padding:4px 6px;font-size:11px;color:#253244;}.wct-role-chip.is-empty{color:#8a5a00;background:#fff8e6;border-color:#efd58e;}.wct-role-chip strong{margin-right:4px;color:#526071;}" +
-      "@media (max-width: 900px){.wct-overlay{padding:8px;}.wct-overlay.is-standalone{padding:0;}.wct-modal{width:calc(100vw - 16px);height:calc(100vh - 16px);}.wct-overlay.is-standalone .wct-modal{width:100vw;height:100vh;}.wct-grid{grid-template-columns:170px minmax(0,1fr);}.wct-controls{gap:7px;}.wct-control select,.wct-control input{min-width:104px;}.wct-search{flex-basis:190px;min-width:180px;}.wct-status-filter{min-width:260px;}}" +
+      "@media (max-width: 900px){.wct-grid{grid-template-columns:170px minmax(0,1fr);}.wct-controls{gap:7px;}.wct-control select,.wct-control input{min-width:104px;}.wct-search{flex-basis:190px;min-width:180px;}.wct-status-filter{min-width:260px;}}" +
       "</style>"
     );
   }
