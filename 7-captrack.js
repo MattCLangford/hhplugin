@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.02",
+    version: "2026-05-14.03",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -33,6 +33,9 @@
       month: 56,
       quarter: 32
     },
+    defaultCardLabelMode: "full",
+    capacityMediumThreshold: 2,
+    capacityHighThreshold: 4,
     personRowMinHeight: 24,
     barHeight: 24,
     laneGap: 2,
@@ -96,6 +99,7 @@
     timeline: null,
     zoom: CFG.defaultZoom,
     groupMode: "project",
+    cardLabelMode: CFG.defaultCardLabelMode,
     search: "",
     showUnassignedOnly: false,
     statusFilters: createDefaultStatusFilters(),
@@ -146,6 +150,7 @@
       projectsLoaded: state.projects.length,
       targetDepot: getTargetDepotSummary(),
       dateRange: getSelectedDateRangeLabel(),
+      cardLabelMode: state.cardLabelMode,
       wiseStatuses: CFG.wiseStatuses.map(function (status) { return status.label; }),
       customFieldKeys: $.extend({}, CFG.customFieldKeys)
     };
@@ -819,7 +824,7 @@
     }
 
     setStatus("", "");
-    renderTimelineHeader(view.timeline);
+    renderTimelineHeader(view.timeline, view.capacity);
     renderProjectBars(view);
     syncTimelineScroll();
     updateVisibleRangeText();
@@ -849,7 +854,8 @@
 
     dated.sort(sortProjectsByStart);
     var timeline = buildTimelineRange(dated);
-    var rows = buildRows(groupProjects(dated, state.groupMode));
+    var capacity = buildCapacityModel(dated, timeline);
+    var rows = buildRows(groupProjects(dated, state.groupMode), timeline);
     var projectMap = {};
     for (var r = 0; r < rows.length; r++) {
       var rowProjects = rows[r].projects || [];
@@ -863,19 +869,21 @@
       datedProjects: dated,
       missingDateProjects: missing,
       timeline: timeline,
+      capacity: capacity,
       rows: rows,
       projectMap: projectMap,
       totalHeight: rows.length ? rows[rows.length - 1].top + rows[rows.length - 1].height : 0
     };
   }
 
-  function buildRows(groups) {
+  function buildRows(groups, timeline) {
     var rows = [];
     var top = 0;
 
     for (var g = 0; g < groups.length; g++) {
       var group = groups[g];
       assignProjectLanes(group);
+      var groupLoad = buildProjectLoadMap(group.projects, timeline);
 
       var lanes = Math.max(1, group.laneCount || 1);
       var height = Math.max(
@@ -889,6 +897,9 @@
         label: group.label,
         count: group.projects.length,
         activeToday: group.activeToday || 0,
+        liveCount: groupLoad.totalLive,
+        peakLiveLoad: groupLoad.maxDay,
+        loadLevel: getCapacityLevel(groupLoad.maxDay),
         projects: group.projects,
         lanes: group.lanes || {},
         laneCount: lanes,
@@ -922,6 +933,109 @@
     group.laneCount = Math.max(1, laneEnds.length);
   }
 
+  function buildCapacityModel(projects, timeline) {
+    var model = buildProjectLoadMap(projects, timeline);
+    var weekLoads = {};
+    var maxWeek = 0;
+
+    if (timeline) {
+      for (var i = 0; i < projects.length; i++) {
+        var project = projects[i];
+        if (!isCapacityLiveProject(project)) continue;
+
+        var start = getProjectStart(project);
+        var end = getProjectEnd(project) || start;
+        if (!start || !end || !projectOverlapsRange(project, timeline.start, timeline.end)) continue;
+
+        var visibleStart = dayNumber(start) < dayNumber(timeline.start) ? timeline.start : start;
+        var visibleEnd = dayNumber(end) > dayNumber(timeline.end) ? timeline.end : end;
+        var cursor = startOfWeek(visibleStart);
+
+        while (dayNumber(cursor) <= dayNumber(visibleEnd)) {
+          var weekKey = String(dayNumber(cursor));
+          weekLoads[weekKey] = (weekLoads[weekKey] || 0) + 1;
+          if (weekLoads[weekKey] > maxWeek) maxWeek = weekLoads[weekKey];
+          cursor = addDays(cursor, 7);
+        }
+      }
+    }
+
+    model.weekLoads = weekLoads;
+    model.maxWeek = maxWeek;
+    return model;
+  }
+
+  function buildProjectLoadMap(projects, timeline) {
+    var dayLoads = {};
+    var maxDay = 0;
+    var totalLive = 0;
+
+    if (!timeline) {
+      return { dayLoads: dayLoads, maxDay: 0, maxWeek: 0, weekLoads: {}, totalLive: 0 };
+    }
+
+    for (var i = 0; i < projects.length; i++) {
+      var project = projects[i];
+      if (!isCapacityLiveProject(project)) continue;
+
+      var start = getProjectStart(project);
+      var end = getProjectEnd(project) || start;
+      if (!start || !end || !projectOverlapsRange(project, timeline.start, timeline.end)) continue;
+
+      totalLive++;
+      var visibleStart = dayNumber(start) < dayNumber(timeline.start) ? timeline.start : start;
+      var visibleEnd = dayNumber(end) > dayNumber(timeline.end) ? timeline.end : end;
+      var cursor = startOfDay(visibleStart);
+
+      while (dayNumber(cursor) <= dayNumber(visibleEnd)) {
+        var key = String(dayNumber(cursor));
+        dayLoads[key] = (dayLoads[key] || 0) + 1;
+        if (dayLoads[key] > maxDay) maxDay = dayLoads[key];
+        cursor = addDays(cursor, 1);
+      }
+    }
+
+    return {
+      dayLoads: dayLoads,
+      maxDay: maxDay,
+      maxWeek: 0,
+      weekLoads: {},
+      totalLive: totalLive
+    };
+  }
+
+  function isCapacityLiveProject(project) {
+    return !!(project && isProjectRecord(project) && !isDeletedProject(project.raw) && isOpenProject(project));
+  }
+
+  function getDayLoad(capacity, date) {
+    if (!capacity || !capacity.dayLoads || !date) return 0;
+    return capacity.dayLoads[String(dayNumber(date))] || 0;
+  }
+
+  function getWeekLoad(capacity, date) {
+    if (!capacity || !capacity.weekLoads || !date) return 0;
+    return capacity.weekLoads[String(dayNumber(startOfWeek(date)))] || 0;
+  }
+
+  function getCapacityLevel(count) {
+    count = Number(count) || 0;
+    if (count <= 0) return "";
+    if (count >= CFG.capacityHighThreshold) return "high";
+    if (count >= CFG.capacityMediumThreshold) return "medium";
+    return "low";
+  }
+
+  function getCapacityClass(count) {
+    var level = getCapacityLevel(count);
+    return level ? " is-load-" + level : "";
+  }
+
+  function getLoadLabel(count, noun) {
+    count = Number(count) || 0;
+    return count + " " + noun + (count === 1 ? "" : "s");
+  }
+
   function renderSummary(view) {
     var liveProjects = 0;
     var noPm = 0;
@@ -944,6 +1058,8 @@
     var items = [
       ["Live projects", liveProjects],
       ["Shown", view.visibleProjects.length],
+      ["Peak day", view.capacity ? view.capacity.maxDay : 0],
+      ["Peak week", view.capacity ? view.capacity.maxWeek : 0],
       ["Missing dates", view.missingDateProjects.length],
       ["No Project", noPm],
       ["No Designer", noDesigner],
@@ -979,7 +1095,7 @@
     ).show();
   }
 
-  function renderTimelineHeader(timeline) {
+  function renderTimelineHeader(timeline, capacity) {
     var html = [];
     var width = timeline.days * timeline.pixelsPerDay;
     var cursor = startOfMonth(timeline.start);
@@ -999,7 +1115,8 @@
       cursor = next;
     }
 
-    appendDayTicks(html, timeline, width);
+    appendDayTicks(html, timeline, width, capacity);
+    appendWeekLoadBands(html, timeline, width, capacity);
 
     $("#" + CFG.timelineHeaderId).css("width", width + "px").html(html.join(""));
   }
@@ -1016,7 +1133,7 @@
       html.push('<div class="wct-row-line is-' + row.type + '" style="top:' + row.top + 'px;height:' + row.height + 'px;"></div>');
     }
     html.push('</div>');
-    appendBodyDayGrid(html, timeline, width, height);
+    appendBodyDayGrid(html, timeline, width, height, view.capacity);
 
     var todayLeft = daysBetween(timeline.start, startOfDay(new Date())) * timeline.pixelsPerDay;
     if (todayLeft >= 0 && todayLeft <= width) {
@@ -1044,11 +1161,11 @@
 
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i];
-      var rowMeta = row.count + " event" + (row.count === 1 ? "" : "s") + (row.activeToday ? " | " + row.activeToday + " active today" : "");
+      var rowMeta = row.count + " event" + (row.count === 1 ? "" : "s") + " | " + row.liveCount + " live | peak " + row.peakLiveLoad + " live at once" + (row.activeToday ? " | " + row.activeToday + " active today" : "");
       html.push(
-        '<div class="wct-left-row is-person' + (row.unassigned ? " is-unassigned" : "") + '" style="top:' + row.top + 'px;height:' + row.height + 'px;" title="' + escapeAttr(rowMeta) + '">' +
+        '<div class="wct-left-row is-person' + (row.unassigned ? " is-unassigned" : "") + getCapacityClass(row.peakLiveLoad) + '" style="top:' + row.top + 'px;height:' + row.height + 'px;" title="' + escapeAttr(rowMeta) + '">' +
           '<strong>' + escapeHtml(row.label) + '</strong>' +
-          '<span>' + escapeHtml(String(row.count)) + '</span>' +
+          '<span class="wct-load-badge">' + escapeHtml(String(row.peakLiveLoad || 0)) + '</span>' +
         '</div>'
       );
     }
@@ -1079,7 +1196,7 @@
         'style="left:' + left + 'px;top:' + top + 'px;width:' + width + 'px;height:' + CFG.barHeight + 'px;background:' + escapeAttr(color) + ';color:' + textColor + ';" ' +
         'title="' + escapeAttr(getProjectLabel(project)) + '">' +
         (onsite ? '<i class="wct-onsite-window" style="' + onsite + '"></i>' : '') +
-        '<span>' + escapeHtml(getShortBarLabel(project)) + '</span>' +
+        '<span>' + escapeHtml(getCardLabel(project)) + '</span>' +
       '</button>'
     );
   }
@@ -1097,15 +1214,16 @@
     return "left:" + leftPct.toFixed(3) + "%;width:" + widthPct.toFixed(3) + "%;";
   }
 
-  function appendDayTicks(html, timeline, width) {
+  function appendDayTicks(html, timeline, width, capacity) {
     var cursor = startOfDay(timeline.start);
 
     while (dayNumber(cursor) <= dayNumber(timeline.end)) {
       var left = daysBetween(timeline.start, cursor) * timeline.pixelsPerDay;
       var dayWidth = Math.max(1, Math.min(timeline.pixelsPerDay, width - left));
+      var load = getDayLoad(capacity, cursor);
       if (left >= 0 && left <= width) {
         html.push(
-          '<div class="wct-day-cell' + getDayCellClasses(cursor) + '" style="left:' + left + 'px;width:' + dayWidth + 'px;">' +
+          '<div class="wct-day-cell' + getDayCellClasses(cursor) + getCapacityClass(load) + '" style="left:' + left + 'px;width:' + dayWidth + 'px;" title="' + escapeAttr(getLoadLabel(load, "live event")) + '">' +
             '<span>' + escapeHtml(String(cursor.getDate())) + '</span>' +
           '</div>'
         );
@@ -1114,13 +1232,33 @@
     }
   }
 
-  function appendBodyDayGrid(html, timeline, width, height) {
+  function appendWeekLoadBands(html, timeline, width, capacity) {
+    var cursor = startOfWeek(timeline.start);
+    while (dayNumber(cursor) <= dayNumber(timeline.end)) {
+      var next = addDays(cursor, 7);
+      var left = Math.max(0, daysBetween(timeline.start, cursor) * timeline.pixelsPerDay);
+      var right = Math.min(width, daysBetween(timeline.start, next) * timeline.pixelsPerDay);
+      var segmentWidth = Math.max(1, right - left);
+      var load = getWeekLoad(capacity, cursor);
+
+      if (load > 0 && right > 0) {
+        html.push(
+          '<div class="wct-week-load' + getCapacityClass(load) + '" style="left:' + left + 'px;width:' + segmentWidth + 'px;" title="' + escapeAttr("Week of " + formatDate(cursor) + ": " + getLoadLabel(load, "live event")) + '"></div>'
+        );
+      }
+
+      cursor = next;
+    }
+  }
+
+  function appendBodyDayGrid(html, timeline, width, height, capacity) {
     var cursor = startOfDay(timeline.start);
     while (dayNumber(cursor) <= dayNumber(timeline.end)) {
       var left = daysBetween(timeline.start, cursor) * timeline.pixelsPerDay;
       var dayWidth = Math.max(1, Math.min(timeline.pixelsPerDay, width - left));
+      var load = getDayLoad(capacity, cursor);
       if (left >= 0 && left <= width) {
-        html.push('<div class="wct-day-gridline' + getDayCellClasses(cursor) + '" style="left:' + left + 'px;width:' + dayWidth + 'px;height:' + height + 'px;"></div>');
+        html.push('<div class="wct-day-gridline' + getDayCellClasses(cursor) + getCapacityClass(load) + '" style="left:' + left + 'px;width:' + dayWidth + 'px;height:' + height + 'px;"></div>');
       }
       cursor = addDays(cursor, 1);
     }
@@ -1289,6 +1427,12 @@
               ["technical", "Technical"],
               ["production", "Production"]
             ]) +
+            controlSelect("wise-capacity-tracker-card-label", "Card label", [
+              ["full", "Full"],
+              ["name", "Name"],
+              ["tier", "Tier"],
+              ["wise", "Wise ID"]
+            ]) +
             '<label class="wct-control wct-search"><span>Search</span><input id="wise-capacity-tracker-search" type="search" autocomplete="off" placeholder="Project, client, venue or person"></label>' +
             '<label class="wct-control wct-date"><span>Start</span><input id="wise-capacity-tracker-date-start" type="date"></label>' +
             '<label class="wct-control wct-date"><span>End</span><input id="wise-capacity-tracker-date-end" type="date"></label>' +
@@ -1329,6 +1473,11 @@
 
     $("#wise-capacity-tracker-group").on("change.wiseCapacityTracker", function () {
       state.groupMode = this.value;
+      render();
+    });
+
+    $("#wise-capacity-tracker-card-label").on("change.wiseCapacityTracker", function () {
+      state.cardLabelMode = this.value || CFG.defaultCardLabelMode;
       render();
     });
 
@@ -1389,6 +1538,7 @@
   function updateControlsFromState() {
     $("#wise-capacity-tracker-zoom").val(state.zoom);
     $("#wise-capacity-tracker-group").val(state.groupMode);
+    $("#wise-capacity-tracker-card-label").val(state.cardLabelMode);
     $("#wise-capacity-tracker-search").val(state.search);
     $("#wise-capacity-tracker-unassigned").prop("checked", state.showUnassignedOnly);
     $("#wise-capacity-tracker-date-start").val(formatDateInput(state.dateRangeStart));
@@ -1442,12 +1592,15 @@
       ".wct-left-inner{position:relative;min-height:100%;}" +
       ".wct-left-row{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border-bottom:1px solid #edf1f5;overflow:hidden;background:#fff;}" +
       ".wct-left-row.is-person strong{font-size:12px;color:#102033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}.wct-left-row.is-person span{flex:0 0 auto;min-width:22px;text-align:center;border:1px solid #dbe3ec;background:#f8fafc;border-radius:5px;padding:1px 4px;font-size:10px;color:#667085;}.wct-left-row.is-unassigned{background:#fff8e6;}" +
+      ".wct-left-row.is-load-low{border-left:4px solid #22c55e;background:linear-gradient(90deg,rgba(34,197,94,.10),#fff 52px);}.wct-left-row.is-load-medium{border-left:4px solid #f59e0b;background:linear-gradient(90deg,rgba(245,158,11,.13),#fff 58px);}.wct-left-row.is-load-high{border-left:4px solid #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.14),#fff 66px);}" +
+      ".wct-left-row.is-load-low .wct-load-badge{background:#ecfdf3;border-color:#86efac;color:#166534;}.wct-left-row.is-load-medium .wct-load-badge{background:#fff7ed;border-color:#fed7aa;color:#9a3412;}.wct-left-row.is-load-high .wct-load-badge{background:#fff1f2;border-color:#fecdd3;color:#9f1239;}" +
       ".wct-timeline-scroll{grid-column:2;grid-row:2;overflow:auto;position:relative;background:#fff;}" +
       ".wct-timeline-body{position:relative;min-width:100%;min-height:100%;}" +
       ".wct-month-segment{position:absolute;top:0;height:22px;border-right:1px solid #d9e2ec;padding:4px 7px 0;font-size:12px;font-weight:700;color:#253244;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
-      ".wct-day-cell{position:absolute;top:22px;height:28px;border-left:1px solid #dbe3ec;display:flex;align-items:center;justify-content:center;font-size:10px;color:#526071;overflow:hidden;}.wct-day-cell.is-weekend{background:#eef3f8;}.wct-day-cell.is-today{background:#fff1f1;color:#b42318;font-weight:700;}" +
+      ".wct-day-cell{position:absolute;top:22px;height:28px;border-left:1px solid #dbe3ec;display:flex;align-items:center;justify-content:center;font-size:10px;color:#526071;overflow:hidden;}.wct-day-cell.is-weekend{background:#eef3f8;}.wct-day-cell.is-load-low{background:#f0fdf4;color:#166534;}.wct-day-cell.is-load-medium{background:#fff7ed;color:#9a3412;}.wct-day-cell.is-load-high{background:#fff1f2;color:#9f1239;font-weight:700;}.wct-day-cell.is-today{box-shadow:inset 0 0 0 2px rgba(217,45,32,.28);color:#b42318;font-weight:700;}" +
+      ".wct-week-load{position:absolute;bottom:0;height:4px;border-radius:4px 4px 0 0;z-index:3;pointer-events:auto;opacity:.72;}.wct-week-load.is-load-low{background:#22c55e;}.wct-week-load.is-load-medium{background:#f59e0b;}.wct-week-load.is-load-high{background:#ef4444;}" +
       ".wct-row-backdrop{position:absolute;left:0;top:0;}.wct-row-line{position:absolute;left:0;right:0;border-bottom:1px solid #edf1f5;}.wct-row-line.is-person:nth-child(even){background:#fcfdff;}" +
-      ".wct-day-gridline{position:absolute;top:0;border-left:1px solid #edf1f5;z-index:1;pointer-events:none;}.wct-day-gridline.is-weekend{background:rgba(238,243,248,.55);}.wct-day-gridline.is-today{background:rgba(217,45,32,.06);}" +
+      ".wct-day-gridline{position:absolute;top:0;border-left:1px solid #edf1f5;z-index:1;pointer-events:none;}.wct-day-gridline.is-weekend{background:rgba(238,243,248,.55);}.wct-day-gridline.is-load-low{background:rgba(34,197,94,.045);}.wct-day-gridline.is-load-medium{background:rgba(245,158,11,.07);}.wct-day-gridline.is-load-high{background:rgba(239,68,68,.085);}.wct-day-gridline.is-today{box-shadow:inset 2px 0 0 rgba(217,45,32,.36);}" +
       ".wct-today-line{position:absolute;top:0;width:0;border-left:2px solid #d92d20;z-index:5;pointer-events:none;}.wct-today-line span{position:absolute;top:4px;left:5px;background:#d92d20;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700;}" +
       ".wct-project-bar{position:absolute;z-index:4;border:1px solid rgba(15,23,42,.22);border-radius:5px;box-shadow:0 1px 2px rgba(15,23,42,.14);padding:0 7px;text-align:left;cursor:pointer;overflow:hidden;}" +
       ".wct-project-bar span{position:relative;z-index:2;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;line-height:22px;}" +
@@ -1535,6 +1688,24 @@
   function getShortBarLabel(project) {
     if (!project) return "";
     return getProjectLabel(project);
+  }
+
+  function getCardLabel(project) {
+    if (!project) return "";
+
+    if (state.cardLabelMode === "tier") {
+      return project.tier || "No tier";
+    }
+
+    if (state.cardLabelMode === "name") {
+      return project.wiseProjectName || project.name || getProjectLabel(project);
+    }
+
+    if (state.cardLabelMode === "wise") {
+      return project.wiseJobNumber || project.id || "No Wise ID";
+    }
+
+    return getShortBarLabel(project);
   }
 
   function getProjectMeta(project) {
@@ -1859,6 +2030,12 @@
 
   function startOfMonth(date) {
     return new Date(date.getFullYear(), date.getMonth(), 1);
+  }
+
+  function startOfWeek(date) {
+    var day = date.getDay();
+    var offset = (day + 6) % 7;
+    return startOfDay(addDays(date, -offset));
   }
 
   function addMonths(date, months) {
