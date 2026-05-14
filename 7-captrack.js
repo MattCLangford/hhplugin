@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.03",
+    version: "2026-05-14.04",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -40,8 +40,8 @@
     barHeight: 24,
     laneGap: 2,
     lanePadding: 0,
-    defaultRangeMonthsBefore: 2,
-    defaultRangeMonthsAfter: 14,
+    defaultRangeMonthsBefore: 0,
+    defaultRangeMonthsAfter: 1,
     fetchPageSize: 500,
     fetchMaxPages: 20,
     searchDebounceMs: 180,
@@ -97,9 +97,11 @@
     rows: [],
     projectMap: {},
     timeline: null,
+    loadedRangeKey: "",
     zoom: CFG.defaultZoom,
     groupMode: "project",
     cardLabelMode: CFG.defaultCardLabelMode,
+    rowOrder: {},
     search: "",
     showUnassignedOnly: false,
     statusFilters: createDefaultStatusFilters(),
@@ -110,6 +112,7 @@
   var latestLoadId = 0;
   var searchTimer = null;
   var buttonRetryTimer = null;
+  var draggedRowKey = "";
 
   window.WiseCapacityTracker = {
     version: CFG.version,
@@ -176,9 +179,14 @@
 
     if ($("#" + CFG.buttonId).length) return;
 
+    var $sampleTab = $host.children("li").not("#" + CFG.buttonId).filter(":visible").last();
+    var tabClass = normaliseHomeTabClass($sampleTab.attr("class") || "ui-state-default ui-corner-top ui-tabs-tab ui-tab");
+    var anchorClass = asText($sampleTab.children("a").first().attr("class"));
+    var anchorClassAttr = anchorClass ? ' class="' + escapeAttr(anchorClass) + '"' : "";
+
     var $btn = $(
-      '<li id="' + CFG.buttonId + '" class="ui-state-default ui-corner-top" role="tab">' +
-        '<a href="#wise-capacity-tracker-open" title="' + escapeAttr(CFG.buttonTitle) + '">' +
+      '<li id="' + CFG.buttonId + '" class="' + escapeAttr(tabClass) + '" role="tab">' +
+        '<a href="#wise-capacity-tracker-open"' + anchorClassAttr + ' title="' + escapeAttr(CFG.buttonTitle) + '">' +
           escapeHtml(CFG.buttonLabel) +
         '</a>' +
       '</li>'
@@ -216,6 +224,26 @@
     return $();
   }
 
+  function normaliseHomeTabClass(value) {
+    var text = asText(value) || "ui-state-default ui-corner-top ui-tabs-tab ui-tab";
+    var remove = {
+      "ui-tabs-active": true,
+      "ui-state-active": true,
+      "ui-state-focus": true,
+      "ui-state-hover": true,
+      "ui-tabs-loading": true
+    };
+    var parts = text.split(/\s+/);
+    var kept = [];
+    for (var i = 0; i < parts.length; i++) {
+      if (!parts[i] || remove[parts[i]]) continue;
+      kept.push(parts[i]);
+    }
+    if (kept.indexOf("ui-state-default") === -1) kept.push("ui-state-default");
+    if (kept.indexOf("ui-corner-top") === -1) kept.push("ui-corner-top");
+    return kept.join(" ");
+  }
+
   function openTracker() {
     ensureModal();
     updateControlsFromState();
@@ -224,7 +252,7 @@
       .show();
     $("body").addClass("wise-capacity-tracker-open");
 
-    if (!state.loaded && !state.loading) {
+    if ((!state.loaded || state.loadedRangeKey !== getSelectedRangeKey()) && !state.loading) {
       refreshProjects();
       return;
     }
@@ -241,6 +269,7 @@
 
   function refreshProjects() {
     var loadId = ++latestLoadId;
+    var rangeKey = getSelectedRangeKey();
     state.loading = true;
     state.error = "";
     setStatus("Loading Wise projects...", "loading");
@@ -254,6 +283,7 @@
         state.loaded = true;
         state.loading = false;
         state.error = "";
+        state.loadedRangeKey = rangeKey;
 
         log("Loaded project rows", {
           rawRows: rows.length,
@@ -718,6 +748,11 @@
     return formatDate(range.start) + " - " + formatDate(range.end);
   }
 
+  function getSelectedRangeKey() {
+    var range = getSelectedDateRange();
+    return formatDateInput(range.start) + "|" + formatDateInput(range.end);
+  }
+
   function applyDateRangeFromControls() {
     var start = parseDateInput($("#wise-capacity-tracker-date-start").val());
     var end = parseDateInput($("#wise-capacity-tracker-date-end").val());
@@ -779,12 +814,33 @@
       groups[key].projects.push(project);
     }
 
-    return Object.keys(groups).map(function (key) {
+    var orderedGroups = Object.keys(groups).map(function (key) {
       var group = groups[key];
       group.projects.sort(sortProjectsByStart);
       group.activeToday = countActiveToday(group.projects);
       return group;
     }).sort(function (a, b) {
+      if (a.unassigned !== b.unassigned) return a.unassigned ? 1 : -1;
+      return a.label.localeCompare(b.label);
+    });
+
+    return applyRowOrder(orderedGroups, groupMode);
+  }
+
+  function applyRowOrder(groups, groupMode) {
+    var order = state.rowOrder[groupMode] || [];
+    if (!order.length) return groups;
+
+    var index = {};
+    for (var i = 0; i < order.length; i++) index[order[i]] = i;
+
+    return groups.slice().sort(function (a, b) {
+      var ai = index[a.key];
+      var bi = index[b.key];
+      var hasA = ai != null;
+      var hasB = bi != null;
+      if (hasA && hasB) return ai - bi;
+      if (hasA !== hasB) return hasA ? -1 : 1;
       if (a.unassigned !== b.unassigned) return a.unassigned ? 1 : -1;
       return a.label.localeCompare(b.label);
     });
@@ -962,6 +1018,16 @@
 
     model.weekLoads = weekLoads;
     model.maxWeek = maxWeek;
+    model.peakWeekDate = null;
+    model.peakWeekDayNumber = null;
+
+    $.each(weekLoads, function (key, count) {
+      if (count === maxWeek && model.peakWeekDayNumber == null) {
+        model.peakWeekDayNumber = Number(key);
+        model.peakWeekDate = dateFromDayNumber(Number(key));
+      }
+    });
+
     return model;
   }
 
@@ -969,9 +1035,10 @@
     var dayLoads = {};
     var maxDay = 0;
     var totalLive = 0;
+    var peakDayNumber = null;
 
     if (!timeline) {
-      return { dayLoads: dayLoads, maxDay: 0, maxWeek: 0, weekLoads: {}, totalLive: 0 };
+      return { dayLoads: dayLoads, maxDay: 0, peakDayNumber: null, peakDayDate: null, maxWeek: 0, peakWeekDayNumber: null, peakWeekDate: null, weekLoads: {}, totalLive: 0 };
     }
 
     for (var i = 0; i < projects.length; i++) {
@@ -990,7 +1057,10 @@
       while (dayNumber(cursor) <= dayNumber(visibleEnd)) {
         var key = String(dayNumber(cursor));
         dayLoads[key] = (dayLoads[key] || 0) + 1;
-        if (dayLoads[key] > maxDay) maxDay = dayLoads[key];
+        if (dayLoads[key] > maxDay) {
+          maxDay = dayLoads[key];
+          peakDayNumber = Number(key);
+        }
         cursor = addDays(cursor, 1);
       }
     }
@@ -998,7 +1068,11 @@
     return {
       dayLoads: dayLoads,
       maxDay: maxDay,
+      peakDayNumber: peakDayNumber,
+      peakDayDate: peakDayNumber == null ? null : dateFromDayNumber(peakDayNumber),
       maxWeek: 0,
+      peakWeekDayNumber: null,
+      peakWeekDate: null,
       weekLoads: {},
       totalLive: totalLive
     };
@@ -1037,43 +1111,28 @@
   }
 
   function renderSummary(view) {
-    var liveProjects = 0;
-    var noPm = 0;
-    var noDesigner = 0;
-    var noTpm = 0;
-    var noProduction = 0;
-    var statusCounts = {};
-
-    for (var i = 0; i < state.projects.length; i++) {
-      var project = state.projects[i];
-      if (!isOpenProject(project)) continue;
-      liveProjects++;
-      statusCounts[getWiseStatusKey(project.status)] = (statusCounts[getWiseStatusKey(project.status)] || 0) + 1;
-      if (!project.roles.pm) noPm++;
-      if (!project.roles.designer) noDesigner++;
-      if (!project.roles.tpm) noTpm++;
-      if (!project.roles.production) noProduction++;
-    }
-
+    var capacity = view.capacity || {};
     var items = [
-      ["Live projects", liveProjects],
-      ["Shown", view.visibleProjects.length],
-      ["Peak day", view.capacity ? view.capacity.maxDay : 0],
-      ["Peak week", view.capacity ? view.capacity.maxWeek : 0],
-      ["Missing dates", view.missingDateProjects.length],
-      ["No Project", noPm],
-      ["No Designer", noDesigner],
-      ["No Technical", noTpm],
-      ["No Production", noProduction],
-      ["Visible range", '<span id="wise-capacity-tracker-visible-range">' + escapeHtml(getVisibleRangeLabel(view.timeline)) + '</span>']
+      { label: "Visible", value: view.visibleProjects.length },
+      { label: "Live", value: capacity.totalLive || 0 },
+      { label: "Peak day", value: formatPeakSummary(capacity.maxDay, capacity.peakDayDate), dayNumber: capacity.peakDayNumber },
+      { label: "Peak week", value: formatPeakSummary(capacity.maxWeek, capacity.peakWeekDate), dayNumber: capacity.peakWeekDayNumber },
+      { label: "Missing dates", value: view.missingDateProjects.length },
+      { label: "Range", value: '<span id="wise-capacity-tracker-visible-range">' + escapeHtml(getVisibleRangeLabel(view.timeline)) + '</span>' }
     ];
 
-    var dominant = getDominantStatusLabel(statusCounts);
-    if (dominant) items.splice(2, 0, ["Top status", dominant]);
-
     $("#" + CFG.summaryId).html(items.map(function (item) {
-      return '<div class="wct-summary-pill"><span>' + escapeHtml(item[0]) + '</span><strong>' + item[1] + '</strong></div>';
+      var clickable = item.dayNumber != null && item.dayNumber !== "" && Number(item.dayNumber) >= 0;
+      var tag = clickable ? "button" : "div";
+      var attrs = clickable ? ' type="button" data-scroll-day="' + escapeAttr(item.dayNumber) + '"' : "";
+      return '<' + tag + attrs + ' class="wct-summary-pill' + (clickable ? " is-clickable" : "") + '"><span>' + escapeHtml(item.label) + '</span><strong>' + item.value + '</strong></' + tag + '>';
     }).join(""));
+  }
+
+  function formatPeakSummary(count, date) {
+    count = Number(count) || 0;
+    if (!count || !date) return "0";
+    return count + " | " + formatDateShort(date);
   }
 
   function renderMissingDates(projects) {
@@ -1163,7 +1222,7 @@
       var row = rows[i];
       var rowMeta = row.count + " event" + (row.count === 1 ? "" : "s") + " | " + row.liveCount + " live | peak " + row.peakLiveLoad + " live at once" + (row.activeToday ? " | " + row.activeToday + " active today" : "");
       html.push(
-        '<div class="wct-left-row is-person' + (row.unassigned ? " is-unassigned" : "") + getCapacityClass(row.peakLiveLoad) + '" style="top:' + row.top + 'px;height:' + row.height + 'px;" title="' + escapeAttr(rowMeta) + '">' +
+        '<div class="wct-left-row is-person' + (row.unassigned ? " is-unassigned" : "") + getCapacityClass(row.peakLiveLoad) + '" draggable="true" data-row-key="' + escapeAttr(row.key) + '" style="top:' + row.top + 'px;height:' + row.height + 'px;" title="' + escapeAttr(rowMeta) + '">' +
           '<strong>' + escapeHtml(row.label) + '</strong>' +
           '<span class="wct-load-badge">' + escapeHtml(String(row.peakLiveLoad || 0)) + '</span>' +
         '</div>'
@@ -1189,29 +1248,14 @@
     var color = project.statusColor || project.colour || "#2563eb";
     var textColor = getReadableTextColor(color);
     var top = row.top + CFG.lanePadding + (lane * (CFG.barHeight + CFG.laneGap));
-    var onsite = getOnsiteWindowStyle(project, visibleStart, visibleEnd, width);
 
     return (
       '<button type="button" class="wct-project-bar is-status-' + escapeAttr(project.statusKey || CFG.unknownStatusKey) + '" data-project-uid="' + escapeAttr(project.uid) + '" ' +
         'style="left:' + left + 'px;top:' + top + 'px;width:' + width + 'px;height:' + CFG.barHeight + 'px;background:' + escapeAttr(color) + ';color:' + textColor + ';" ' +
         'title="' + escapeAttr(getProjectLabel(project)) + '">' +
-        (onsite ? '<i class="wct-onsite-window" style="' + onsite + '"></i>' : '') +
         '<span>' + escapeHtml(getCardLabel(project)) + '</span>' +
       '</button>'
     );
-  }
-
-  function getOnsiteWindowStyle(project, visibleStart, visibleEnd, barWidth) {
-    if (!project || !project.onsiteStart || !project.onsiteEnd || !barWidth) return "";
-    if (dayNumber(project.onsiteEnd) < dayNumber(visibleStart) || dayNumber(project.onsiteStart) > dayNumber(visibleEnd)) return "";
-
-    var onsiteStart = dayNumber(project.onsiteStart) < dayNumber(visibleStart) ? visibleStart : project.onsiteStart;
-    var onsiteEnd = dayNumber(project.onsiteEnd) > dayNumber(visibleEnd) ? visibleEnd : project.onsiteEnd;
-    var totalDays = Math.max(1, daysBetween(visibleStart, visibleEnd) + 1);
-    var leftPct = Math.max(0, (daysBetween(visibleStart, onsiteStart) / totalDays) * 100);
-    var widthPct = Math.max(3, ((daysBetween(onsiteStart, onsiteEnd) + 1) / totalDays) * 100);
-    if (leftPct + widthPct > 100) widthPct = 100 - leftPct;
-    return "left:" + leftPct.toFixed(3) + "%;width:" + widthPct.toFixed(3) + "%;";
   }
 
   function appendDayTicks(html, timeline, width, capacity) {
@@ -1224,6 +1268,7 @@
       if (left >= 0 && left <= width) {
         html.push(
           '<div class="wct-day-cell' + getDayCellClasses(cursor) + getCapacityClass(load) + '" style="left:' + left + 'px;width:' + dayWidth + 'px;" title="' + escapeAttr(getLoadLabel(load, "live event")) + '">' +
+            '<em>' + escapeHtml(getWeekdayName(cursor)) + '</em>' +
             '<span>' + escapeHtml(String(cursor.getDate())) + '</span>' +
           '</div>'
         );
@@ -1274,16 +1319,40 @@
 
   function scrollToToday(options) {
     options = options || {};
+    scrollToDayNumber(dayNumber(startOfDay(new Date())), options);
+  }
+
+  function scrollToDayNumber(targetDayNumber, options) {
+    options = options || {};
     var timeline = state.timeline;
     var $scroll = $("#" + CFG.timelineScrollId);
     if (!timeline || !$scroll.length) return;
+    if (!isFinite(targetDayNumber)) return;
 
-    var todayLeft = daysBetween(timeline.start, startOfDay(new Date())) * timeline.pixelsPerDay;
+    var targetLeft = (targetDayNumber - dayNumber(timeline.start)) * timeline.pixelsPerDay;
     var bias = options.centerBias == null ? 0.42 : Number(options.centerBias);
-    var left = Math.max(0, todayLeft - ($scroll.innerWidth() * bias));
+    var left = Math.max(0, targetLeft - ($scroll.innerWidth() * bias));
 
     $scroll.scrollLeft(left);
     syncTimelineScroll();
+  }
+
+  function reorderCurrentRows(sourceKey, targetKey, insertAfter) {
+    if (!sourceKey || !targetKey || sourceKey === targetKey) return;
+
+    var order = [];
+    for (var i = 0; i < state.rows.length; i++) {
+      order.push(state.rows[i].key);
+    }
+
+    var sourceIndex = order.indexOf(sourceKey);
+    var targetIndex = order.indexOf(targetKey);
+    if (sourceIndex === -1 || targetIndex === -1) return;
+
+    order.splice(sourceIndex, 1);
+    targetIndex = order.indexOf(targetKey);
+    order.splice(targetIndex + (insertAfter ? 1 : 0), 0, sourceKey);
+    state.rowOrder[state.groupMode] = order;
   }
 
   function syncTimelineScroll() {
@@ -1513,6 +1582,44 @@
 
     $("#" + CFG.timelineScrollId).on("scroll.wiseCapacityTracker", syncTimelineScroll);
 
+    $("#" + CFG.summaryId).on("click.wiseCapacityTracker", ".wct-summary-pill[data-scroll-day]", function (event) {
+      event.preventDefault();
+      scrollToDayNumber(Number($(this).attr("data-scroll-day")), { centerBias: 0.35 });
+    });
+
+    $("#" + CFG.leftBodyId)
+      .on("dragstart.wiseCapacityTracker", ".wct-left-row", function (event) {
+        draggedRowKey = $(this).attr("data-row-key") || "";
+        $(this).addClass("is-dragging");
+        if (event.originalEvent && event.originalEvent.dataTransfer) {
+          event.originalEvent.dataTransfer.effectAllowed = "move";
+          event.originalEvent.dataTransfer.setData("text/plain", draggedRowKey);
+        }
+      })
+      .on("dragover.wiseCapacityTracker", ".wct-left-row", function (event) {
+        if (!draggedRowKey) return;
+        event.preventDefault();
+        $(this).addClass("is-drop-target");
+      })
+      .on("dragleave.wiseCapacityTracker", ".wct-left-row", function () {
+        $(this).removeClass("is-drop-target");
+      })
+      .on("drop.wiseCapacityTracker", ".wct-left-row", function (event) {
+        if (!draggedRowKey) return;
+        event.preventDefault();
+        var targetKey = $(this).attr("data-row-key") || "";
+        var rect = this.getBoundingClientRect();
+        var after = event.originalEvent && event.originalEvent.clientY > rect.top + (rect.height / 2);
+        reorderCurrentRows(draggedRowKey, targetKey, after);
+        draggedRowKey = "";
+        $("#" + CFG.leftBodyId + " .wct-left-row").removeClass("is-dragging is-drop-target");
+        render();
+      })
+      .on("dragend.wiseCapacityTracker", ".wct-left-row", function () {
+        draggedRowKey = "";
+        $("#" + CFG.leftBodyId + " .wct-left-row").removeClass("is-dragging is-drop-target");
+      });
+
     $("#" + CFG.modalId)
       .on("click.wiseCapacityTracker", ".wct-project-bar", function (event) {
         event.preventDefault();
@@ -1582,6 +1689,7 @@
       ".wct-status.is-loading{border-color:#9cc5ed;background:#edf7ff;color:#164e7a;}.wct-status.is-error{border-color:#f0b4b4;background:#fff1f1;color:#8a1f1f;}.wct-status.is-empty{border-color:#d6e4f0;background:#ffffff;color:#526071;}" +
       ".wct-summary{display:flex;flex-wrap:wrap;gap:6px;padding:8px 14px 6px;min-height:38px;}" +
       ".wct-summary-pill{display:flex;align-items:baseline;gap:7px;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:5px 8px;min-height:28px;}" +
+      "button.wct-summary-pill{font-family:inherit;cursor:pointer;}button.wct-summary-pill:hover{background:#eef6ff;border-color:#9fc5ef;}" +
       ".wct-summary-pill span{font-size:11px;text-transform:uppercase;color:#667085;font-weight:700;letter-spacing:0;}.wct-summary-pill strong{font-size:13px;color:#1f2937;font-weight:700;}" +
       ".wct-missing{margin:0 14px 6px;padding:7px 9px;border:1px solid #f0d38a;background:#fff8e6;border-radius:6px;color:#6b4e00;font-size:12px;display:flex;gap:10px;align-items:center;}.wct-missing span{color:#725c23;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}" +
       ".wct-grid{flex:1 1 auto;min-height:240px;display:grid;grid-template-columns:210px minmax(0,1fr);grid-template-rows:50px minmax(0,1fr);border-top:1px solid #d9e2ec;background:#fff;}" +
@@ -1590,21 +1698,21 @@
       ".wct-timeline-header{position:relative;height:50px;min-width:100%;}" +
       ".wct-left-body{grid-column:1;grid-row:2;position:relative;overflow:hidden;border-right:1px solid #d9e2ec;background:#fbfdff;}" +
       ".wct-left-inner{position:relative;min-height:100%;}" +
-      ".wct-left-row{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border-bottom:1px solid #edf1f5;overflow:hidden;background:#fff;}" +
+      ".wct-left-row{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border-bottom:1px solid #edf1f5;overflow:hidden;background:#fff;cursor:grab;}" +
+      ".wct-left-row.is-dragging{opacity:.52;cursor:grabbing;}.wct-left-row.is-drop-target{box-shadow:inset 0 0 0 2px rgba(37,99,235,.28);}" +
       ".wct-left-row.is-person strong{font-size:12px;color:#102033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}.wct-left-row.is-person span{flex:0 0 auto;min-width:22px;text-align:center;border:1px solid #dbe3ec;background:#f8fafc;border-radius:5px;padding:1px 4px;font-size:10px;color:#667085;}.wct-left-row.is-unassigned{background:#fff8e6;}" +
       ".wct-left-row.is-load-low{border-left:4px solid #22c55e;background:linear-gradient(90deg,rgba(34,197,94,.10),#fff 52px);}.wct-left-row.is-load-medium{border-left:4px solid #f59e0b;background:linear-gradient(90deg,rgba(245,158,11,.13),#fff 58px);}.wct-left-row.is-load-high{border-left:4px solid #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.14),#fff 66px);}" +
       ".wct-left-row.is-load-low .wct-load-badge{background:#ecfdf3;border-color:#86efac;color:#166534;}.wct-left-row.is-load-medium .wct-load-badge{background:#fff7ed;border-color:#fed7aa;color:#9a3412;}.wct-left-row.is-load-high .wct-load-badge{background:#fff1f2;border-color:#fecdd3;color:#9f1239;}" +
       ".wct-timeline-scroll{grid-column:2;grid-row:2;overflow:auto;position:relative;background:#fff;}" +
       ".wct-timeline-body{position:relative;min-width:100%;min-height:100%;}" +
       ".wct-month-segment{position:absolute;top:0;height:22px;border-right:1px solid #d9e2ec;padding:4px 7px 0;font-size:12px;font-weight:700;color:#253244;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
-      ".wct-day-cell{position:absolute;top:22px;height:28px;border-left:1px solid #dbe3ec;display:flex;align-items:center;justify-content:center;font-size:10px;color:#526071;overflow:hidden;}.wct-day-cell.is-weekend{background:#eef3f8;}.wct-day-cell.is-load-low{background:#f0fdf4;color:#166534;}.wct-day-cell.is-load-medium{background:#fff7ed;color:#9a3412;}.wct-day-cell.is-load-high{background:#fff1f2;color:#9f1239;font-weight:700;}.wct-day-cell.is-today{box-shadow:inset 0 0 0 2px rgba(217,45,32,.28);color:#b42318;font-weight:700;}" +
+      ".wct-day-cell{position:absolute;top:22px;height:28px;border-left:1px solid #dbe3ec;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;color:#526071;overflow:hidden;line-height:1.05;}.wct-day-cell em{font-style:normal;font-size:8px;text-transform:uppercase;color:inherit;opacity:.72;}.wct-day-cell span{font-size:11px;font-weight:700;}.wct-day-cell.is-weekend{background:#eef3f8;}.wct-day-cell.is-load-low{background:#f0fdf4;color:#166534;}.wct-day-cell.is-load-medium{background:#fff7ed;color:#9a3412;}.wct-day-cell.is-load-high{background:#fff1f2;color:#9f1239;font-weight:700;}.wct-day-cell.is-today{box-shadow:inset 0 0 0 2px rgba(217,45,32,.28);color:#b42318;font-weight:700;}" +
       ".wct-week-load{position:absolute;bottom:0;height:4px;border-radius:4px 4px 0 0;z-index:3;pointer-events:auto;opacity:.72;}.wct-week-load.is-load-low{background:#22c55e;}.wct-week-load.is-load-medium{background:#f59e0b;}.wct-week-load.is-load-high{background:#ef4444;}" +
       ".wct-row-backdrop{position:absolute;left:0;top:0;}.wct-row-line{position:absolute;left:0;right:0;border-bottom:1px solid #edf1f5;}.wct-row-line.is-person:nth-child(even){background:#fcfdff;}" +
       ".wct-day-gridline{position:absolute;top:0;border-left:1px solid #edf1f5;z-index:1;pointer-events:none;}.wct-day-gridline.is-weekend{background:rgba(238,243,248,.55);}.wct-day-gridline.is-load-low{background:rgba(34,197,94,.045);}.wct-day-gridline.is-load-medium{background:rgba(245,158,11,.07);}.wct-day-gridline.is-load-high{background:rgba(239,68,68,.085);}.wct-day-gridline.is-today{box-shadow:inset 2px 0 0 rgba(217,45,32,.36);}" +
       ".wct-today-line{position:absolute;top:0;width:0;border-left:2px solid #d92d20;z-index:5;pointer-events:none;}.wct-today-line span{position:absolute;top:4px;left:5px;background:#d92d20;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700;}" +
       ".wct-project-bar{position:absolute;z-index:4;border:1px solid rgba(15,23,42,.22);border-radius:5px;box-shadow:0 1px 2px rgba(15,23,42,.14);padding:0 7px;text-align:left;cursor:pointer;overflow:hidden;}" +
       ".wct-project-bar span{position:relative;z-index:2;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;line-height:22px;}" +
-      ".wct-onsite-window{position:absolute;z-index:1;top:3px;bottom:3px;border-radius:4px;background:rgba(255,255,255,.24);box-shadow:inset 0 0 0 1px rgba(255,255,255,.26);pointer-events:none;}" +
       ".wct-project-bar:hover{filter:brightness(1.03);box-shadow:0 2px 7px rgba(15,23,42,.22);}" +
       ".wct-popover{position:absolute;z-index:20;width:420px;max-width:calc(100% - 24px);background:#fff;border:1px solid #b9c7d6;border-radius:8px;box-shadow:0 14px 34px rgba(15,23,42,.26);padding:12px;color:#1f2937;}" +
       ".wct-popover-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;}.wct-popover-head strong{font-size:15px;line-height:1.25;}.wct-popover-close{border:0;background:transparent;color:#667085;font-size:16px;line-height:1;cursor:pointer;}" +
@@ -1674,7 +1782,11 @@
 
   function getProjectLabel(project) {
     if (!project) return "";
-    if (project.wiseProjectName) return project.wiseProjectName;
+    return getWiseStandardLabel(project) || project.wiseProjectName || project.name || project.wiseJobNumber || ("Project " + project.id);
+  }
+
+  function getWiseStandardLabel(project) {
+    if (!project) return "";
     var parts = [];
     if (project.tier) parts.push(project.tier);
     if (project.wiseJobNumber) parts.push(project.wiseJobNumber);
@@ -1682,7 +1794,7 @@
     if (project.client && project.venue) clientVenue = project.client + " @ " + project.venue;
     else clientVenue = project.client || project.venue;
     if (clientVenue) parts.push(clientVenue);
-    return parts.join(" - ") || project.name || project.wiseJobNumber || ("Project " + project.id);
+    return parts.join(" - ");
   }
 
   function getShortBarLabel(project) {
@@ -1705,7 +1817,7 @@
       return project.wiseJobNumber || project.id || "No Wise ID";
     }
 
-    return getShortBarLabel(project);
+    return getWiseStandardLabel(project) || getShortBarLabel(project);
   }
 
   function getProjectMeta(project) {
@@ -2050,6 +2162,11 @@
     return Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000);
   }
 
+  function dateFromDayNumber(value) {
+    var epoch = new Date(1970, 0, 1);
+    return startOfDay(addDays(epoch, Number(value) || 0));
+  }
+
   function daysBetween(start, end) {
     return dayNumber(end) - dayNumber(start);
   }
@@ -2067,6 +2184,10 @@
       ? ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
       : ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     return names[date.getMonth()];
+  }
+
+  function getWeekdayName(date) {
+    return ["sun", "mon", "tues", "wed", "thur", "fri", "sat"][date.getDay()];
   }
 
   function clamp(value, min, max) {

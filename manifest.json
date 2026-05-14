@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-05-14.03",
+  "version": "2026-05-14.04",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -54,7 +54,7 @@
     {
       "file": "7-captrack.js",
       "status": "active",
-      "cacheVersion": "0.9",
+      "cacheVersion": "1.0",
       "role": "Full-page Wise capacity timeline using project-level custom fields, date-range filtering, and Wise status controls.",
       "recommendedLoadOrder": 7
     }
