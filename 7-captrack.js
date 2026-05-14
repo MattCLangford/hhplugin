@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.07",
+    version: "2026-05-14.08",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
     buttonLabel: "Capacity Tracker",
@@ -2403,7 +2403,7 @@
     var date = new Date(year, month - 1, day, hour || 0, minute || 0, second || 0);
     if (!isValidDate(date)) return null;
     if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
-    return startOfDay(date);
+    return date;
   }
 
   function isValidDate(date) {
