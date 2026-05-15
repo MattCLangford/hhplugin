@@ -8,9 +8,9 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-14.12",
+    version: "2026-05-15.1",
     title: "Capacity Tracker",
-    subtitle: "Wise project timeline by Project, Designer, Technical and Production assignment",
+    subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
     buttonTitle: "Open Capacity Tracker",
     buttonId: "wise-capacity-tracker-button",
@@ -81,11 +81,14 @@
     }
   };
 
-  var ROLE_MODES = {
-    project: { field: "pm", label: "Project", groupLabel: "Project", unassigned: "Unassigned Project" },
-    designer: { field: "designer", label: "Designer", groupLabel: "Designer", unassigned: "Unassigned Designer" },
-    technical: { field: "tpm", label: "Technical", groupLabel: "Technical", unassigned: "Unassigned Technical" },
-    production: { field: "production", label: "Production", groupLabel: "Production", unassigned: "Unassigned Production" }
+  var GROUP_MODES = {
+    project: { field: "pm", source: "roles", label: "Project team", headerLabel: "Project team", unassigned: "Unassigned Project", emptyFilterLabel: "Unassigned only" },
+    designer: { field: "designer", source: "roles", label: "Designer", headerLabel: "Designer", unassigned: "Unassigned Designer", emptyFilterLabel: "Unassigned only" },
+    technical: { field: "tpm", source: "roles", label: "Technical", headerLabel: "Technical", unassigned: "Unassigned Technical", emptyFilterLabel: "Unassigned only" },
+    production: { field: "production", source: "roles", label: "Production", headerLabel: "Production", unassigned: "Unassigned Production", emptyFilterLabel: "Unassigned only" },
+    tier: { field: "tier", source: "project", label: "Tier", headerLabel: "Tier", unassigned: "No tier", emptyFilterLabel: "Missing tier only", normalise: getTierGroupLabel },
+    status: { field: "status", source: "project", label: "Status", headerLabel: "Status", unassigned: "No status", emptyFilterLabel: "Missing status only", normalise: normaliseWiseStatus },
+    venue: { field: "venue", source: "project", label: "Venue", headerLabel: "Venue", unassigned: "No venue", emptyFilterLabel: "Missing venue only" }
   };
 
   var defaultDateRange = createDefaultDateRange();
@@ -162,6 +165,7 @@
       dateRange: getSelectedDateRangeLabel(),
       fetchPlan: describeFetchPlan(),
       nativeHireHopStatus: getNativeStatusFilterLabel(),
+      groupMode: state.groupMode,
       cardLabelMode: state.cardLabelMode,
       wiseStatuses: CFG.wiseStatuses.map(function (status) { return status.label; }),
       customFieldKeys: $.extend({}, CFG.customFieldKeys)
@@ -993,18 +997,19 @@
   }
 
   function groupProjects(projects, groupMode) {
-    var role = ROLE_MODES[groupMode] || ROLE_MODES.project;
+    var mode = getGroupMode(groupMode);
     var groups = {};
 
     for (var i = 0; i < projects.length; i++) {
       var project = projects[i];
-      var value = cleanRoleValue(project.roles[role.field]) || role.unassigned;
-      var key = normaliseGroupKey(value);
+      var value = getProjectGroupValue(project, mode);
+      var label = value || mode.unassigned;
+      var key = normaliseGroupKey(label);
       if (!groups[key]) {
         groups[key] = {
           key: key,
-          label: value,
-          unassigned: value === role.unassigned,
+          label: label,
+          unassigned: !value,
           projects: []
         };
       }
@@ -1017,8 +1022,7 @@
       group.activeToday = countActiveToday(group.projects);
       return group;
     }).sort(function (a, b) {
-      if (a.unassigned !== b.unassigned) return a.unassigned ? 1 : -1;
-      return a.label.localeCompare(b.label);
+      return compareGroupRows(a, b, groupMode);
     });
 
     return applyRowOrder(orderedGroups, groupMode);
@@ -1038,9 +1042,48 @@
       var hasB = bi != null;
       if (hasA && hasB) return ai - bi;
       if (hasA !== hasB) return hasA ? -1 : 1;
-      if (a.unassigned !== b.unassigned) return a.unassigned ? 1 : -1;
-      return a.label.localeCompare(b.label);
+      return compareGroupRows(a, b, groupMode);
     });
+  }
+
+  function getGroupMode(groupMode) {
+    return GROUP_MODES[groupMode] || GROUP_MODES.project;
+  }
+
+  function getProjectGroupValue(project, mode) {
+    if (!project || !mode) return "";
+
+    var value = "";
+    if (mode.source === "project") {
+      value = project[mode.field];
+    } else {
+      value = project.roles ? project.roles[mode.field] : "";
+    }
+
+    if (typeof mode.normalise === "function") value = mode.normalise(value);
+    return cleanRoleValue(value);
+  }
+
+  function compareGroupRows(a, b, groupMode) {
+    if (a.unassigned !== b.unassigned) return a.unassigned ? 1 : -1;
+    if (groupMode === "tier") return compareTierTotalLabels(a.label, b.label);
+    if (groupMode === "status") return compareStatusGroupLabels(a.label, b.label);
+    return a.label.localeCompare(b.label);
+  }
+
+  function compareStatusGroupLabels(a, b) {
+    var ai = getStatusGroupSortIndex(a);
+    var bi = getStatusGroupSortIndex(b);
+    if (ai !== bi) return ai - bi;
+    return a.localeCompare(b);
+  }
+
+  function getStatusGroupSortIndex(value) {
+    var key = getWiseStatusKey(value);
+    for (var i = 0; i < CFG.wiseStatuses.length; i++) {
+      if (CFG.wiseStatuses[i].key === key) return i;
+    }
+    return CFG.wiseStatuses.length + 1;
   }
 
   function render() {
@@ -1060,7 +1103,7 @@
     state.timeline = view.timeline;
     state.projectMap = view.projectMap;
 
-    $(".wct-left-head").text((ROLE_MODES[state.groupMode] || ROLE_MODES.project).label + " team");
+    $(".wct-left-head").text(getGroupMode(state.groupMode).headerLabel);
     renderSummary(view);
     renderMissingDates(view.missingDateProjects);
 
@@ -1146,7 +1189,7 @@
       );
 
       rows.push({
-        type: "person",
+        type: "group",
         key: group.key,
         label: group.label,
         count: group.projects.length,
@@ -1401,7 +1444,7 @@
 
     for (var r = 0; r < view.rows.length; r++) {
       var rowModel = view.rows[r];
-      if (rowModel.type !== "person") continue;
+      if (rowModel.type !== "group") continue;
       for (var p = 0; p < rowModel.projects.length; p++) {
         var project = rowModel.projects[p];
         html.push(renderProjectBar(rowModel, project, rowModel.lanes[project.uid] || 0, timeline));
@@ -1422,7 +1465,7 @@
       var row = rows[i];
       var rowMeta = row.count + " event" + (row.count === 1 ? "" : "s") + " | " + row.liveCount + " live | peak " + row.peakLiveLoad + " live at once" + (row.activeToday ? " | " + row.activeToday + " active today" : "");
       html.push(
-        '<div class="wct-left-row is-person' + (row.unassigned ? " is-unassigned" : "") + getCapacityClass(row.peakLiveLoad) + '" draggable="true" data-row-key="' + escapeAttr(row.key) + '" style="top:' + row.top + 'px;height:' + row.height + 'px;" title="' + escapeAttr(rowMeta) + '">' +
+        '<div class="wct-left-row is-group' + (row.unassigned ? " is-unassigned" : "") + getCapacityClass(row.peakLiveLoad) + '" draggable="true" data-row-key="' + escapeAttr(row.key) + '" style="top:' + row.top + 'px;height:' + row.height + 'px;" title="' + escapeAttr(rowMeta) + '">' +
           '<strong>' + escapeHtml(row.label) + '</strong>' +
           '<span class="wct-load-badge">' + escapeHtml(String(row.peakLiveLoad || 0)) + '</span>' +
         '</div>'
@@ -1615,6 +1658,10 @@
     if (compact) return "T" + compact[1];
 
     return text;
+  }
+
+  function getTierGroupLabel(value) {
+    return cleanRoleValue(value) ? getTierTotalLabel(value) : "";
   }
 
   function getSortedTierTotalKeys(tiers) {
@@ -1877,15 +1924,19 @@
               ["month", "Balanced"],
               ["quarter", "Overview"]
             ]) +
-            controlSelect("wise-capacity-tracker-group", "Team", [
-              ["project", "Project"],
+            controlSelect("wise-capacity-tracker-group", "Group by", [
+              ["project", "Project team"],
               ["designer", "Designer"],
               ["technical", "Technical"],
-              ["production", "Production"]
+              ["production", "Production"],
+              ["tier", "Tier"],
+              ["status", "Status"],
+              ["venue", "Venue"]
             ]) +
             controlSelect("wise-capacity-tracker-card-label", "Card label", [
               ["full", "Full"],
               ["name", "Name"],
+              ["venue", "Venue"],
               ["tier", "Tier"],
               ["wise", "Wise ID"],
               ["revenue", "Revenue \u00a3"]
@@ -1895,7 +1946,7 @@
             '<label class="wct-control wct-date"><span>End</span><input id="wise-capacity-tracker-date-end" type="date"></label>' +
             '<div class="wct-native-filter" id="' + CFG.nativeStatusFiltersId + '" aria-label="HireHop native status filters">' + renderNativeStatusFilterControls() + '</div>' +
             '<div class="wct-status-filter" id="' + CFG.statusFiltersId + '" aria-label="Wise status filters">' + renderStatusFilterControls() + '</div>' +
-            '<label class="wct-check"><input id="wise-capacity-tracker-unassigned" type="checkbox"> Unassigned only</label>' +
+            '<label class="wct-check"><input id="wise-capacity-tracker-unassigned" type="checkbox"> <span id="wise-capacity-tracker-unassigned-label">Unassigned only</span></label>' +
           '</div>' +
           '<div id="' + CFG.statusId + '" class="wct-status" style="display:none;"></div>' +
           '<div id="' + CFG.summaryId + '" class="wct-summary"></div>' +
@@ -2048,6 +2099,7 @@
     $("#wise-capacity-tracker-card-label").val(state.cardLabelMode);
     $("#wise-capacity-tracker-search").val(state.search);
     $("#wise-capacity-tracker-unassigned").prop("checked", state.showUnassignedOnly);
+    $("#wise-capacity-tracker-unassigned-label").text(getGroupMode(state.groupMode).emptyFilterLabel || "Unassigned only");
     $("#wise-capacity-tracker-date-start").val(formatDateInput(state.dateRangeStart));
     $("#wise-capacity-tracker-date-end").val(formatDateInput(state.dateRangeEnd));
     updateNativeStatusControls();
@@ -2103,7 +2155,7 @@
       ".wct-left-inner{position:relative;min-height:100%;}" +
       ".wct-left-row{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border-bottom:1px solid #edf1f5;overflow:hidden;background:#fff;cursor:grab;}" +
       ".wct-left-row.is-dragging{opacity:.52;cursor:grabbing;}.wct-left-row.is-drop-target{box-shadow:inset 0 0 0 2px rgba(37,99,235,.28);}" +
-      ".wct-left-row.is-person strong{font-size:12px;color:#102033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}.wct-left-row.is-person span{flex:0 0 auto;min-width:22px;text-align:center;border:1px solid #dbe3ec;background:#f8fafc;border-radius:5px;padding:1px 4px;font-size:10px;color:#667085;}.wct-left-row.is-unassigned{background:#fff8e6;}" +
+      ".wct-left-row.is-group strong{font-size:12px;color:#102033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}.wct-left-row.is-group span{flex:0 0 auto;min-width:22px;text-align:center;border:1px solid #dbe3ec;background:#f8fafc;border-radius:5px;padding:1px 4px;font-size:10px;color:#667085;}.wct-left-row.is-unassigned{background:#fff8e6;}" +
       ".wct-left-row.is-load-low{border-left:4px solid #22c55e;background:linear-gradient(90deg,rgba(34,197,94,.10),#fff 52px);}.wct-left-row.is-load-medium{border-left:4px solid #f59e0b;background:linear-gradient(90deg,rgba(245,158,11,.13),#fff 58px);}.wct-left-row.is-load-high{border-left:4px solid #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.14),#fff 66px);}" +
       ".wct-left-row.is-load-low .wct-load-badge{background:#ecfdf3;border-color:#86efac;color:#166534;}.wct-left-row.is-load-medium .wct-load-badge{background:#fff7ed;border-color:#fed7aa;color:#9a3412;}.wct-left-row.is-load-high .wct-load-badge{background:#fff1f2;border-color:#fecdd3;color:#9f1239;}" +
       ".wct-timeline-scroll{grid-column:2;grid-row:2;overflow:auto;position:relative;background:#fff;}" +
@@ -2116,7 +2168,7 @@
       ".wct-month-segment{position:absolute;top:0;height:22px;border-right:1px solid #d9e2ec;padding:4px 7px 0;font-size:12px;font-weight:700;color:#253244;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}" +
       ".wct-day-cell{position:absolute;top:22px;height:28px;border-left:1px solid #dbe3ec;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:10px;color:#526071;overflow:hidden;line-height:1.05;}.wct-day-cell em{font-style:normal;font-size:8px;text-transform:uppercase;color:inherit;opacity:.72;}.wct-day-cell span{font-size:11px;font-weight:700;}.wct-day-cell.is-weekend{background:#eef3f8;}.wct-day-cell.is-load-low{background:#f0fdf4;color:#166534;}.wct-day-cell.is-load-medium{background:#fff7ed;color:#9a3412;}.wct-day-cell.is-load-high{background:#fff1f2;color:#9f1239;font-weight:700;}.wct-day-cell.is-today{box-shadow:inset 0 0 0 2px rgba(217,45,32,.28);color:#b42318;font-weight:700;}" +
       ".wct-week-load{position:absolute;bottom:0;height:4px;border-radius:4px 4px 0 0;z-index:3;pointer-events:auto;opacity:.72;}.wct-week-load.is-load-low{background:#22c55e;}.wct-week-load.is-load-medium{background:#f59e0b;}.wct-week-load.is-load-high{background:#ef4444;}" +
-      ".wct-row-backdrop{position:absolute;left:0;top:0;}.wct-row-line{position:absolute;left:0;right:0;border-bottom:1px solid #edf1f5;}.wct-row-line.is-person:nth-child(even){background:#fcfdff;}" +
+      ".wct-row-backdrop{position:absolute;left:0;top:0;}.wct-row-line{position:absolute;left:0;right:0;border-bottom:1px solid #edf1f5;}.wct-row-line.is-group:nth-child(even){background:#fcfdff;}" +
       ".wct-day-gridline{position:absolute;top:0;border-left:1px solid #edf1f5;z-index:1;pointer-events:none;}.wct-day-gridline.is-weekend{background:rgba(238,243,248,.55);}.wct-day-gridline.is-load-low{background:rgba(34,197,94,.045);}.wct-day-gridline.is-load-medium{background:rgba(245,158,11,.07);}.wct-day-gridline.is-load-high{background:rgba(239,68,68,.085);}.wct-day-gridline.is-today{box-shadow:inset 2px 0 0 rgba(217,45,32,.36);}" +
       ".wct-today-line{position:absolute;top:0;width:0;border-left:2px solid #d92d20;z-index:5;pointer-events:none;}.wct-today-line span{position:absolute;top:4px;left:5px;background:#d92d20;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700;}" +
       ".wct-project-bar{position:absolute;z-index:4;border:1px solid rgba(15,23,42,.22);border-radius:5px;box-shadow:0 1px 2px rgba(15,23,42,.14);padding:0 7px;text-align:left;cursor:pointer;overflow:hidden;}" +
@@ -2237,6 +2289,10 @@
       return project.wiseProjectName || project.name || getProjectLabel(project);
     }
 
+    if (state.cardLabelMode === "venue") {
+      return project.venue || "No venue";
+    }
+
     if (state.cardLabelMode === "wise") {
       return project.wiseJobNumber || project.id || "No Wise ID";
     }
@@ -2314,8 +2370,7 @@
   }
 
   function isProjectUnassignedForCurrentMode(project) {
-    var role = ROLE_MODES[state.groupMode] || ROLE_MODES.project;
-    return !project.roles[role.field];
+    return !getProjectGroupValue(project, getGroupMode(state.groupMode));
   }
 
   function isProjectStatusVisible(project) {
