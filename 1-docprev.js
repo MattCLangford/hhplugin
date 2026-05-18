@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-18.2"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-18.3"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -801,10 +801,12 @@
       return;
     }
 
+    var nativeButtonTemplate = getNativeToolbarButtonTemplate($host);
+    var classAttr = nativeButtonTemplate.className || "items_func_btn ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-primary";
+    var styleAttr = nativeButtonTemplate.style ? ' style="' + escapeHtml(nativeButtonTemplate.style) + '"' : "";
     var $btn = $(
       '<button id="' + TOGGLE_ID + '" type="button" ' +
-        'class="items_func_btn ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-primary" ' +
-        'style="width: 140px; margin: 0px 0.5em;" ' +
+        'class="' + escapeHtml(classAttr) + '"' + styleAttr + ' ' +
         'role="button">' +
         '<span class="ui-button-icon-primary ui-icon ui-icon-search"></span>' +
         '<span class="ui-button-text">Preview</span>' +
@@ -827,6 +829,21 @@
 
   function findToolbarHost() {
     return $("#items_tab > div:first-child");
+  }
+
+  function getNativeToolbarButtonTemplate($host) {
+    var $sample = $host.find("button,a,[role='button'],input[type='button'],input[type='submit']").filter(":visible").filter(function () {
+      var $el = $(this);
+      if ($el.is("#" + TOGGLE_ID)) return false;
+      if ($el.hasClass("fixed_width")) return false;
+      var text = normaliseWhitespace($el.text() || $el.val() || $el.attr("title") || $el.attr("aria-label") || "");
+      return !!text && !/^preview$/i.test(text);
+    }).first();
+
+    return {
+      className: $sample.attr("class") || "",
+      style: $sample.attr("style") || ""
+    };
   }
 
   function installDepotRuntimeGate() {

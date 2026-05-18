@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-18.1-depot-gated",
+    version: "2026-05-18.2-native-tab",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -211,17 +211,7 @@
     if ($("#" + CFG.buttonId).length) return;
 
     var $sampleTab = $host.children("li").not("#" + CFG.buttonId).filter(":visible").last();
-    var tabClass = normaliseHomeTabClass($sampleTab.attr("class") || "ui-state-default ui-corner-top ui-tabs-tab ui-tab");
-    var anchorClass = asText($sampleTab.children("a").first().attr("class"));
-    var anchorClassAttr = anchorClass ? ' class="' + escapeAttr(anchorClass) + '"' : "";
-
-    var $btn = $(
-      '<li id="' + CFG.buttonId + '" class="' + escapeAttr(tabClass) + '" role="tab">' +
-        '<a href="#wise-capacity-tracker-open"' + anchorClassAttr + ' title="' + escapeAttr(CFG.buttonTitle) + '">' +
-          escapeHtml(CFG.buttonLabel) +
-        '</a>' +
-      '</li>'
-    );
+    var $btn = buildHomeTabButton($sampleTab);
 
     $btn.on("click", function (event) {
       event.preventDefault();
@@ -230,6 +220,38 @@
     });
 
     $host.append($btn);
+  }
+
+  function buildHomeTabButton($sampleTab) {
+    var $btn = $sampleTab && $sampleTab.length ? $sampleTab.clone(false, false) : $();
+
+    if (!$btn.length) {
+      $btn = $('<li role="tab"><a href="#wise-capacity-tracker-open"></a></li>');
+    }
+
+    $btn
+      .attr("id", CFG.buttonId)
+      .removeClass("ui-tabs-active ui-state-active ui-state-focus ui-state-hover ui-tabs-loading")
+      .attr("aria-selected", "false")
+      .attr("aria-expanded", "false")
+      .removeAttr("aria-controls aria-labelledby");
+
+    var tabClass = normaliseHomeTabClass($btn.attr("class") || "ui-state-default ui-corner-top ui-tabs-tab ui-tab");
+    $btn.attr("class", tabClass);
+
+    var $anchor = $btn.children("a").first();
+    if (!$anchor.length) {
+      $anchor = $('<a></a>').appendTo($btn);
+    }
+
+    $btn.children().not($anchor).remove();
+    $anchor
+      .attr("href", "#wise-capacity-tracker-open")
+      .attr("title", CFG.buttonTitle)
+      .removeAttr("id aria-controls aria-selected aria-expanded")
+      .text(CFG.buttonLabel);
+
+    return $btn;
   }
 
   function removeEntryPoint() {

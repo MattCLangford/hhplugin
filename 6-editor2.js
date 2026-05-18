@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-18.2-proposal-only",
+    version: "2026-05-18.3-native-toolbar",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -512,9 +512,54 @@
       });
     }
 
-    if (!$toggle.parent().is($host)) $host.append($toggle);
+    applyNativeToolbarButtonTemplate($toggle, $host);
+    placeToolbarButtonBeforeGear($toggle, $host);
     updateProposalViewToggle();
     return $toggle;
+  }
+
+  function applyNativeToolbarButtonTemplate($button, $host) {
+    if (!$button || !$button.length) return;
+
+    var template = getNativeToolbarButtonTemplate($host);
+    if (template.className) {
+      $button.attr("class", template.className);
+    }
+    if (template.style) {
+      $button.attr("style", template.style);
+    } else {
+      $button.removeAttr("style");
+    }
+  }
+
+  function getNativeToolbarButtonTemplate($host) {
+    $host = $host && $host.length ? $host : findToolbarHost();
+    if (!$host.length) return { className: "", style: "" };
+
+    var $sample = $host.find("button,a,[role='button'],input[type='button'],input[type='submit']").filter(":visible").filter(function () {
+      var $el = $(this);
+      if ($el.is("#" + CFG.viewToggleId + ",#wise-doc-preview-toggle,#" + CFG.buttonId + ",#" + CFG.nativeFallbackId)) return false;
+      if ($el.hasClass("fixed_width")) return false;
+      var text = $.trim(String($el.text() || $el.val() || $el.attr("title") || $el.attr("aria-label") || ""));
+      return !!text;
+    }).first();
+
+    return {
+      className: $sample.attr("class") || "",
+      style: $sample.attr("style") || ""
+    };
+  }
+
+  function placeToolbarButtonBeforeGear($button, $host) {
+    if (!$button || !$button.length || !$host || !$host.length) return;
+
+    var $gear = $host.children("button.fixed_width,.fixed_width").filter(":visible").last();
+    if ($gear.length) {
+      if (!$button.next().is($gear)) $button.insertBefore($gear);
+      return;
+    }
+
+    if (!$button.parent().is($host)) $host.append($button);
   }
 
   function updateProposalViewToggle() {
@@ -537,16 +582,6 @@
 
     $host.addClass("wise-supply-toolbar");
     $host.removeClass("is-wise-preview-compact is-wise-preview-tight");
-
-    var previewOpen = isPreviewWindowOpen();
-    var available = $host.innerWidth() || host.clientWidth || 0;
-    var shouldCompact = previewOpen || available < 860 || host.scrollWidth > host.clientWidth + 2;
-
-    if (shouldCompact) $host.addClass("is-wise-preview-compact");
-
-    var stillOverflowing = host.scrollWidth > host.clientWidth + 2;
-    var shouldTighten = stillOverflowing || available < 620;
-    if (shouldTighten) $host.addClass("is-wise-preview-tight");
   }
 
   function isPreviewWindowOpen() {
@@ -654,9 +689,7 @@
     $nativeEdit.attr("aria-label", CFG.nativeFallbackLabel);
     setToolbarButtonText($nativeEdit, CFG.nativeFallbackLabel);
 
-    if ($nativeEdit.is("button") || $nativeEdit.attr("role") === "button") {
-      $nativeEdit.css({ width: "auto", minWidth: "58px", margin: "0 2px" });
-    }
+    $nativeEdit.css({ width: "", minWidth: "", margin: "" });
   }
 
   function ensureNativeFallbackButton($nativeEdit) {
@@ -3055,23 +3088,9 @@
     if ($("#" + id).length) return;
 
     var css = [
-      ".wise-supply-toolbar{display:flex!important;align-items:center!important;gap:4px!important;flex-wrap:nowrap!important;min-width:0!important;overflow:hidden!important;}",
-      ".wise-supply-toolbar button,.wise-supply-toolbar a,.wise-supply-toolbar [role='button'],.wise-supply-toolbar input[type='button'],.wise-supply-toolbar input[type='submit']{box-sizing:border-box!important;flex:0 1 auto!important;width:auto!important;min-width:30px!important;max-width:150px!important;margin:0 2px!important;padding:5px 7px!important;white-space:nowrap!important;}",
-      ".wise-supply-toolbar .ui-button-text{display:inline-block!important;max-width:112px!important;overflow:hidden!important;text-overflow:ellipsis!important;vertical-align:middle!important;white-space:nowrap!important;}",
-      ".wise-supply-toolbar .ui-button-icon-primary{margin-right:3px!important;}",
-      ".wise-supply-toolbar > button.fixed_width,.wise-supply-toolbar > .fixed_width{flex:0 0 32px!important;width:32px!important;min-width:32px!important;max-width:32px!important;padding-left:0!important;padding-right:0!important;position:relative!important;z-index:2!important;}",
-      ".wise-supply-toolbar #wise-doc-preview-toggle{flex:0 0 auto!important;max-width:120px!important;position:relative!important;z-index:2!important;}",
-      ".wise-supply-toolbar.is-wise-preview-compact button,.wise-supply-toolbar.is-wise-preview-compact a,.wise-supply-toolbar.is-wise-preview-compact [role='button'],.wise-supply-toolbar.is-wise-preview-compact input[type='button'],.wise-supply-toolbar.is-wise-preview-compact input[type='submit']{max-width:104px!important;padding-left:5px!important;padding-right:5px!important;}",
-      ".wise-supply-toolbar.is-wise-preview-compact .ui-button-text{max-width:74px!important;}",
-      ".wise-supply-toolbar.is-wise-preview-tight button,.wise-supply-toolbar.is-wise-preview-tight a,.wise-supply-toolbar.is-wise-preview-tight [role='button']{max-width:42px!important;}",
-      ".wise-supply-toolbar.is-wise-preview-tight .ui-button-text{display:none!important;}",
-      ".wise-supply-toolbar.is-wise-preview-tight [data-wise-native-edit='1']{max-width:64px!important;min-width:54px!important;}",
-      ".wise-supply-toolbar.is-wise-preview-tight [data-wise-native-edit='1'] .ui-button-text{display:inline-block!important;max-width:34px!important;}",
-      ".wise-supply-toolbar.is-wise-preview-tight #wise-doc-preview-toggle{max-width:74px!important;min-width:38px!important;}",
-      ".wise-supply-toolbar.is-wise-preview-tight #wise-doc-preview-toggle .ui-button-text{display:inline-block!important;max-width:42px!important;}",
-      ".wise-supply-toolbar #" + CFG.viewToggleId + "{flex:0 0 auto!important;margin-left:auto!important;min-width:132px!important;max-width:170px!important;position:relative!important;z-index:3!important;}",
+      ".wise-supply-toolbar{display:flex!important;align-items:center!important;flex-wrap:nowrap!important;overflow:visible!important;}",
+      ".wise-supply-toolbar #wise-doc-preview-toggle,.wise-supply-toolbar #" + CFG.viewToggleId + "{white-space:nowrap!important;position:relative!important;z-index:2!important;}",
       ".wise-supply-toolbar #" + CFG.viewToggleId + ".is-active{border-color:#0D1226!important;background:#0D1226!important;color:#FFFDF9!important;}",
-      ".wise-supply-toolbar.is-wise-preview-tight #" + CFG.viewToggleId + "{max-width:132px!important;min-width:112px!important;}",
       "." + CFG.inlineParentClass + "{display:flex!important;flex-direction:column!important;min-height:0!important;}",
       "#" + CFG.inlineHostId + "{display:none;flex:1 1 auto;min-height:420px;width:100%;overflow:hidden;}",
       "." + CFG.nativeHiddenClass + "{display:none!important;}",
