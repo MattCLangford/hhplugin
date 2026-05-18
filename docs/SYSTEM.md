@@ -12,13 +12,15 @@ HireHop remains the operational database for jobs, headings, items, listed inven
 
 Load these in HireHop:
 
-1. `1-docprev.js`
-2. `2-apselall.js`
-3. `3-meta.js`
-4. `4-layout.js`
-5. `5-hirehop.js`
+1. `5-hirehop.js`
+2. `1-docprev.js`
+3. `2-apselall.js`
+4. `3-meta.js`
+5. `4-layout.js`
 6. `6-editor2.js`
 7. `7-captrack.js`
+
+`5-hirehop.js` names the HireHop UI selectors, endpoint paths, depot rules, timings, active depot detector, and tree item prefixes that the other runtime scripts depend on. It loads first so each module shares the same framework-aware HireHop context.
 
 `1-docprev.js` is essential because it lets users see what their list edits do to the rendered proposal. Power users can work directly in HireHop's native list editing with that preview open.
 
@@ -27,8 +29,6 @@ Load these in HireHop:
 `3-meta.js` owns the shared `WisePageMeta` envelope and editor/template identifiers. Load it before the main editor so metadata names stay explicit and easy to audit.
 
 `4-layout.js` contains the proposal page catalogue and layout matching rules.
-
-`5-hirehop.js` names the HireHop UI selectors, endpoint paths, depot rules, timings, and tree item prefixes that the editor depends on.
 
 `6-editor2.js` is the primary editor. It gives non-technical users a safer visual page editor for baseline QTC standards, while still handing native item editing back to HireHop where appropriate.
 

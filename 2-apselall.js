@@ -4,13 +4,15 @@
   if (window.__wiseHireHopAutopullSelectAllLoaded) return;
   window.__wiseHireHopAutopullSelectAllLoaded = true;
 
-  try { console.warn("[WiseHireHop] autopull select-all loaded - v2026-05-05.01"); } catch (e) {}
+  try { console.warn("[WiseHireHop] autopull select-all loaded - v2026-05-18.1"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
 
+  var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
+
   var CFG = {
-    version: "2026-05-05.01",
+    version: "2026-05-18.1",
     stylesId: "wise-autopull-select-all-styles",
     buttonClass: "wise-autopull-select-all",
     buttonDoneClass: "wise-autopull-select-all-complete",
@@ -19,9 +21,9 @@
     bootstrapRetryMs: 500,
     depotRule: {
       enabled: false,
-      allowedIds: ["14"],
-      allowedNames: ["Project Costs"],
-      blockWhenUndetected: true
+      allowedIds: getSharedDepotArrayValue("allowedIds", ["14"]),
+      allowedNames: getSharedDepotArrayValue("allowedNames", ["Project Costs", "Proposal Creation"]),
+      blockWhenUndetected: getSharedDepotBooleanValue("blockWhenUndetected", true)
     }
   };
 
@@ -73,6 +75,7 @@
     attempt();
     $(window).on("load.wiseAutopullDepot focus.wiseAutopullDepot", attempt);
     $(document).on("ajaxComplete.wiseAutopullDepot", attempt);
+    $(document).on("change.wiseAutopullDepot input.wiseAutopullDepot", "select,input", attempt);
   }
 
   function initialiseAutopullUi() {
@@ -337,6 +340,29 @@
 
     if (!CFG.depotRule.enabled) return true;
 
+    var sharedDepot = getSharedDepotModule();
+    if (sharedDepot && typeof sharedDepot.isAllowed === "function") {
+      var allowed = sharedDepot.isAllowed(context, {
+        rule: CFG.depotRule,
+        allowedIds: CFG.depotRule.allowedIds,
+        allowedNames: CFG.depotRule.allowedNames,
+        blockWhenUndetected: CFG.depotRule.blockWhenUndetected
+      });
+      var sharedContext = context || getActiveDepotContext();
+      var hasSharedDepot = !!(sharedContext && (sharedContext.id || sharedContext.name));
+
+      logDepotDecision(
+        allowed ? "matched" : (hasSharedDepot ? "blocked" : "undetected"),
+        allowed
+          ? "[WiseHireHop] autopull select-all depot matched"
+          : (hasSharedDepot ? "[WiseHireHop] autopull select-all blocked outside allowed depot" : "[WiseHireHop] autopull select-all blocked because no depot could be detected"),
+        sharedContext,
+        options
+      );
+
+      return allowed;
+    }
+
     var allowedIds = normaliseAllowedDepotValues(CFG.depotRule.allowedIds, true);
     var allowedNames = normaliseAllowedDepotValues(CFG.depotRule.allowedNames, false);
     var hasRule = allowedIds.length || allowedNames.length;
@@ -387,6 +413,13 @@
   }
 
   function getActiveDepotContext() {
+    var sharedDepot = getSharedDepotModule();
+    if (sharedDepot && typeof sharedDepot.getActiveContext === "function") {
+      var sharedContext = sharedDepot.getActiveContext();
+      window.__wiseHireHopDepotContext = sharedContext;
+      return sharedContext;
+    }
+
     var cached = window.__wiseHireHopDepotContext || {};
     var context = {
       id: normaliseDepotId(cached.id || ""),
@@ -428,6 +461,33 @@
     window.__wiseHireHopDepotContext = context;
 
     return context;
+  }
+
+  function getSharedHireHopModule() {
+    var module = window[HIREHOP_MODULE_GLOBAL];
+    return module && typeof module === "object" ? module : null;
+  }
+
+  function getSharedDepotModule() {
+    var module = getSharedHireHopModule();
+    var depot = module && module.depot;
+    return depot && typeof depot === "object" ? depot : null;
+  }
+
+  function getSharedDepotValue(key, fallback) {
+    var depot = getSharedDepotModule();
+    var value = depot && depot[key];
+    return value == null || value === "" ? fallback : value;
+  }
+
+  function getSharedDepotArrayValue(key, fallback) {
+    var value = getSharedDepotValue(key, fallback);
+    return Array.isArray(value) ? value.slice() : fallback.slice();
+  }
+
+  function getSharedDepotBooleanValue(key, fallback) {
+    var value = getSharedDepotValue(key, fallback);
+    return value === true || value === false ? value : fallback;
   }
 
   function findHeaderDepotSelect() {

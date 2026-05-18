@@ -1,20 +1,18 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-04-25.14"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-18.1"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
 
+  var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
+
   var DEPOT_RULE = {
     enabled: true,
-    allowedIds: [
-      "14"
-    ],
-    allowedNames: [
-      "Project Costs"
-    ],
-    blockWhenUndetected: true
+    allowedIds: getSharedDepotArrayValue("allowedIds", ["14"]),
+    allowedNames: getSharedDepotArrayValue("allowedNames", ["Project Costs", "Proposal Creation"]),
+    blockWhenUndetected: getSharedDepotBooleanValue("blockWhenUndetected", true)
   };
 
   var DEPOT_BOOTSTRAP_MAX_TRIES = 120;
@@ -139,12 +137,36 @@
 
     $(window).on("load.wiseDocPreviewDepot focus.wiseDocPreviewDepot", attempt);
     $(document).on("ajaxComplete.wiseDocPreviewDepot", attempt);
+    $(document).on("change.wiseDocPreviewDepot input.wiseDocPreviewDepot", "select,input", attempt);
   }
 
   function isAllowedDepot(context, options) {
     options = options || {};
 
     if (!DEPOT_RULE.enabled) return true;
+
+    var sharedDepot = getSharedDepotModule();
+    if (sharedDepot && typeof sharedDepot.isAllowed === "function") {
+      var allowed = sharedDepot.isAllowed(context, {
+        rule: DEPOT_RULE,
+        allowedIds: DEPOT_RULE.allowedIds,
+        allowedNames: DEPOT_RULE.allowedNames,
+        blockWhenUndetected: DEPOT_RULE.blockWhenUndetected
+      });
+
+      var sharedContext = context || getActiveDepotContext();
+      var hasSharedDepot = !!(sharedContext && (sharedContext.id || sharedContext.name));
+      logDepotDecision(
+        allowed ? "matched" : (hasSharedDepot ? "blocked" : "undetected"),
+        allowed
+          ? "[WiseHireHop] depot matched"
+          : (hasSharedDepot ? "[WiseHireHop] blocked outside allowed depot" : "[WiseHireHop] blocked because no depot could be detected"),
+        sharedContext,
+        options
+      );
+
+      return allowed;
+    }
 
     var allowedIds = normaliseAllowedDepotValues(DEPOT_RULE.allowedIds, true);
     var allowedNames = normaliseAllowedDepotValues(DEPOT_RULE.allowedNames, false);
@@ -196,6 +218,13 @@
   }
 
   function getActiveDepotContext() {
+    var sharedDepot = getSharedDepotModule();
+    if (sharedDepot && typeof sharedDepot.getActiveContext === "function") {
+      var sharedContext = sharedDepot.getActiveContext();
+      window.__wiseHireHopDepotContext = sharedContext;
+      return sharedContext;
+    }
+
     var headerDepotContext = getHeaderDepotContext();
     var context = {
       id: "",
@@ -332,6 +361,33 @@
     window.__wiseHireHopDepotContext = context;
 
     return context;
+  }
+
+  function getSharedHireHopModule() {
+    var module = window[HIREHOP_MODULE_GLOBAL];
+    return module && typeof module === "object" ? module : null;
+  }
+
+  function getSharedDepotModule() {
+    var module = getSharedHireHopModule();
+    var depot = module && module.depot;
+    return depot && typeof depot === "object" ? depot : null;
+  }
+
+  function getSharedDepotValue(key, fallback) {
+    var depot = getSharedDepotModule();
+    var value = depot && depot[key];
+    return value == null || value === "" ? fallback : value;
+  }
+
+  function getSharedDepotArrayValue(key, fallback) {
+    var value = getSharedDepotValue(key, fallback);
+    return Array.isArray(value) ? value.slice() : fallback.slice();
+  }
+
+  function getSharedDepotBooleanValue(key, fallback) {
+    var value = getSharedDepotValue(key, fallback);
+    return value === true || value === false ? value : fallback;
   }
 
   function getHeaderDepotContext() {

@@ -66,11 +66,11 @@ It owns:
 
 Recommended HireHop script set:
 
+- Load `5-hirehop.js`.
 - Load `1-docprev.js`.
 - Load `2-apselall.js`.
 - Load `3-meta.js`.
 - Load `4-layout.js`.
-- Load `5-hirehop.js`.
 - Load `6-editor2.js`.
 
 Do not load `wise-headingedit-ui.js` or `wise-sectionbuilder-ui.js` in normal production.

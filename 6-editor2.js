@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-11.02-url-clear-buttons",
+    version: "2026-05-18.1-framework-depot",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -234,6 +234,7 @@
 
     $(window).on("load.wiseEventOverview focus.wiseEventOverview", attempt);
     $(document).on("ajaxComplete.wiseEventOverview", attempt);
+    $(document).on("change.wiseEventOverview input.wiseEventOverview", "select,input", attempt);
     $(window).on("resize.wiseToolbarCompression", function () {
       if (editor.ready) {
         updateToolbarCompression();
@@ -2736,6 +2737,13 @@
   }
 
   function getActiveDepotContext() {
+    var sharedDepot = getSharedDepotModule();
+    if (sharedDepot && typeof sharedDepot.getActiveContext === "function") {
+      var sharedContext = sharedDepot.getActiveContext();
+      window.__wiseHireHopDepotContext = sharedContext;
+      return sharedContext;
+    }
+
     var $select = findHeaderDepotSelect();
     var $selected = $select.length ? $select.find("option:selected").first() : $();
     return {
@@ -2745,6 +2753,18 @@
   }
 
   function isAllowedDepot(context) {
+    var sharedDepot = getSharedDepotModule();
+    if (sharedDepot && typeof sharedDepot.isAllowed === "function") {
+      var allowed = sharedDepot.isAllowed(context, {
+        allowedIds: CFG.allowedDepotIds,
+        allowedNames: CFG.allowedDepotNames,
+        blockWhenUndetected: CFG.blockWhenDepotUndetected
+      });
+      var sharedContext = context || getActiveDepotContext();
+      logDepotDecision(allowed ? "matched" : ((sharedContext && (sharedContext.id || sharedContext.name)) ? "blocked" : "undetected"), sharedContext);
+      return allowed;
+    }
+
     var allowedIds = CFG.allowedDepotIds.map(normaliseDepotId).filter(Boolean);
     var allowedNames = CFG.allowedDepotNames.map(function (name) { return normaliseDepotText(name, false); }).filter(Boolean);
     var hasDetected = !!(context && (context.id || context.name));
@@ -2760,6 +2780,12 @@
 
     logDepotDecision("matched", context);
     return true;
+  }
+
+  function getSharedDepotModule() {
+    var module = getExternalHireHopModule();
+    var depot = module && module.depot;
+    return depot && typeof depot === "object" ? depot : null;
   }
 
   function logDepotDecision(decision, context) {

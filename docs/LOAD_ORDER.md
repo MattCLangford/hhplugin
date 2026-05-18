@@ -2,11 +2,11 @@
 
 Use this order for the live HireHop scripts.
 
-1. `1-docprev.js`
-2. `2-apselall.js`
-3. `3-meta.js`
-4. `4-layout.js`
-5. `5-hirehop.js`
+1. `5-hirehop.js`
+2. `1-docprev.js`
+3. `2-apselall.js`
+4. `3-meta.js`
+5. `4-layout.js`
 6. `6-editor2.js`
 7. `7-captrack.js`
 
