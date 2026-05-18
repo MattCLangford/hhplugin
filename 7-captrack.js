@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-18.6-absence-overlay",
+    version: "2026-05-18.7-ms365-absence-test",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -134,7 +134,12 @@
       loadedAt: 0,
       events: [],
       byPersonKey: {},
-      promise: null
+      promise: null,
+      graph: {
+        accessToken: "",
+        calendarId: "",
+        userPath: "me"
+      }
     }
   };
 
@@ -150,6 +155,8 @@
     refreshAbsences: function () { return ensureAbsenceFeed({ force: true, renderOnComplete: true }); },
     setAbsenceFeedUrl: setAbsenceFeedUrl,
     clearAbsenceFeedUrl: clearAbsenceFeedUrl,
+    setMs365AbsenceAccessToken: setMs365AbsenceAccessToken,
+    clearMs365AbsenceAccessToken: clearMs365AbsenceAccessToken,
     describe: describe,
     debugDateFields: debugDateFields,
     _test: {
@@ -250,10 +257,53 @@
     return describeAbsenceFeed();
   }
 
+  function setMs365AbsenceAccessToken(accessToken, calendarId, userPath) {
+    var token = asText(accessToken);
+    var id = asText(calendarId);
+    if (!token || !id) {
+      clearMs365AbsenceAccessToken();
+      return describeAbsenceFeed();
+    }
+
+    state.absence.graph = {
+      accessToken: token,
+      calendarId: id,
+      userPath: asText(userPath) || "me"
+    };
+    state.absence.configured = true;
+    state.absence.loaded = false;
+    state.absence.error = "";
+    state.absence.loadedAt = 0;
+    state.absence.feedKey = "";
+    state.absence.events = [];
+    state.absence.byPersonKey = {};
+
+    ensureAbsenceFeed({ force: true, renderOnComplete: true });
+    return describeAbsenceFeed();
+  }
+
+  function clearMs365AbsenceAccessToken() {
+    state.absence.graph = {
+      accessToken: "",
+      calendarId: "",
+      userPath: "me"
+    };
+    state.absence.loading = false;
+    state.absence.loaded = false;
+    state.absence.error = "";
+    state.absence.feedKey = "";
+    state.absence.loadedAt = 0;
+    state.absence.events = [];
+    state.absence.byPersonKey = {};
+    state.absence.promise = null;
+    if ($("#" + CFG.overlayId).hasClass("is-visible")) render();
+    return describeAbsenceFeed();
+  }
+
   function describeAbsenceFeed() {
-    var resolved = resolveAbsenceFeedUrl();
+    var resolved = resolveAbsenceSource();
     return {
-      configured: !!resolved.url,
+      configured: !!resolved.url || !!resolved.graph,
       source: resolved.source || "",
       loading: !!state.absence.loading,
       loaded: !!state.absence.loaded,
@@ -647,17 +697,19 @@
       return Promise.resolve(describeAbsenceFeed());
     }
 
-    var resolved = resolveAbsenceFeedUrl();
-    state.absence.configured = !!resolved.url;
-    state.absence.feedUrl = resolved.url;
-    state.absence.feedUrlSource = resolved.source;
+    var resolved = resolveAbsenceSource();
+    state.absence.configured = !!resolved.url || !!resolved.graph;
+    if (resolved.url) {
+      state.absence.feedUrl = resolved.url;
+      state.absence.feedUrlSource = resolved.source;
+    }
 
-    if (!resolved.url) {
+    if (!resolved.url && !resolved.graph) {
       clearAbsenceRuntimeState();
       return Promise.resolve(describeAbsenceFeed());
     }
 
-    var feedKey = getAbsenceFeedKey(resolved.url);
+    var feedKey = getAbsenceSourceKey(resolved);
     var now = Date.now();
     var ttl = Math.max(60000, Number(CFG.absenceFeed.cacheTtlMs) || 900000);
     var isFresh = state.absence.loaded && state.absence.feedKey === feedKey && (now - state.absence.loadedAt) < ttl;
@@ -667,9 +719,8 @@
     state.absence.loading = true;
     state.absence.error = "";
 
-    state.absence.promise = fetchAbsenceFeed(resolved.url)
-      .then(function (text) {
-        var events = parseIcsEvents(text);
+    state.absence.promise = fetchAbsenceSource(resolved)
+      .then(function (events) {
         state.absence.events = events;
         state.absence.byPersonKey = buildAbsenceIndex(events);
         state.absence.loaded = true;
@@ -696,6 +747,11 @@
 
     if (options.renderOnComplete && $("#" + CFG.overlayId).hasClass("is-visible")) render();
     return state.absence.promise;
+  }
+
+  function fetchAbsenceSource(source) {
+    if (source && source.graph) return fetchGraphAbsenceEvents(source.graph);
+    return fetchAbsenceFeed(source.url).then(parseIcsEvents);
   }
 
   function fetchAbsenceFeed(url) {
@@ -735,8 +791,115 @@
     });
   }
 
+  function fetchGraphAbsenceEvents(config) {
+    var url = buildGraphCalendarViewUrl(config);
+    var events = [];
+
+    function fetchPage(pageUrl, page) {
+      if (page > CFG.fetchMaxPages) return Promise.resolve(events);
+
+      return window.fetch(pageUrl, {
+        method: "GET",
+        credentials: "omit",
+        headers: {
+          Accept: "application/json",
+          Authorization: "Bearer " + config.accessToken,
+          Prefer: 'outlook.timezone="' + getGraphTimezone() + '"'
+        }
+      }).then(function (response) {
+        return response.text().then(function (text) {
+          var json = tryParseJson(text);
+          if (!response.ok) {
+            var error = new Error("Microsoft Graph returned HTTP " + response.status + ".");
+            error.status = response.status;
+            error.source = "graph";
+            throw error;
+          }
+          if (!json) throw new Error("Microsoft Graph did not return JSON from calendarView.");
+
+          appendGraphAbsenceEvents(events, json.value || []);
+          var nextLink = asText(json["@odata.nextLink"]);
+          return nextLink ? fetchPage(nextLink, page + 1) : events;
+        });
+      });
+    }
+
+    return fetchPage(url, 1);
+  }
+
+  function buildGraphCalendarViewUrl(config) {
+    var selected = getSelectedDateRange();
+    var params = {
+      startDateTime: formatDateInput(selected.start) + "T00:00:00",
+      endDateTime: formatDateInput(addDays(selected.end, 1)) + "T00:00:00",
+      "$select": "id,subject,start,end,isAllDay",
+      "$top": "1000"
+    };
+
+    return "https://graph.microsoft.com/v1.0/" +
+      normaliseGraphUserPath(config.userPath) +
+      "/calendars/" +
+      encodeURIComponent(config.calendarId) +
+      "/calendarView?" +
+      $.param(params);
+  }
+
+  function normaliseGraphUserPath(value) {
+    var path = asText(value).replace(/^\/+|\/+$/g, "");
+    if (!path || path.toLowerCase() === "me") return "me";
+    if (/^users\//i.test(path)) {
+      var parts = path.split("/");
+      return parts.map(function (part, index) {
+        return index === 0 ? "users" : encodeURIComponent(part);
+      }).join("/");
+    }
+    return "users/" + encodeURIComponent(path);
+  }
+
+  function getGraphTimezone() {
+    return getTimezone() || "Europe/London";
+  }
+
+  function appendGraphAbsenceEvents(target, graphEvents) {
+    for (var i = 0; i < graphEvents.length; i++) {
+      var event = graphEventToAbsence(graphEvents[i], target.length + i);
+      if (event) target.push(event);
+    }
+  }
+
+  function graphEventToAbsence(event, index) {
+    event = event || {};
+    var summary = cleanRoleValue(event.subject);
+    var candidates = getAbsenceNameCandidates(summary);
+    if (!candidates.length) return null;
+
+    var allDay = !!event.isAllDay;
+    var start = parseGraphDateTime(event.start);
+    var endExclusive = parseGraphDateTime(event.end);
+    if (!start) return null;
+    if (!endExclusive) endExclusive = allDay ? addDays(start, 1) : new Date(start.getTime());
+    if (endExclusive.getTime() <= start.getTime()) endExclusive = allDay ? addDays(start, 1) : addDays(startOfDay(start), 1);
+
+    return {
+      uid: asText(event.id) || ("graph-absence-" + index),
+      summary: summary,
+      nameCandidates: candidates,
+      start: allDay ? startOfDay(start) : start,
+      endExclusive: allDay ? startOfDay(endExclusive) : endExclusive,
+      allDay: allDay
+    };
+  }
+
+  function parseGraphDateTime(value) {
+    var raw = value && typeof value === "object" ? value.dateTime : value;
+    var date = parseHireHopDate(raw);
+    return date ? date : null;
+  }
+
   function getAbsenceFetchErrorMessage(error) {
     if (error && error.name === "AbortError") return "BrightHR absence feed timed out.";
+    if (error && error.source === "graph" && error.status === 401) return "Microsoft 365 calendar token expired or was rejected.";
+    if (error && error.source === "graph" && error.status) return "Microsoft Graph returned HTTP " + error.status + ".";
     if (error && error.status) return "BrightHR absence feed returned HTTP " + error.status + ".";
     return "BrightHR absence feed could not be read. The feed may be blocked by browser CORS or unavailable.";
   }
@@ -750,6 +913,27 @@
     state.absence.events = [];
     state.absence.byPersonKey = {};
     state.absence.promise = null;
+  }
+
+  function resolveAbsenceSource() {
+    var graph = resolveGraphAbsenceConfig();
+    if (graph) return { graph: graph, source: "ms365-token" };
+
+    var feed = resolveAbsenceFeedUrl();
+    return { url: feed.url, source: feed.source };
+  }
+
+  function resolveGraphAbsenceConfig() {
+    var graph = state.absence.graph || {};
+    var token = asText(graph.accessToken);
+    var calendarId = asText(graph.calendarId);
+    if (!token || !calendarId) return null;
+
+    return {
+      accessToken: token,
+      calendarId: calendarId,
+      userPath: asText(graph.userPath) || "me"
+    };
   }
 
   function resolveAbsenceFeedUrl() {
@@ -771,6 +955,18 @@
     if (storedUrl) return { url: storedUrl, source: "localStorage" };
 
     return { url: "", source: "" };
+  }
+
+  function getAbsenceSourceKey(source) {
+    if (source && source.graph) {
+      return [
+        "graph",
+        source.graph.userPath || "me",
+        source.graph.calendarId,
+        getSelectedRangeKey()
+      ].join(":");
+    }
+    return getAbsenceFeedKey(source && source.url);
   }
 
   function normaliseAbsenceFeedUrl(url) {

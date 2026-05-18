@@ -54,7 +54,7 @@
     {
       "file": "7-captrack.js",
       "status": "active",
-      "cacheVersion": "2.6",
+      "cacheVersion": "2.7",
       "role": "Full-page Wise capacity timeline using project-level custom fields, date-range filtering, and Wise status controls.",
       "recommendedLoadOrder": 7
     }
