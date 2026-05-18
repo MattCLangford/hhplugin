@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-18.2-native-tab",
+    version: "2026-05-18.3-native-tab",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -210,7 +210,7 @@
 
     if ($("#" + CFG.buttonId).length) return;
 
-    var $sampleTab = $host.children("li").not("#" + CFG.buttonId).filter(":visible").last();
+    var $sampleTab = findHomeTabTemplate($host);
     var $btn = buildHomeTabButton($sampleTab);
 
     $btn.on("click", function (event) {
@@ -236,7 +236,9 @@
       .attr("aria-expanded", "false")
       .removeAttr("aria-controls aria-labelledby");
 
-    var tabClass = normaliseHomeTabClass($btn.attr("class") || "ui-state-default ui-corner-top ui-tabs-tab ui-tab");
+    var tabClass = $sampleTab && $sampleTab.length
+      ? normaliseHomeTabClass($sampleTab.attr("class") || $btn.attr("class") || "")
+      : normaliseHomeTabClass($btn.attr("class") || "ui-state-default ui-corner-top ui-tabs-tab ui-tab");
     $btn.attr("class", tabClass);
 
     var $anchor = $btn.children("a").first();
@@ -248,10 +250,36 @@
     $anchor
       .attr("href", "#wise-capacity-tracker-open")
       .attr("title", CFG.buttonTitle)
-      .removeAttr("id aria-controls aria-selected aria-expanded")
-      .text(CFG.buttonLabel);
+      .removeAttr("id aria-controls aria-selected aria-expanded");
+    setHomeTabAnchorText($anchor, CFG.buttonLabel);
 
     return $btn;
+  }
+
+  function findHomeTabTemplate($host) {
+    var labels = ["stock check", "pre-prep", "reports"];
+
+    for (var i = 0; i < labels.length; i++) {
+      var $match = $host.children("li").not("#" + CFG.buttonId).filter(":visible").filter(function () {
+        return normaliseSearch($(this).text()) === labels[i];
+      }).last();
+      if ($match.length) return $match;
+    }
+
+    return $host.children("li").not("#" + CFG.buttonId).filter(":visible").last();
+  }
+
+  function setHomeTabAnchorText($anchor, label) {
+    var $textNodeHost = $anchor.find("span").filter(function () {
+      return $.trim(String($(this).text() || "")) !== "";
+    }).last();
+
+    if ($textNodeHost.length) {
+      $textNodeHost.text(label);
+      return;
+    }
+
+    $anchor.text(label);
   }
 
   function removeEntryPoint() {

@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-18.3-native-toolbar",
+    version: "2026-05-18.4-native-toolbar",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -539,6 +539,7 @@
     var $sample = $host.find("button,a,[role='button'],input[type='button'],input[type='submit']").filter(":visible").filter(function () {
       var $el = $(this);
       if ($el.is("#" + CFG.viewToggleId + ",#wise-doc-preview-toggle,#" + CFG.buttonId + ",#" + CFG.nativeFallbackId)) return false;
+      if ($el.attr("data-wise-native-edit") === "1") return false;
       if ($el.hasClass("fixed_width")) return false;
       var text = $.trim(String($el.text() || $el.val() || $el.attr("title") || $el.attr("aria-label") || ""));
       return !!text;
@@ -568,7 +569,7 @@
 
     var active = editor.viewMode === "proposal" && $("#" + CFG.overlayId).is(":visible");
     $toggle.attr("aria-pressed", active ? "true" : "false");
-    $toggle.toggleClass("ui-state-active is-active", active);
+    $toggle.toggleClass("is-wise-active", active);
     setToolbarButtonText($toggle, active ? "Native List" : "Proposal Editor");
     $toggle.attr("title", active ? "Switch to HireHop's native supplying list." : "Switch to the Wise proposal page editor.");
   }
@@ -689,7 +690,10 @@
     $nativeEdit.attr("aria-label", CFG.nativeFallbackLabel);
     setToolbarButtonText($nativeEdit, CFG.nativeFallbackLabel);
 
-    $nativeEdit.css({ width: "", minWidth: "", margin: "" });
+    $nativeEdit.removeAttr("style");
+    $nativeEdit.removeAttr("data-wise-native-edit");
+    applyNativeToolbarButtonTemplate($nativeEdit, findToolbarHost());
+    $nativeEdit.attr("data-wise-native-edit", "1");
   }
 
   function ensureNativeFallbackButton($nativeEdit) {
@@ -3090,7 +3094,6 @@
     var css = [
       ".wise-supply-toolbar{display:flex!important;align-items:center!important;flex-wrap:nowrap!important;overflow:visible!important;}",
       ".wise-supply-toolbar #wise-doc-preview-toggle,.wise-supply-toolbar #" + CFG.viewToggleId + "{white-space:nowrap!important;position:relative!important;z-index:2!important;}",
-      ".wise-supply-toolbar #" + CFG.viewToggleId + ".is-active{border-color:#0D1226!important;background:#0D1226!important;color:#FFFDF9!important;}",
       "." + CFG.inlineParentClass + "{display:flex!important;flex-direction:column!important;min-height:0!important;}",
       "#" + CFG.inlineHostId + "{display:none;flex:1 1 auto;min-height:420px;width:100%;overflow:hidden;}",
       "." + CFG.nativeHiddenClass + "{display:none!important;}",
