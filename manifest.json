@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-05-18.1",
+  "version": "2026-05-18.2",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "5-hirehop.js",
       "status": "active-module",
-      "cacheVersion": "0.4",
+      "cacheVersion": "0.5",
       "role": "Shared HireHop selectors, endpoint paths, depot rules, retry timings, search helpers, and tree item prefixes consumed by the section builder and capacity tracker.",
       "recommendedLoadOrder": 1
     },

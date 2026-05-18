@@ -7,14 +7,14 @@ Do not hand-edit the current string or source table. Update `manifest.json` firs
 ## Current String
 
 ```text
-https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.4; https://mattclangford.github.io/hhplugin/1-docprev.js?v=0.2; https://mattclangford.github.io/hhplugin/2-apselall.js?v=0.2; https://mattclangford.github.io/hhplugin/3-meta.js?v=0.1; https://mattclangford.github.io/hhplugin/4-layout.js?v=0.1; https://mattclangford.github.io/hhplugin/6-editor2.js?v=1.2; https://mattclangford.github.io/hhplugin/7-captrack.js?v=1.9;
+https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.5; https://mattclangford.github.io/hhplugin/1-docprev.js?v=0.2; https://mattclangford.github.io/hhplugin/2-apselall.js?v=0.2; https://mattclangford.github.io/hhplugin/3-meta.js?v=0.1; https://mattclangford.github.io/hhplugin/4-layout.js?v=0.1; https://mattclangford.github.io/hhplugin/6-editor2.js?v=1.2; https://mattclangford.github.io/hhplugin/7-captrack.js?v=1.9;
 ```
 
 ## Source Table
 
 | Order | File | Cache version |
 | --- | --- | --- |
-| 1 | `5-hirehop.js` | `0.4` |
+| 1 | `5-hirehop.js` | `0.5` |
 | 2 | `1-docprev.js` | `0.2` |
 | 3 | `2-apselall.js` | `0.2` |
 | 4 | `3-meta.js` | `0.1` |

@@ -6,7 +6,7 @@
    * This module names the HireHop UI surfaces and endpoints the editor depends on.
    */
   var hirehop = {
-    version: "2026-05-18.1",
+    version: "2026-05-18.2",
     purpose: "Centralises HireHop selectors, endpoints, depot gating, retry timings, search helpers, and tree item prefixes.",
 
     selectors: {
@@ -63,6 +63,7 @@
   hirehop.depot.isAllowed = isAllowedDepot;
   hirehop.depot.resolveName = resolveDepotNameFromId;
   hirehop.depot.resolveId = resolveDepotIdFromName;
+  hirehop.depot.debug = debugDepotDetection;
 
   hirehop.describe = function () {
     return {
@@ -83,14 +84,16 @@
       return normaliseDepotContext(window.__wiseHireHopDepotContext);
     }
 
-    var context = normaliseDepotContext(firstUsefulDepotContext([
+    var candidates = [
       readHeaderDepotContext(),
+      readVisibleKnownDepotContext(),
       readNamedDepotContext(),
       readAttributeDepotContext(),
       readUrlDepotContext(),
       readWindowDepotContext(),
       readStoredDepotContext()
-    ]));
+    ];
+    var context = normaliseDepotContext(selectBestDepotContext(candidates, hirehop.depot.allowedIds, hirehop.depot.allowedNames));
 
     if (context.id && !context.name) {
       context.name = resolveDepotNameFromId(context.id);
@@ -121,6 +124,12 @@
 
     if (context.id && allowedIds.indexOf(context.id) !== -1) return true;
     if (context.name && allowedNames.indexOf(normaliseDepotText(context.name)) !== -1) return true;
+
+    var visibleContext = readVisibleKnownDepotContext(allowedIds, allowedNames);
+    if (visibleContext.id || visibleContext.name) {
+      window.__wiseHireHopDepotContext = visibleContext;
+      return true;
+    }
 
     return context.id || context.name ? false : !blockWhenUndetected;
   }
@@ -241,6 +250,102 @@
     });
 
     return { id: id, name: name };
+  }
+
+  function readVisibleKnownDepotContext(allowedIds, allowedNames) {
+    if (!ensureJQuery()) return {};
+
+    allowedIds = normaliseAllowedDepotValues(allowedIds || hirehop.depot.allowedIds, true);
+    allowedNames = normaliseAllowedDepotValues(allowedNames || hirehop.depot.allowedNames, false);
+    if (!allowedIds.length && !allowedNames.length) return {};
+
+    var selectors = [
+      "select option:selected",
+      "input",
+      "button",
+      "a",
+      "label",
+      "span",
+      "div",
+      "td",
+      "th"
+    ].join(",");
+    var context = {};
+
+    $(selectors).each(function () {
+      if (context.id || context.name) return false;
+      if (!isVisibleDepotCandidate(this)) return;
+
+      var text = getElementDepotText(this);
+      if (!text || text.length > 160) return;
+
+      var matchedName = matchAllowedDepotNameFromText(text, allowedNames);
+      if (matchedName) {
+        context = normaliseDepotContext({
+          id: resolveDepotIdFromName(matchedName),
+          name: matchedName
+        });
+        return false;
+      }
+
+      var matchedId = matchAllowedDepotIdFromText(text, allowedIds);
+      if (matchedId) {
+        context = normaliseDepotContext({
+          id: matchedId,
+          name: resolveDepotNameFromId(matchedId)
+        });
+        return false;
+      }
+    });
+
+    return context;
+  }
+
+  function isVisibleDepotCandidate(element) {
+    if (!element || !ensureJQuery()) return false;
+    if (element.tagName && /^(script|style)$/i.test(element.tagName)) return false;
+
+    var el = $(element);
+    if (!el.is(":visible") && !el.is("option")) return false;
+    if (el.closest("script,style,#wise-doc-preview-panel,#wise-proposal-page-editor-modal,#wise-capacity-tracker-modal").length) return false;
+
+    return true;
+  }
+
+  function getElementDepotText(element) {
+    if (!element || !ensureJQuery()) return "";
+
+    var el = $(element);
+    return normaliseDepotText(firstNonEmpty([
+      el.is("input,textarea,select") ? el.val() : "",
+      el.is("option") ? el.text() : "",
+      el.attr("aria-label"),
+      el.attr("title"),
+      el.text()
+    ]), true);
+  }
+
+  function matchAllowedDepotNameFromText(text, allowedNames) {
+    var normalisedText = normaliseComparableDepotName(text);
+    if (!normalisedText) return "";
+
+    for (var i = 0; i < allowedNames.length; i++) {
+      var allowed = normaliseDepotText(allowedNames[i], true);
+      var normalisedAllowed = normaliseComparableDepotName(allowed);
+      if (!normalisedAllowed) continue;
+
+      if (normalisedText === normalisedAllowed || normalisedText.indexOf(normalisedAllowed) !== -1) {
+        return allowed;
+      }
+    }
+
+    return "";
+  }
+
+  function matchAllowedDepotIdFromText(text, allowedIds) {
+    var id = normaliseDepotId(text);
+    if (!id) return "";
+    return allowedIds.indexOf(id) !== -1 ? id : "";
   }
 
   function readControlDepotContext(element) {
@@ -429,13 +534,29 @@
     return { id: value, name: "" };
   }
 
-  function firstUsefulDepotContext(contexts) {
+  function selectBestDepotContext(contexts, allowedIds, allowedNames) {
+    var first = {};
+
     for (var i = 0; i < contexts.length; i++) {
       var context = normaliseDepotContext(contexts[i]);
-      if (context.id || context.name) return context;
+      if (!context.id && !context.name) continue;
+
+      if (!first.id && !first.name) first = context;
+      if (contextMatchesAllowedDepot(context, allowedIds, allowedNames)) return context;
     }
 
-    return {};
+    return first;
+  }
+
+  function contextMatchesAllowedDepot(context, allowedIds, allowedNames) {
+    context = normaliseDepotContext(context);
+    allowedIds = normaliseAllowedDepotValues(allowedIds || hirehop.depot.allowedIds, true);
+    allowedNames = normaliseAllowedDepotValues(allowedNames || hirehop.depot.allowedNames, false);
+
+    if (context.id && allowedIds.indexOf(context.id) !== -1) return true;
+    if (context.name && allowedNames.indexOf(normaliseDepotText(context.name)) !== -1) return true;
+
+    return false;
   }
 
   function normaliseDepotContext(context) {
@@ -609,6 +730,26 @@
   function ensureJQuery() {
     if (!$ && window.jQuery) $ = window.jQuery;
     return $;
+  }
+
+  function debugDepotDetection() {
+    var candidates = {
+      header: readHeaderDepotContext(),
+      visibleKnown: readVisibleKnownDepotContext(),
+      named: readNamedDepotContext(),
+      attribute: readAttributeDepotContext(),
+      url: readUrlDepotContext(),
+      windowValue: readWindowDepotContext(),
+      stored: readStoredDepotContext()
+    };
+
+    return {
+      candidates: candidates,
+      selected: getActiveDepotContext(),
+      allowed: isAllowedDepot(),
+      allowedIds: hirehop.depot.allowedIds.slice(),
+      allowedNames: hirehop.depot.allowedNames.slice()
+    };
   }
 
   window.WiseProposalSectionBuilderHireHop = hirehop;
