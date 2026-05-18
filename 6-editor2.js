@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-18.1-framework-depot",
+    version: "2026-05-18.2-proposal-only",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -40,8 +40,8 @@
     requiredRawSectionName: "Event Overview",
     maxSchedules: 3,
     maxRows: 10,
-    allowedDepotIds: getHireHopArrayValue("depot", "allowedIds", ["14"]),
-    allowedDepotNames: getHireHopArrayValue("depot", "allowedNames", ["Project Costs", "Proposal Creation"]),
+    allowedDepotIds: getHireHopArrayValue("depot", "allowedIds", []),
+    allowedDepotNames: getHireHopArrayValue("depot", "allowedNames", ["Proposal Creation"]),
     blockWhenDepotUndetected: getHireHopBooleanValue("depot", "blockWhenUndetected", true),
     bootstrapMaxTries: getHireHopNumberValue("timings", "bootstrapMaxTries", 120),
     bootstrapRetryMs: getHireHopNumberValue("timings", "bootstrapRetryMs", 500),
@@ -210,6 +210,7 @@
       tries += 1;
 
       if (!isAllowedDepot(getActiveDepotContext())) {
+        removeProposalEditorEntryPoints();
         if (tries < CFG.bootstrapMaxTries) setTimeout(attempt, CFG.bootstrapRetryMs);
         return;
       }
@@ -604,6 +605,12 @@
     addToolbarButton();
     installTreeDefaultOpenHandler();
     maybeOpenDefaultProposalCreationView();
+  }
+
+  function removeProposalEditorEntryPoints() {
+    $("#" + CFG.buttonId + ",#" + CFG.nativeFallbackId + ",#" + CFG.viewToggleId).remove();
+    editor.userSelectedNativeView = false;
+    if ($("#" + CFG.overlayId).is(":visible")) closeEditor();
   }
 
   function maybeOpenDefaultProposalCreationView() {

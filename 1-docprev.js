@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-18.1"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-18.2"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -10,8 +10,8 @@
 
   var DEPOT_RULE = {
     enabled: true,
-    allowedIds: getSharedDepotArrayValue("allowedIds", ["14"]),
-    allowedNames: getSharedDepotArrayValue("allowedNames", ["Project Costs", "Proposal Creation"]),
+    allowedIds: getSharedDepotArrayValue("allowedIds", []),
+    allowedNames: getSharedDepotArrayValue("allowedNames", ["Proposal Creation"]),
     blockWhenUndetected: getSharedDepotBooleanValue("blockWhenUndetected", true)
   };
 
@@ -628,6 +628,7 @@
       if ($("#items_tab").length) {
         injectBaseStyles();
         tryAddPreviewButton();
+        installDepotRuntimeGate();
         installAjaxHooks();
         installFetchHooks();
 
@@ -787,6 +788,11 @@
   // BUTTON
   // =========================================================
   function tryAddPreviewButton() {
+    if (!isCurrentDepotAllowed()) {
+      removePreviewEntryPoint();
+      return;
+    }
+
     if ($("#" + TOGGLE_ID).length) return;
 
     var $host = findToolbarHost();
@@ -823,10 +829,42 @@
     return $("#items_tab > div:first-child");
   }
 
+  function installDepotRuntimeGate() {
+    $(document)
+      .off("change.wiseDocPreviewRuntimeDepot input.wiseDocPreviewRuntimeDepot")
+      .on("change.wiseDocPreviewRuntimeDepot input.wiseDocPreviewRuntimeDepot", "select,input", function () {
+        setTimeout(maintainPreviewEntryPointForDepot, 80);
+      });
+  }
+
+  function maintainPreviewEntryPointForDepot() {
+    if (!isCurrentDepotAllowed()) {
+      removePreviewEntryPoint();
+      return;
+    }
+
+    tryAddPreviewButton();
+  }
+
+  function removePreviewEntryPoint() {
+    if (panelOpen) closeDockedPreview();
+    $("#" + TOGGLE_ID).remove();
+  }
+
+  function isCurrentDepotAllowed() {
+    activeDepotContext = getActiveDepotContext();
+    return isAllowedDepot(activeDepotContext, { silent: true });
+  }
+
   // =========================================================
   // DOCKED LAYOUT
   // =========================================================
   function openDockedPreview() {
+    if (!isCurrentDepotAllowed()) {
+      removePreviewEntryPoint();
+      return;
+    }
+
     if (panelOpen) return;
 
     var $itemsTab = $("#items_tab");

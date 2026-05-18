@@ -6,7 +6,7 @@
    * This module names the HireHop UI surfaces and endpoints the editor depends on.
    */
   var hirehop = {
-    version: "2026-05-18.2",
+    version: "2026-05-18.4",
     purpose: "Centralises HireHop selectors, endpoints, depot gating, retry timings, search helpers, and tree item prefixes.",
 
     selectors: {
@@ -16,8 +16,10 @@
       treeNodes: "#items_tab li.jstree-node,#items_tab a.jstree-anchor",
       treeClicked: "#items_tab .jstree-clicked",
       treeSelectedFallback: "#items_tab li.jstree-node.jstree-clicked, #items_tab li.jstree-selected, #items_tab li[aria-selected='true'], #items_tab a.jstree-anchor[aria-selected='true']",
+      depotHeader: ".hh-header-depot",
+      depotHeaderSelect: ".hh-header-depot select",
       depotLabel: "[data-label=\"depotTxt\"]",
-      depotCandidates: "select,input,textarea,.hh_base_select,.hh_depots_select,[data-depot-id],[data-current-depot-id],[data-branch-id],[data-current-branch-id],[data-location-id],[data-site-id]"
+      depotCandidates: ".hh-header-depot select,select,input,textarea,.hh_base_select,.hh_depots_select,[data-depot-id],[data-current-depot-id],[data-branch-id],[data-current-branch-id],[data-location-id],[data-site-id]"
     },
 
     endpoints: {
@@ -27,8 +29,8 @@
     },
 
     depot: {
-      allowedIds: ["14"],
-      allowedNames: ["Project Costs", "Proposal Creation"],
+      allowedIds: [],
+      allowedNames: ["Proposal Creation"],
       blockWhenUndetected: true,
       fieldNames: ["depot_id", "depot", "branch_id", "branch", "location_id", "location", "site_id", "site", "warehouse_id", "warehouse"],
       labelText: ["warehouse name", "warehouse", "depot", "branch", "location", "site"]
@@ -86,7 +88,7 @@
 
     var candidates = [
       readHeaderDepotContext(),
-      readVisibleKnownDepotContext(),
+      readVisibleCurrentDepotContext(),
       readNamedDepotContext(),
       readAttributeDepotContext(),
       readUrlDepotContext(),
@@ -125,9 +127,9 @@
     if (context.id && allowedIds.indexOf(context.id) !== -1) return true;
     if (context.name && allowedNames.indexOf(normaliseDepotText(context.name)) !== -1) return true;
 
-    var visibleContext = readVisibleKnownDepotContext(allowedIds, allowedNames);
-    if (visibleContext.id || visibleContext.name) {
-      window.__wiseHireHopDepotContext = visibleContext;
+    var currentContext = readVisibleCurrentDepotContext(allowedIds, allowedNames);
+    if (contextMatchesAllowedDepot(currentContext, allowedIds, allowedNames)) {
+      window.__wiseHireHopDepotContext = currentContext;
       return true;
     }
 
@@ -149,6 +151,9 @@
   function findHeaderDepotSelect() {
     if (!ensureJQuery()) return null;
 
+    var headerSelect = findExplicitHeaderDepotSelect();
+    if (headerSelect) return headerSelect;
+
     var label = findDepotLabelElement();
     var near = findDepotCandidateNear(label, true);
     if (near) return near;
@@ -164,6 +169,19 @@
     });
 
     return found;
+  }
+
+  function findExplicitHeaderDepotSelect() {
+    if (!ensureJQuery()) return null;
+
+    var selector = hirehop.selectors && hirehop.selectors.depotHeaderSelect;
+    var select = selector ? $(selector).filter(":visible").first() : $();
+    if (select.length) return select.get(0);
+
+    var headerSelector = hirehop.selectors && hirehop.selectors.depotHeader;
+    var header = headerSelector ? $(headerSelector).filter(":visible").first() : $();
+    select = header.length ? header.find("select").filter(":visible").first() : $();
+    return select.length ? select.get(0) : null;
   }
 
   function findContextNearDepotLabel() {
@@ -252,7 +270,7 @@
     return { id: id, name: name };
   }
 
-  function readVisibleKnownDepotContext(allowedIds, allowedNames) {
+  function readVisibleCurrentDepotContext(allowedIds, allowedNames) {
     if (!ensureJQuery()) return {};
 
     allowedIds = normaliseAllowedDepotValues(allowedIds || hirehop.depot.allowedIds, true);
@@ -260,23 +278,24 @@
     if (!allowedIds.length && !allowedNames.length) return {};
 
     var selectors = [
-      "select option:selected",
+      ".hh-header-depot select",
+      "select",
       "input",
-      "button",
-      "a",
-      "label",
-      "span",
-      "div",
-      "td",
-      "th"
+      "textarea",
+      "[data-depot-id]",
+      "[data-current-depot-id]",
+      "[data-depot-name]",
+      "[data-current-depot-name]",
+      ".hh_base_select",
+      ".hh_depots_select"
     ].join(",");
     var context = {};
 
     $(selectors).each(function () {
       if (context.id || context.name) return false;
-      if (!isVisibleDepotCandidate(this)) return;
+      if (!isCurrentDepotCandidate(this)) return;
 
-      var text = getElementDepotText(this);
+      var text = getCurrentDepotElementText(this);
       if (!text || text.length > 160) return;
 
       var matchedName = matchAllowedDepotNameFromText(text, allowedNames);
@@ -301,24 +320,34 @@
     return context;
   }
 
-  function isVisibleDepotCandidate(element) {
+  function isCurrentDepotCandidate(element) {
     if (!element || !ensureJQuery()) return false;
     if (element.tagName && /^(script|style)$/i.test(element.tagName)) return false;
 
     var el = $(element);
-    if (!el.is(":visible") && !el.is("option")) return false;
+    if (!el.is(":visible") && !el.is("select,input,textarea")) return false;
     if (el.closest("script,style,#wise-doc-preview-panel,#wise-proposal-page-editor-modal,#wise-capacity-tracker-modal").length) return false;
+    if (el.closest(hirehop.selectors.depotHeader || ".hh-header-depot").length) return true;
+    if (matchesDepotField(element, hirehop.depot.fieldNames || [])) return true;
+    if (readDataValue(el, ["depotId", "currentDepotId", "depotName", "currentDepotName"])) return true;
 
-    return true;
+    var label = findDepotLabelElement();
+    var scope = label && label.length ? label.closest("tr,td,th,li,div,span,form") : $();
+    if (scope.length && (scope.get(0) === element || scope.has(element).length)) return true;
+
+    return false;
   }
 
-  function getElementDepotText(element) {
+  function getCurrentDepotElementText(element) {
     if (!element || !ensureJQuery()) return "";
 
     var el = $(element);
+    var selected = el.is("select") ? el.find("option:selected").first() : $();
+
     return normaliseDepotText(firstNonEmpty([
+      selected.length ? selected.text() : "",
+      readDataValue(el, ["depotName", "currentDepotName", "name", "label", "text"]),
       el.is("input,textarea,select") ? el.val() : "",
-      el.is("option") ? el.text() : "",
       el.attr("aria-label"),
       el.attr("title"),
       el.text()
@@ -326,7 +355,7 @@
   }
 
   function matchAllowedDepotNameFromText(text, allowedNames) {
-    var normalisedText = normaliseComparableDepotName(text);
+    var normalisedText = normaliseComparableDepotName(stripDepotLabelText(text));
     if (!normalisedText) return "";
 
     for (var i = 0; i < allowedNames.length; i++) {
@@ -334,12 +363,16 @@
       var normalisedAllowed = normaliseComparableDepotName(allowed);
       if (!normalisedAllowed) continue;
 
-      if (normalisedText === normalisedAllowed || normalisedText.indexOf(normalisedAllowed) !== -1) {
+      if (normalisedText === normalisedAllowed) {
         return allowed;
       }
     }
 
     return "";
+  }
+
+  function stripDepotLabelText(value) {
+    return normaliseDepotText(value, true).replace(/^(?:current\s+)?(?:warehouse\s+name|warehouse|depot|branch|location|site)\s*:?\s*/i, "");
   }
 
   function matchAllowedDepotIdFromText(text, allowedIds) {
@@ -735,7 +768,7 @@
   function debugDepotDetection() {
     var candidates = {
       header: readHeaderDepotContext(),
-      visibleKnown: readVisibleKnownDepotContext(),
+      visibleCurrent: readVisibleCurrentDepotContext(),
       named: readNamedDepotContext(),
       attribute: readAttributeDepotContext(),
       url: readUrlDepotContext(),

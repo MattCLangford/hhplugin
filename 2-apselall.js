@@ -4,7 +4,7 @@
   if (window.__wiseHireHopAutopullSelectAllLoaded) return;
   window.__wiseHireHopAutopullSelectAllLoaded = true;
 
-  try { console.warn("[WiseHireHop] autopull select-all loaded - v2026-05-18.1"); } catch (e) {}
+  try { console.warn("[WiseHireHop] autopull select-all loaded - v2026-05-18.2"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -12,7 +12,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-05-18.1",
+    version: "2026-05-18.2",
     stylesId: "wise-autopull-select-all-styles",
     buttonClass: "wise-autopull-select-all",
     buttonDoneClass: "wise-autopull-select-all-complete",
@@ -20,9 +20,9 @@
     bootstrapMaxTries: 120,
     bootstrapRetryMs: 500,
     depotRule: {
-      enabled: false,
-      allowedIds: getSharedDepotArrayValue("allowedIds", ["14"]),
-      allowedNames: getSharedDepotArrayValue("allowedNames", ["Project Costs", "Proposal Creation"]),
+      enabled: true,
+      allowedIds: getSharedDepotArrayValue("allowedIds", []),
+      allowedNames: getSharedDepotArrayValue("allowedNames", ["Proposal Creation"]),
       blockWhenUndetected: getSharedDepotBooleanValue("blockWhenUndetected", true)
     }
   };
@@ -154,6 +154,11 @@
 
   function applyToAutopullDialog($dialog) {
     if (!$dialog || !$dialog.length) return;
+
+    if (CFG.depotRule.enabled && !isAllowedDepot(getActiveDepotContext(), { silent: true })) {
+      $dialog.find("." + CFG.buttonClass).remove();
+      return;
+    }
 
     var $buttonPane = $dialog.find(".ui-dialog-buttonpane .ui-dialog-buttonset").first();
     if (!$buttonPane.length) return;

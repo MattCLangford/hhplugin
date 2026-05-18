@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-15.1",
+    version: "2026-05-18.1-depot-gated",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -152,6 +152,7 @@
 
     $(window).on("load.wiseCapacityTracker focus.wiseCapacityTracker", installEntryPoint);
     $(document).on("ajaxComplete.wiseCapacityTracker", installEntryPoint);
+    $(document).on("change.wiseCapacityTracker input.wiseCapacityTracker", "select,input", installEntryPoint);
   }
 
   function describe() {
@@ -185,8 +186,13 @@
   }
 
   function installEntryPoint() {
+    if (!isAllowedActiveDepot()) {
+      removeEntryPoint();
+      return;
+    }
+
     if (!isHomePage()) {
-      $("#" + CFG.buttonId).remove();
+      removeEntryPoint();
       return;
     }
 
@@ -224,6 +230,13 @@
     });
 
     $host.append($btn);
+  }
+
+  function removeEntryPoint() {
+    $("#" + CFG.buttonId).remove();
+    if ($("#" + CFG.overlayId).is(":visible")) {
+      closeTracker();
+    }
   }
 
   function isHomePage() {
@@ -2740,6 +2753,27 @@
       CFG.customFieldKeys.revenue,
       CFG.customFieldKeys.tier
     ]));
+  }
+
+  function isAllowedActiveDepot() {
+    var depot = getSharedDepotModule();
+    if (!depot || typeof depot.isAllowed !== "function") return false;
+
+    var context = typeof depot.getActiveContext === "function"
+      ? depot.getActiveContext()
+      : (window.__wiseHireHopDepotContext || {});
+
+    return depot.isAllowed(context, {
+      allowedIds: [],
+      allowedNames: ["Proposal Creation"],
+      blockWhenUndetected: true
+    });
+  }
+
+  function getSharedDepotModule() {
+    var module = window[HIREHOP_MODULE_GLOBAL];
+    var depot = module && module.depot;
+    return depot && typeof depot === "object" ? depot : null;
   }
 
   function getHireHopModuleSection(name) {

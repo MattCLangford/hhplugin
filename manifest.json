@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-05-18.2",
+  "version": "2026-05-18.4",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,21 +12,21 @@
     {
       "file": "5-hirehop.js",
       "status": "active-module",
-      "cacheVersion": "0.5",
+      "cacheVersion": "0.7",
       "role": "Shared HireHop selectors, endpoint paths, depot rules, retry timings, search helpers, and tree item prefixes consumed by the section builder and capacity tracker.",
       "recommendedLoadOrder": 1
     },
     {
       "file": "1-docprev.js",
       "status": "active",
-      "cacheVersion": "0.2",
+      "cacheVersion": "0.3",
       "role": "Document preview panel used by power users and by the page editor preview dock.",
       "recommendedLoadOrder": 2
     },
     {
       "file": "2-apselall.js",
       "status": "active",
-      "cacheVersion": "0.2",
+      "cacheVersion": "0.3",
       "role": "Small native-popup helper for repetitive line item selection actions.",
       "recommendedLoadOrder": 3
     },
@@ -47,14 +47,14 @@
     {
       "file": "6-editor2.js",
       "status": "active-primary",
-      "cacheVersion": "1.2",
+      "cacheVersion": "1.3",
       "role": "Main proposal page editor and HireHop authoring layer.",
       "recommendedLoadOrder": 6
     },
     {
       "file": "7-captrack.js",
       "status": "active",
-      "cacheVersion": "1.9",
+      "cacheVersion": "2.0",
       "role": "Full-page Wise capacity timeline using project-level custom fields, date-range filtering, and Wise status controls.",
       "recommendedLoadOrder": 7
     }
