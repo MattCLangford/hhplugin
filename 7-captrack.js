@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-18.4-native-tab",
+    version: "2026-05-18.5-scroll-sync",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -1282,6 +1282,7 @@
     renderTimelineHeader(view.timeline, view.capacity);
     renderProjectBars(view);
     renderTimelineTotals(view);
+    syncTimelineScrollLayout();
     syncTimelineScroll();
     updateVisibleRangeText();
   }
@@ -1959,6 +1960,42 @@
     updateVisibleRangeText();
   }
 
+  function syncTimelineScrollLayout() {
+    var $scroll = $("#" + CFG.timelineScrollId);
+    var $body = $("#" + CFG.timelineBodyId);
+    var $leftInner = $("#" + CFG.leftBodyId + " .wct-left-inner");
+    if (!$scroll.length || !$body.length || !$leftInner.length) return;
+
+    var scrollElement = $scroll[0];
+    var bodyHeight = Math.max($body.outerHeight() || 0, 80);
+    var horizontalScrollbarHeight = Math.max(0, scrollElement.offsetHeight - scrollElement.clientHeight);
+
+    $leftInner.css("height", (bodyHeight + horizontalScrollbarHeight) + "px");
+  }
+
+  function scrollTimelineFromLeftColumn(event) {
+    var $scroll = $("#" + CFG.timelineScrollId);
+    if (!$scroll.length) return;
+
+    var original = event.originalEvent || event;
+    var deltaX = original && original.deltaX ? original.deltaX : 0;
+    var deltaY = original && original.deltaY ? original.deltaY : 0;
+    if (!deltaX && !deltaY) return;
+
+    if (original && original.deltaMode === 1) {
+      deltaX *= 16;
+      deltaY *= 16;
+    } else if (original && original.deltaMode === 2) {
+      deltaX *= $scroll.innerWidth();
+      deltaY *= $scroll.innerHeight();
+    }
+
+    event.preventDefault();
+    $scroll.scrollTop($scroll.scrollTop() + deltaY);
+    $scroll.scrollLeft($scroll.scrollLeft() + deltaX);
+    syncTimelineScroll();
+  }
+
   function updateVisibleRangeText() {
     var timeline = state.timeline;
     var $range = $("#wise-capacity-tracker-visible-range");
@@ -2191,6 +2228,10 @@
     });
 
     $("#" + CFG.timelineScrollId).on("scroll.wiseCapacityTracker", syncTimelineScroll);
+    $(window).on("resize.wiseCapacityTracker", function () {
+      syncTimelineScrollLayout();
+      syncTimelineScroll();
+    });
 
     $("#" + CFG.summaryId).on("click.wiseCapacityTracker", ".wct-summary-pill[data-scroll-day]", function (event) {
       event.preventDefault();
@@ -2198,6 +2239,7 @@
     });
 
     $("#" + CFG.leftBodyId)
+      .on("wheel.wiseCapacityTracker", scrollTimelineFromLeftColumn)
       .on("dragstart.wiseCapacityTracker", ".wct-left-row", function (event) {
         draggedRowKey = $(this).attr("data-row-key") || "";
         $(this).addClass("is-dragging");
