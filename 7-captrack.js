@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-18.3-native-tab",
+    version: "2026-05-18.4-native-tab",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -208,9 +208,13 @@
       return;
     }
 
-    if ($("#" + CFG.buttonId).length) return;
-
     var $sampleTab = findHomeTabTemplate($host);
+    var $existing = $("#" + CFG.buttonId);
+    if ($existing.length) {
+      applyHomeTabTemplate($existing, $sampleTab);
+      return;
+    }
+
     var $btn = buildHomeTabButton($sampleTab);
 
     $btn.on("click", function (event) {
@@ -220,6 +224,7 @@
     });
 
     $host.append($btn);
+    applyHomeTabTemplate($btn, $sampleTab);
   }
 
   function buildHomeTabButton($sampleTab) {
@@ -254,6 +259,97 @@
     setHomeTabAnchorText($anchor, CFG.buttonLabel);
 
     return $btn;
+  }
+
+  function applyHomeTabTemplate($btn, $sampleTab) {
+    if (!$btn || !$btn.length) return;
+
+    $sampleTab = $sampleTab && $sampleTab.length ? $sampleTab : findHomeTabTemplate($btn.parent());
+    if (!$sampleTab.length) return;
+
+    $btn.attr("class", normaliseHomeTabClass($sampleTab.attr("class") || $btn.attr("class") || ""));
+    $btn
+      .removeClass("ui-tabs-active ui-state-active ui-state-focus ui-state-hover ui-tabs-loading")
+      .attr("role", $sampleTab.attr("role") || "tab")
+      .attr("aria-selected", "false")
+      .attr("aria-expanded", "false")
+      .removeAttr("aria-controls aria-labelledby");
+
+    copyComputedStyle($sampleTab.get(0), $btn.get(0), [
+      "display",
+      "float",
+      "position",
+      "boxSizing",
+      "height",
+      "minHeight",
+      "marginTop",
+      "marginRight",
+      "marginBottom",
+      "marginLeft",
+      "paddingTop",
+      "paddingRight",
+      "paddingBottom",
+      "paddingLeft",
+      "borderTopWidth",
+      "borderRightWidth",
+      "borderBottomWidth",
+      "borderLeftWidth",
+      "borderTopStyle",
+      "borderRightStyle",
+      "borderBottomStyle",
+      "borderLeftStyle",
+      "borderTopColor",
+      "borderRightColor",
+      "borderBottomColor",
+      "borderLeftColor",
+      "backgroundColor"
+    ]);
+
+    var $anchor = $btn.children("a").first();
+    var $sampleAnchor = $sampleTab.children("a").first();
+    if ($anchor.length && $sampleAnchor.length) {
+      $anchor.attr("class", $sampleAnchor.attr("class") || "");
+      copyComputedStyle($sampleAnchor.get(0), $anchor.get(0), [
+        "display",
+        "boxSizing",
+        "height",
+        "minHeight",
+        "lineHeight",
+        "paddingTop",
+        "paddingRight",
+        "paddingBottom",
+        "paddingLeft",
+        "borderTopWidth",
+        "borderRightWidth",
+        "borderBottomWidth",
+        "borderLeftWidth",
+        "fontFamily",
+        "fontSize",
+        "fontWeight",
+        "color",
+        "textDecoration"
+      ]);
+      $anchor
+        .attr("href", "#wise-capacity-tracker-open")
+        .attr("title", CFG.buttonTitle)
+        .removeAttr("id aria-controls aria-selected aria-expanded");
+      setHomeTabAnchorText($anchor, CFG.buttonLabel);
+    }
+  }
+
+  function copyComputedStyle(source, target, props) {
+    if (!source || !target || !window.getComputedStyle) return;
+
+    var computed;
+    try { computed = window.getComputedStyle(source); } catch (e) { computed = null; }
+    if (!computed) return;
+
+    for (var i = 0; i < props.length; i++) {
+      var prop = props[i];
+      var value = computed[prop];
+      if (!value || value === "auto" || value === "normal" && prop !== "lineHeight") continue;
+      try { target.style[prop] = value; } catch (err) {}
+    }
   }
 
   function findHomeTabTemplate($host) {
