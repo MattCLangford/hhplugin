@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-18.5-scroll-sync",
+    version: "2026-05-18.6-absence-overlay",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -51,6 +51,13 @@
     fetchMaxPages: 20,
     searchDebounceMs: 180,
     searchEndpointFallback: "/php_functions/search_list.php",
+    absenceFeed: {
+      enabled: true,
+      cacheTtlMs: 15 * 60 * 1000,
+      requestTimeoutMs: 15000,
+      localStorageKey: "wise-capacity-tracker-absence-feed-url",
+      personGroupModes: ["project", "designer", "technical", "production"]
+    },
     debugUseMock: false,
     targetDepotIds: [],
     targetDepotNames: [
@@ -115,7 +122,20 @@
     nativeStatusFilters: createDefaultNativeStatusFilters(),
     statusFilters: createDefaultStatusFilters(),
     dateRangeStart: defaultDateRange.start,
-    dateRangeEnd: defaultDateRange.end
+    dateRangeEnd: defaultDateRange.end,
+    absence: {
+      configured: false,
+      loading: false,
+      loaded: false,
+      error: "",
+      feedUrl: "",
+      feedUrlSource: "",
+      feedKey: "",
+      loadedAt: 0,
+      events: [],
+      byPersonKey: {},
+      promise: null
+    }
   };
 
   var latestLoadId = 0;
@@ -127,6 +147,9 @@
     version: CFG.version,
     open: openTracker,
     refresh: refreshProjects,
+    refreshAbsences: function () { return ensureAbsenceFeed({ force: true, renderOnComplete: true }); },
+    setAbsenceFeedUrl: setAbsenceFeedUrl,
+    clearAbsenceFeedUrl: clearAbsenceFeedUrl,
     describe: describe,
     debugDateFields: debugDateFields,
     _test: {
@@ -138,7 +161,9 @@
       getProjectStart: getProjectStart,
       getProjectEnd: getProjectEnd,
       buildTimelineRange: buildTimelineRange,
-      groupProjects: groupProjects
+      groupProjects: groupProjects,
+      parseIcsEvents: parseIcsEvents,
+      normalisePersonName: normalisePersonName
     }
   };
 
@@ -168,6 +193,7 @@
       nativeHireHopStatus: getNativeStatusFilterLabel(),
       groupMode: state.groupMode,
       cardLabelMode: state.cardLabelMode,
+      absenceFeed: describeAbsenceFeed(),
       wiseStatuses: CFG.wiseStatuses.map(function (status) { return status.label; }),
       customFieldKeys: $.extend({}, CFG.customFieldKeys)
     };
@@ -183,6 +209,57 @@
         rawDateTimeFields: collectDateTimeRawFields(project.raw)
       };
     });
+  }
+
+  function setAbsenceFeedUrl(url, persist) {
+    var feedUrl = normaliseAbsenceFeedUrl(url);
+    if (!feedUrl) {
+      clearAbsenceFeedUrl(persist !== false);
+      return describeAbsenceFeed();
+    }
+
+    state.absence.feedUrl = feedUrl;
+    state.absence.feedUrlSource = persist ? "localStorage" : "runtime";
+    state.absence.configured = true;
+    state.absence.loaded = false;
+    state.absence.error = "";
+    state.absence.loadedAt = 0;
+    state.absence.feedKey = "";
+    state.absence.events = [];
+    state.absence.byPersonKey = {};
+
+    if (persist) writeStoredAbsenceFeedUrl(feedUrl);
+    ensureAbsenceFeed({ force: true, renderOnComplete: true });
+    return describeAbsenceFeed();
+  }
+
+  function clearAbsenceFeedUrl(clearStored) {
+    state.absence.feedUrl = "";
+    state.absence.feedUrlSource = "";
+    state.absence.configured = false;
+    state.absence.loading = false;
+    state.absence.loaded = false;
+    state.absence.error = "";
+    state.absence.feedKey = "";
+    state.absence.loadedAt = 0;
+    state.absence.events = [];
+    state.absence.byPersonKey = {};
+    state.absence.promise = null;
+    if (clearStored !== false) removeStoredAbsenceFeedUrl();
+    if ($("#" + CFG.overlayId).hasClass("is-visible")) render();
+    return describeAbsenceFeed();
+  }
+
+  function describeAbsenceFeed() {
+    var resolved = resolveAbsenceFeedUrl();
+    return {
+      configured: !!resolved.url,
+      source: resolved.source || "",
+      loading: !!state.absence.loading,
+      loaded: !!state.absence.loaded,
+      events: state.absence.events ? state.absence.events.length : 0,
+      error: state.absence.error ? "unavailable" : ""
+    };
   }
 
   function installEntryPoint() {
@@ -441,6 +518,7 @@
       return;
     }
 
+    ensureAbsenceFeed({ renderOnComplete: true });
     render();
     setTimeout(function () { scrollToToday({ centerBias: 0.35 }); }, 40);
   }
@@ -460,6 +538,7 @@
     state.error = "";
     setStatus("Loading Wise projects (" + getSelectedDateRangeLabel() + ", " + getNativeStatusFilterLabel() + ")...", "loading");
     clearTimeline();
+    ensureAbsenceFeed({ renderOnComplete: true });
 
     fetchProjectRows()
       .then(function (rows) {
@@ -559,6 +638,319 @@
     }
 
     return fetchChunk(0);
+  }
+
+  function ensureAbsenceFeed(options) {
+    options = options || {};
+    if (!CFG.absenceFeed || CFG.absenceFeed.enabled === false || typeof window.fetch !== "function") {
+      clearAbsenceRuntimeState();
+      return Promise.resolve(describeAbsenceFeed());
+    }
+
+    var resolved = resolveAbsenceFeedUrl();
+    state.absence.configured = !!resolved.url;
+    state.absence.feedUrl = resolved.url;
+    state.absence.feedUrlSource = resolved.source;
+
+    if (!resolved.url) {
+      clearAbsenceRuntimeState();
+      return Promise.resolve(describeAbsenceFeed());
+    }
+
+    var feedKey = getAbsenceFeedKey(resolved.url);
+    var now = Date.now();
+    var ttl = Math.max(60000, Number(CFG.absenceFeed.cacheTtlMs) || 900000);
+    var isFresh = state.absence.loaded && state.absence.feedKey === feedKey && (now - state.absence.loadedAt) < ttl;
+    if (!options.force && isFresh) return Promise.resolve(describeAbsenceFeed());
+    if (state.absence.loading && state.absence.promise) return state.absence.promise;
+
+    state.absence.loading = true;
+    state.absence.error = "";
+
+    state.absence.promise = fetchAbsenceFeed(resolved.url)
+      .then(function (text) {
+        var events = parseIcsEvents(text);
+        state.absence.events = events;
+        state.absence.byPersonKey = buildAbsenceIndex(events);
+        state.absence.loaded = true;
+        state.absence.loadedAt = Date.now();
+        state.absence.feedKey = feedKey;
+        state.absence.error = "";
+        log("Loaded absence feed", { events: events.length });
+        return describeAbsenceFeed();
+      })
+      .then(null, function (error) {
+        state.absence.loaded = false;
+        state.absence.events = [];
+        state.absence.byPersonKey = {};
+        state.absence.error = getAbsenceFetchErrorMessage(error);
+        logWarn("Failed to load absence feed", state.absence.error);
+        return describeAbsenceFeed();
+      })
+      .then(function (summary) {
+        state.absence.loading = false;
+        state.absence.promise = null;
+        if (options.renderOnComplete && $("#" + CFG.overlayId).hasClass("is-visible")) render();
+        return summary;
+      });
+
+    if (options.renderOnComplete && $("#" + CFG.overlayId).hasClass("is-visible")) render();
+    return state.absence.promise;
+  }
+
+  function fetchAbsenceFeed(url) {
+    var options = {
+      method: "GET",
+      credentials: "omit",
+      referrerPolicy: "no-referrer",
+      headers: {
+        Accept: "text/calendar,text/plain,*/*"
+      }
+    };
+
+    if (window.AbortController) {
+      var controller = new window.AbortController();
+      var timeout = setTimeout(function () { controller.abort(); }, Math.max(3000, Number(CFG.absenceFeed.requestTimeoutMs) || 15000));
+      options.signal = controller.signal;
+      return window.fetch(url, options).then(function (response) {
+        clearTimeout(timeout);
+        return readAbsenceFeedResponse(response);
+      }, function (error) {
+        clearTimeout(timeout);
+        throw error;
+      });
+    }
+
+    return window.fetch(url, options).then(readAbsenceFeedResponse);
+  }
+
+  function readAbsenceFeedResponse(response) {
+    return response.text().then(function (text) {
+      if (!response.ok) {
+        var error = new Error("BrightHR returned HTTP " + response.status + ".");
+        error.status = response.status;
+        throw error;
+      }
+      return text;
+    });
+  }
+
+  function getAbsenceFetchErrorMessage(error) {
+    if (error && error.name === "AbortError") return "BrightHR absence feed timed out.";
+    if (error && error.status) return "BrightHR absence feed returned HTTP " + error.status + ".";
+    return "BrightHR absence feed could not be read. The feed may be blocked by browser CORS or unavailable.";
+  }
+
+  function clearAbsenceRuntimeState() {
+    state.absence.loading = false;
+    state.absence.loaded = false;
+    state.absence.error = "";
+    state.absence.feedKey = "";
+    state.absence.loadedAt = 0;
+    state.absence.events = [];
+    state.absence.byPersonKey = {};
+    state.absence.promise = null;
+  }
+
+  function resolveAbsenceFeedUrl() {
+    var runtimeUrl = normaliseAbsenceFeedUrl(state.absence.feedUrl);
+    if (runtimeUrl) return { url: runtimeUrl, source: state.absence.feedUrlSource || "runtime" };
+
+    var globalUrl = normaliseAbsenceFeedUrl(window.WiseCapacityTrackerAbsenceFeedUrl);
+    if (globalUrl) return { url: globalUrl, source: "window" };
+
+    var config = window.WiseCapacityTrackerConfig;
+    var configUrl = "";
+    if (config && typeof config === "object") {
+      configUrl = config.absenceFeedUrl || (config.absence && config.absence.feedUrl);
+    }
+    configUrl = normaliseAbsenceFeedUrl(configUrl);
+    if (configUrl) return { url: configUrl, source: "window-config" };
+
+    var storedUrl = normaliseAbsenceFeedUrl(readStoredAbsenceFeedUrl());
+    if (storedUrl) return { url: storedUrl, source: "localStorage" };
+
+    return { url: "", source: "" };
+  }
+
+  function normaliseAbsenceFeedUrl(url) {
+    var text = asText(url);
+    if (!text) return "";
+    if (!/^https:\/\//i.test(text)) return "";
+    return text;
+  }
+
+  function getAbsenceFeedKey(url) {
+    var text = normaliseAbsenceFeedUrl(url);
+    if (!text) return "";
+    var match = text.match(/^https:\/\/([^\/]+)(\/.*)$/i);
+    return match ? match[1].toLowerCase() + match[2].replace(/[?#].*$/, "") : text.replace(/[?#].*$/, "");
+  }
+
+  function readStoredAbsenceFeedUrl() {
+    try {
+      return window.localStorage ? window.localStorage.getItem(CFG.absenceFeed.localStorageKey) : "";
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function writeStoredAbsenceFeedUrl(url) {
+    try {
+      if (window.localStorage) window.localStorage.setItem(CFG.absenceFeed.localStorageKey, url);
+    } catch (e) {}
+  }
+
+  function removeStoredAbsenceFeedUrl() {
+    try {
+      if (window.localStorage) window.localStorage.removeItem(CFG.absenceFeed.localStorageKey);
+    } catch (e) {}
+  }
+
+  function parseIcsEvents(text) {
+    var unfolded = unfoldIcsLines(text);
+    var blocks = unfolded.match(/BEGIN:VEVENT[\s\S]*?END:VEVENT/g) || [];
+    var events = [];
+
+    for (var i = 0; i < blocks.length; i++) {
+      var event = parseIcsEventBlock(blocks[i], i);
+      if (event) events.push(event);
+    }
+
+    return events;
+  }
+
+  function unfoldIcsLines(text) {
+    return String(text || "").replace(/\r\n[ \t]/g, "").replace(/\n[ \t]/g, "");
+  }
+
+  function parseIcsEventBlock(block, index) {
+    var props = parseIcsProperties(block);
+    var startProp = getFirstIcsProperty(props, "DTSTART");
+    if (!startProp) return null;
+
+    var endProp = getFirstIcsProperty(props, "DTEND");
+    var summaryProp = getFirstIcsProperty(props, "SUMMARY");
+    var uidProp = getFirstIcsProperty(props, "UID");
+    var start = parseIcsDateValue(startProp.value);
+    if (!start) return null;
+
+    var allDay = isIcsDateOnly(startProp);
+    var endExclusive = endProp ? parseIcsDateValue(endProp.value) : null;
+    if (!endExclusive) endExclusive = allDay ? addDays(start, 1) : new Date(start.getTime());
+    if (endExclusive.getTime() <= start.getTime()) endExclusive = allDay ? addDays(start, 1) : addDays(startOfDay(start), 1);
+
+    var summary = unescapeIcsText(summaryProp ? summaryProp.value : "");
+    var candidates = getAbsenceNameCandidates(summary);
+    if (!candidates.length) return null;
+
+    return {
+      uid: asText(uidProp ? uidProp.value : "") || ("absence-" + index),
+      summary: summary,
+      nameCandidates: candidates,
+      start: allDay ? startOfDay(start) : start,
+      endExclusive: allDay ? startOfDay(endExclusive) : endExclusive,
+      allDay: allDay
+    };
+  }
+
+  function parseIcsProperties(block) {
+    var props = {};
+    var lines = unfoldIcsLines(block).split(/\r?\n/);
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i];
+      var colon = line.indexOf(":");
+      if (colon <= 0) continue;
+
+      var head = line.substr(0, colon);
+      var value = line.substr(colon + 1);
+      var parts = head.split(";");
+      var name = asText(parts.shift()).toUpperCase();
+      if (!name || name === "BEGIN" || name === "END") continue;
+
+      var params = {};
+      for (var p = 0; p < parts.length; p++) {
+        var eq = parts[p].indexOf("=");
+        if (eq > 0) params[parts[p].substr(0, eq).toUpperCase()] = parts[p].substr(eq + 1);
+      }
+
+      if (!props[name]) props[name] = [];
+      props[name].push({ name: name, params: params, value: value });
+    }
+
+    return props;
+  }
+
+  function getFirstIcsProperty(props, name) {
+    var values = props && props[String(name || "").toUpperCase()];
+    return values && values.length ? values[0] : null;
+  }
+
+  function isIcsDateOnly(prop) {
+    var value = asText(prop && prop.value);
+    var valueType = prop && prop.params ? asText(prop.params.VALUE).toUpperCase() : "";
+    return valueType === "DATE" || /^\d{8}$/.test(value);
+  }
+
+  function parseIcsDateValue(value) {
+    var text = asText(value);
+    var dateOnly = text.match(/^(\d{4})(\d{2})(\d{2})$/);
+    if (dateOnly) return dateFromParts(Number(dateOnly[1]), Number(dateOnly[2]), Number(dateOnly[3]), 0, 0, 0);
+
+    var dateTime = text.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/);
+    if (dateTime) {
+      if (dateTime[7] === "Z") {
+        var utc = new Date(Date.UTC(Number(dateTime[1]), Number(dateTime[2]) - 1, Number(dateTime[3]), Number(dateTime[4]), Number(dateTime[5]), Number(dateTime[6])));
+        return isValidDate(utc) ? utc : null;
+      }
+      return dateFromParts(Number(dateTime[1]), Number(dateTime[2]), Number(dateTime[3]), Number(dateTime[4]), Number(dateTime[5]), Number(dateTime[6]));
+    }
+
+    return parseHireHopDate(text);
+  }
+
+  function unescapeIcsText(value) {
+    return asText(value)
+      .replace(/\\n/gi, " ")
+      .replace(/\\,/g, ",")
+      .replace(/\\;/g, ";")
+      .replace(/\\\\/g, "\\")
+      .replace(/\s+/g, " ");
+  }
+
+  function getAbsenceNameCandidates(summary) {
+    var text = cleanRoleValue(summary);
+    var result = [];
+    if (!text) return result;
+
+    addAbsenceNameCandidate(result, text);
+    addAbsenceNameCandidate(result, text.replace(/\([^)]*\)/g, " "));
+
+    var parts = text.split(/\s+(?:-|--|\u2013|\u2014|\||:)\s+/);
+    if (parts.length > 1) {
+      for (var i = 0; i < parts.length; i++) addAbsenceNameCandidate(result, parts[i]);
+    }
+
+    return result;
+  }
+
+  function addAbsenceNameCandidate(result, value) {
+    var key = normalisePersonName(value);
+    if (key && result.indexOf(key) === -1) result.push(key);
+  }
+
+  function buildAbsenceIndex(events) {
+    var index = {};
+    for (var i = 0; i < events.length; i++) {
+      var event = events[i];
+      for (var c = 0; c < event.nameCandidates.length; c++) {
+        var key = event.nameCandidates[c];
+        if (!index[key]) index[key] = [];
+        index[key].push(event);
+      }
+    }
+    return index;
   }
 
   function buildSearchParams(page, depotIds, jsonEncodeFilter, range) {
@@ -1313,6 +1705,7 @@
     var timeline = buildTimelineRange(dated);
     var capacity = buildCapacityModel(dated, timeline);
     var rows = buildRows(groupProjects(dated, state.groupMode), timeline);
+    var absenceSummary = buildVisibleAbsenceSummary(rows);
     var projectMap = {};
     for (var r = 0; r < rows.length; r++) {
       var rowProjects = rows[r].projects || [];
@@ -1327,6 +1720,7 @@
       missingDateProjects: missing,
       timeline: timeline,
       capacity: capacity,
+      absenceSummary: absenceSummary,
       rows: rows,
       projectMap: projectMap,
       totalHeight: rows.length ? rows[rows.length - 1].top + rows[rows.length - 1].height : 0
@@ -1360,6 +1754,7 @@
         projects: group.projects,
         lanes: group.lanes || {},
         laneCount: lanes,
+        absences: getGroupAbsences(group, timeline),
         unassigned: group.unassigned,
         top: top,
         height: height
@@ -1368,6 +1763,69 @@
     }
 
     return rows;
+  }
+
+  function getGroupAbsences(group, timeline) {
+    if (!isPersonGroupMode(state.groupMode)) return [];
+    if (!group || group.unassigned || !timeline || !state.absence.loaded) return [];
+
+    var keys = getPersonNameKeys(group.label);
+    if (!keys.length) return [];
+
+    var seen = {};
+    var result = [];
+    for (var i = 0; i < keys.length; i++) {
+      var matches = state.absence.byPersonKey[keys[i]] || [];
+      for (var m = 0; m < matches.length; m++) {
+        var absence = matches[m];
+        var dedupeKey = absence.uid + ":" + dayNumber(absence.start) + ":" + dayNumber(absence.endExclusive);
+        if (seen[dedupeKey]) continue;
+        if (!absenceOverlapsTimeline(absence, timeline)) continue;
+        seen[dedupeKey] = true;
+        result.push(absence);
+      }
+    }
+
+    result.sort(function (a, b) {
+      return a.start.getTime() - b.start.getTime();
+    });
+    return result;
+  }
+
+  function buildVisibleAbsenceSummary(rows) {
+    var summary = {
+      active: isAbsenceSummaryActive(),
+      personGrouping: isPersonGroupMode(state.groupMode),
+      loading: !!state.absence.loading,
+      loaded: !!state.absence.loaded,
+      error: state.absence.error,
+      rowCount: 0,
+      rangeCount: 0
+    };
+
+    for (var i = 0; i < rows.length; i++) {
+      var count = rows[i].absences ? rows[i].absences.length : 0;
+      if (!count) continue;
+      summary.rowCount++;
+      summary.rangeCount += count;
+    }
+
+    return summary;
+  }
+
+  function isAbsenceSummaryActive() {
+    return !!(state.absence.configured || state.absence.loading || state.absence.loaded || state.absence.error);
+  }
+
+  function absenceOverlapsTimeline(absence, timeline) {
+    if (!absence || !timeline || !absence.start || !absence.endExclusive) return false;
+    var clipEnd = getTimelineClipEnd(timeline);
+    return absence.endExclusive.getTime() > timeline.start.getTime() && absence.start.getTime() < clipEnd.getTime();
+  }
+
+  function isPersonGroupMode(groupMode) {
+    if (!CFG.absenceFeed || !CFG.absenceFeed.personGroupModes) return false;
+    return CFG.absenceFeed.personGroupModes.indexOf(groupMode) !== -1;
   }
 
   function assignProjectLanes(group) {
@@ -1520,9 +1978,12 @@
       { label: "Live", value: capacity.totalLive || 0 },
       { label: "Peak day", value: formatPeakSummary(capacity.maxDay, capacity.peakDayDate), dayNumber: capacity.peakDayNumber },
       { label: "Peak week", value: formatPeakSummary(capacity.maxWeek, capacity.peakWeekDate), dayNumber: capacity.peakWeekDayNumber },
-      { label: "Missing dates", value: view.missingDateProjects.length },
-      { label: "Range", value: '<span id="wise-capacity-tracker-visible-range">' + escapeHtml(getVisibleRangeLabel(view.timeline)) + '</span>' }
+      { label: "Missing dates", value: view.missingDateProjects.length }
     ];
+
+    var absenceItem = getAbsenceSummaryItem(view.absenceSummary);
+    if (absenceItem) items.push(absenceItem);
+    items.push({ label: "Range", value: '<span id="wise-capacity-tracker-visible-range">' + escapeHtml(getVisibleRangeLabel(view.timeline)) + '</span>' });
 
     $("#" + CFG.summaryId).html(items.map(function (item) {
       var clickable = item.dayNumber != null && item.dayNumber !== "" && Number(item.dayNumber) >= 0;
@@ -1532,10 +1993,29 @@
     }).join(""));
   }
 
+  function getAbsenceSummaryItem(summary) {
+    if (!summary || !summary.active) return null;
+
+    var value = "";
+    if (summary.loading) value = "Loading";
+    else if (summary.error) value = "Unavailable";
+    else if (!summary.personGrouping) value = "Person rows only";
+    else value = summary.rangeCount + " range" + (summary.rangeCount === 1 ? "" : "s");
+
+    return { label: "Absence", value: escapeHtml(value) };
+  }
+
   function formatPeakSummary(count, date) {
     count = Number(count) || 0;
     if (!count || !date) return "0";
     return count + " | " + formatDateShort(date);
+  }
+
+  function formatAbsenceRange(absence) {
+    if (!absence || !absence.start || !absence.endExclusive) return "";
+    var endDisplay = absence.allDay ? addDays(absence.endExclusive, -1) : absence.endExclusive;
+    if (dayNumber(absence.start) === dayNumber(endDisplay)) return formatDate(absence.start);
+    return formatDate(absence.start) + " - " + formatDate(endDisplay);
   }
 
   function renderMissingDates(projects) {
@@ -1596,6 +2076,7 @@
     }
     html.push('</div>');
     appendBodyDayGrid(html, timeline, width, height, view.capacity);
+    appendAbsenceBands(html, view.rows, timeline, width);
 
     var todayLeft = getTimelineX(timeline, new Date());
     if (todayLeft >= 0 && todayLeft <= width) {
@@ -1618,12 +2099,41 @@
     renderLeftRows(view.rows, height);
   }
 
+  function appendAbsenceBands(html, rows, timeline, width) {
+    if (!isPersonGroupMode(state.groupMode) || !state.absence.loaded) return;
+
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      var absences = row.absences || [];
+      for (var a = 0; a < absences.length; a++) {
+        html.push(renderAbsenceBand(row, absences[a], timeline, width));
+      }
+    }
+  }
+
+  function renderAbsenceBand(row, absence, timeline, width) {
+    var clipEnd = getTimelineClipEnd(timeline);
+    var visibleStart = absence.start.getTime() < timeline.start.getTime() ? timeline.start : absence.start;
+    var visibleEnd = absence.endExclusive.getTime() > clipEnd.getTime() ? clipEnd : absence.endExclusive;
+    var left = clamp(getTimelineX(timeline, visibleStart), 0, width);
+    var right = clamp(getTimelineX(timeline, visibleEnd), 0, width);
+    var bandWidth = Math.max(2, right - left);
+    var title = row.label + " absent: " + formatAbsenceRange(absence);
+
+    return (
+      '<div class="wct-absence-band" ' +
+        'style="left:' + left + 'px;top:' + row.top + 'px;width:' + bandWidth + 'px;height:' + row.height + 'px;" ' +
+        'title="' + escapeAttr(title) + '"></div>'
+    );
+  }
+
   function renderLeftRows(rows, height) {
     var html = ['<div class="wct-left-inner" style="height:' + Math.max(height, 80) + 'px;">'];
 
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i];
-      var rowMeta = row.count + " event" + (row.count === 1 ? "" : "s") + " | " + row.liveCount + " live | peak " + row.peakLiveLoad + " live at once" + (row.activeToday ? " | " + row.activeToday + " active today" : "");
+      var absenceCount = row.absences ? row.absences.length : 0;
+      var rowMeta = row.count + " event" + (row.count === 1 ? "" : "s") + " | " + row.liveCount + " live | peak " + row.peakLiveLoad + " live at once" + (row.activeToday ? " | " + row.activeToday + " active today" : "") + (absenceCount ? " | " + absenceCount + " absence range" + (absenceCount === 1 ? "" : "s") : "");
       html.push(
         '<div class="wct-left-row is-group' + (row.unassigned ? " is-unassigned" : "") + getCapacityClass(row.peakLiveLoad) + '" draggable="true" data-row-key="' + escapeAttr(row.key) + '" style="top:' + row.top + 'px;height:' + row.height + 'px;" title="' + escapeAttr(rowMeta) + '">' +
           '<strong>' + escapeHtml(row.label) + '</strong>' +
@@ -2371,6 +2881,7 @@
       ".wct-week-load{position:absolute;bottom:0;height:4px;border-radius:4px 4px 0 0;z-index:3;pointer-events:auto;opacity:.72;}.wct-week-load.is-load-low{background:#22c55e;}.wct-week-load.is-load-medium{background:#f59e0b;}.wct-week-load.is-load-high{background:#ef4444;}" +
       ".wct-row-backdrop{position:absolute;left:0;top:0;}.wct-row-line{position:absolute;left:0;right:0;border-bottom:1px solid #edf1f5;}.wct-row-line.is-group:nth-child(even){background:#fcfdff;}" +
       ".wct-day-gridline{position:absolute;top:0;border-left:1px solid #edf1f5;z-index:1;pointer-events:none;}.wct-day-gridline.is-weekend{background:rgba(238,243,248,.55);}.wct-day-gridline.is-load-low{background:rgba(34,197,94,.045);}.wct-day-gridline.is-load-medium{background:rgba(245,158,11,.07);}.wct-day-gridline.is-load-high{background:rgba(239,68,68,.085);}.wct-day-gridline.is-today{box-shadow:inset 2px 0 0 rgba(217,45,32,.36);}" +
+      ".wct-absence-band{position:absolute;z-index:2;background:repeating-linear-gradient(135deg,rgba(71,85,105,.18) 0,rgba(71,85,105,.18) 8px,rgba(71,85,105,.10) 8px,rgba(71,85,105,.10) 16px);border-left:1px solid rgba(71,85,105,.26);border-right:1px solid rgba(71,85,105,.20);pointer-events:auto;}" +
       ".wct-today-line{position:absolute;top:0;width:0;border-left:2px solid #d92d20;z-index:5;pointer-events:none;}.wct-today-line span{position:absolute;top:4px;left:5px;background:#d92d20;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700;}" +
       ".wct-project-bar{position:absolute;z-index:4;border:1px solid rgba(15,23,42,.22);border-radius:5px;box-shadow:0 1px 2px rgba(15,23,42,.14);padding:0 7px;text-align:left;cursor:pointer;overflow:hidden;}" +
       ".wct-project-bar span{position:relative;z-index:2;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;line-height:22px;}" +
@@ -2705,6 +3216,51 @@
     var text = asText(value).replace(/\s+/g, " ");
     if (!text || /^null$/i.test(text) || /^undefined$/i.test(text)) return "";
     return text;
+  }
+
+  function getPersonNameKeys(value) {
+    var text = cleanRoleValue(value);
+    var keys = [];
+    if (!text) return keys;
+
+    addPersonNameKey(keys, text);
+
+    var parts = text.split(/\s*(?:,|\/|&|\+|\band\b)\s*/i);
+    if (parts.length > 1) {
+      for (var i = 0; i < parts.length; i++) addPersonNameKey(keys, parts[i]);
+    }
+
+    return keys;
+  }
+
+  function addPersonNameKey(keys, value) {
+    var key = normalisePersonName(value);
+    if (key && keys.indexOf(key) === -1) keys.push(key);
+
+    var reversed = getReversedPersonNameKey(value);
+    if (reversed && keys.indexOf(reversed) === -1) keys.push(reversed);
+  }
+
+  function getReversedPersonNameKey(value) {
+    var text = cleanRoleValue(value);
+    var comma = text.match(/^([^,]+),\s*(.+)$/);
+    if (comma) return normalisePersonName(comma[2] + " " + comma[1]);
+
+    var words = text.split(/\s+/);
+    if (words.length === 2) return normalisePersonName(words[1] + " " + words[0]);
+    return "";
+  }
+
+  function normalisePersonName(value) {
+    var text = cleanRoleValue(value).toLowerCase();
+    if (!text) return "";
+    if (typeof text.normalize === "function") text = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return text
+      .replace(/['`]/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\b(?:mr|mrs|miss|ms|dr)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .replace(/^\s+|\s+$/g, "");
   }
 
   function flattenValues(values) {
