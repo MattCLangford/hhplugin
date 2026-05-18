@@ -18,6 +18,7 @@ It owns:
 - Event Overview profile/template keys.
 - Generic page editor IDs and versions.
 - Labour day editor IDs and versions.
+- Page control field names such as `renderType`, `layoutId`, `hidden`, `excludeFromProjectTotal`, `imageUrl`, `splitSide`, `summaryMode`, `layoutVariant`, `pageKind`, and `deptLayout` (`image`, `no-image`, or `columns`).
 
 `4-layout.js` owns the shared layout catalogue.
 

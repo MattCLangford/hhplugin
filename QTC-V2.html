@@ -1849,6 +1849,14 @@
         ],
         additional: ["[name='items:additional']", "[name='additional']"],
         technical: ["[name='items:technical']", "[name='technical']"],
+        meta: [
+          "[name='items:meta']",
+          "[name='items:metadata']",
+          "[name='items:page_meta']",
+          "[name='meta']",
+          "[name='metadata']",
+          "[name='page_meta']"
+        ],
         imageUrl: ["[name='items:image_url']", "[name='image_url']"],
         price: ["[name='items:price']", "[name='price']"],
         qty: ["[name='items:qty']", "[name='qty']"],
@@ -1889,6 +1897,15 @@
     features: Object.freeze({
       debugShowFlagsInOutput: false,
       auditWorkflowOnBuild: false
+    }),
+    meta: Object.freeze({
+      start: "[WisePageMeta]",
+      end: "[/WisePageMeta]",
+      genericEditor: "genericPage",
+      eventOverviewEditor: "eventOverview",
+      labourDayEditor: "genericLabourDay",
+      eventOverviewRootTemplateKey: "section_event_overview",
+      eventOverviewDeptTemplateKey: "dept_proposed_timings"
     }),
     get continuedSuffix(){ return this.text.continuedSuffix; },
     get eventOverviewSectionName(){ return this.text.eventOverviewSectionName; },
@@ -2031,8 +2048,26 @@
 
   function stripLeadingSlashes(name){
     const raw = String(name || "").trim();
-    if (raw.startsWith("//")) return { hidden: true, name: raw.replace(/^\/\/\s*/, "") };
-    return { hidden: false, name: raw };
+    let text = raw;
+    let hidden = false;
+    let optional = false;
+    let changed = true;
+
+    while (changed){
+      changed = false;
+      if (/^\/\/\s*/.test(text)){
+        hidden = true;
+        text = text.replace(/^\/\/\s*/, "").trim();
+        changed = true;
+      }
+      if (/^\$\s*/.test(text)){
+        optional = true;
+        text = text.replace(/^\$\s*/, "").trim();
+        changed = true;
+      }
+    }
+
+    return { hidden, optional, name: text };
   }
   function toToken(value){
     return String(value || "")
@@ -2090,12 +2125,12 @@
   }
   function parseHeadingPrefix(name){
     const s = String(name || "").trim();
-    // Supported page directives:
+    // Legacy page directive fallbacks. New editor saves should use heading metadata.
     // - $dept[layout=thankyou,variant=minimal,theme=light]: Thank you
     // - Dept: Thank you :: variant=minimal, theme=light
     const patterns = [
-      { regex: /^\$\s*section\s*(?:\[(.*?)\])?\s*:\s*(.*)$/i, prefix: "Section", excludeFromProjectTotal: false },
-      { regex: /^\$\s*dept\s*(?:\[(.*?)\])?\s*:\s*(.*)$/i, prefix: "Dept", excludeFromProjectTotal: true },
+      { regex: /^\$\s*section\s*(?:\[(.*?)\])?\s*:\s*(.*)$/i, prefix: "Section", excludeFromProjectTotal: false, optional: true },
+      { regex: /^\$\s*dept\s*(?:\[(.*?)\])?\s*:\s*(.*)$/i, prefix: "Dept", excludeFromProjectTotal: false, optional: true },
       { regex: /^section\s*(?:\[(.*?)\])?\s*:\s*(.*)$/i, prefix: "Section", excludeFromProjectTotal: false },
       { regex: /^dept\s*(?:\[(.*?)\])?\s*:\s*(.*)$/i, prefix: "Dept", excludeFromProjectTotal: false }
     ];
@@ -2111,7 +2146,8 @@
         rawTitle: String(match[2] || "").trim(),
         title: titleInfo.title,
         directives: mergeDirectives(prefixDirectives, titleInfo.directives),
-        excludeFromProjectTotal: pattern.excludeFromProjectTotal
+        excludeFromProjectTotal: pattern.excludeFromProjectTotal,
+        optional: !!pattern.optional
       };
     }
 
@@ -2121,7 +2157,8 @@
       rawTitle: s,
       title: titleInfo.title,
       directives: titleInfo.directives,
-      excludeFromProjectTotal: false
+      excludeFromProjectTotal: false,
+      optional: false
     };
   }
   function looksLikeHeadingType(type){
@@ -2198,9 +2235,10 @@
 
     const baseTitle = String(match[1] || "").trim();
     const variant = toToken(match[2]);
+    const metaLayout = getMetaLayoutId(getNodeSystemMeta(node));
     const isThankYouDept =
       String(node?.prefix || "").trim() === "Dept" &&
-      normalizeHeadingMatchText(baseTitle) === normalizeHeadingMatchText("Thank you");
+      (normalizeHeadingMatchText(baseTitle) === normalizeHeadingMatchText("Thank you") || metaLayout === "thankyou");
 
     if (!isThankYouDept){
       return { title: originalTitle, variant: "" };
@@ -2249,22 +2287,306 @@
     if (s.toLowerCase() === "null") return "";
     return s;
   }
+
+  function extractStoredPageMeta(text){
+    const raw = String(text || "");
+    const startMarker = CONFIG.meta.start;
+    const endMarker = CONFIG.meta.end;
+    const start = raw.indexOf(startMarker);
+    const end = start === -1 ? -1 : raw.indexOf(endMarker, start + startMarker.length);
+
+    if (start !== -1 && end !== -1){
+      const before = raw.slice(0, start).trim();
+      const jsonText = raw.slice(start + startMarker.length, end);
+      const after = raw.slice(end + endMarker.length).trim();
+      const baseText = [before, after].filter(Boolean).join("\n\n").trim();
+      let meta = null;
+
+      try {
+        const parsed = JSON.parse(jsonText);
+        meta = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : null;
+      } catch (error) {
+        meta = null;
+      }
+
+      return { baseText, meta };
+    }
+
+    const trimmed = raw.trim();
+    if (/^\{[\s\S]*\}$/.test(trimmed)){
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)){
+          return { baseText: "", meta: parsed };
+        }
+      } catch (error) {}
+    }
+
+    return { baseText: trimmed, meta: null };
+  }
+
+  function stripStoredPageMeta(text){
+    return extractStoredPageMeta(text).baseText;
+  }
+
+  function mergeStoredPageMeta(){
+    let merged = null;
+    for (let i = 0; i < arguments.length; i++){
+      const value = arguments[i];
+      const meta = value && typeof value === "object" && !Array.isArray(value)
+        ? value
+        : extractStoredPageMeta(value).meta;
+      if (!meta || typeof meta !== "object" || Array.isArray(meta)) continue;
+      merged = Object.assign(merged || {}, meta);
+    }
+    return merged;
+  }
+
+  function truthyMetaValue(value){
+    if (value === true) return true;
+    if (value === false || value == null) return false;
+    const text = String(value).trim().toLowerCase();
+    return ["1", "true", "yes", "y", "on", "optional", "exclude", "excluded"].includes(text);
+  }
+
+  function isMetaExcludedFromProjectTotal(meta){
+    if (!meta || typeof meta !== "object") return false;
+    return truthyMetaValue(meta.excludeFromProjectTotal) ||
+      truthyMetaValue(meta.notInProjectTotal) ||
+      truthyMetaValue(meta.excludedFromProjectTotal) ||
+      truthyMetaValue(meta.excludeCost) ||
+      truthyMetaValue(meta.optional) ||
+      truthyMetaValue(meta.optionalItems) ||
+      truthyMetaValue(meta.optionalExcludedFromTotal);
+  }
+
+  function isMetaHidden(meta){
+    if (!meta || typeof meta !== "object") return false;
+    return truthyMetaValue(meta.hidden) ||
+      truthyMetaValue(meta.hide) ||
+      truthyMetaValue(meta.hiddenPage) ||
+      truthyMetaValue(meta.hidden_page) ||
+      truthyMetaValue(meta.hidePage) ||
+      truthyMetaValue(meta.hide_page) ||
+      truthyMetaValue(meta.pageHidden) ||
+      truthyMetaValue(meta.page_hidden) ||
+      truthyMetaValue(meta.hiddenFromRender) ||
+      truthyMetaValue(meta.hideFromRender) ||
+      truthyMetaValue(meta.excludeFromRender);
+  }
+
+  function metaString(meta, keys){
+    if (!meta || typeof meta !== "object") return "";
+    for (const key of keys){
+      if (meta[key] == null) continue;
+      const value = String(meta[key] || "").trim();
+      if (value) return value;
+    }
+    return "";
+  }
+
+  function explicitUrlCandidate(value){
+    const s = stripStoredPageMeta(value);
+    if (!s) return "";
+
+    let explicitUrl = extractFirstUrl(s);
+    if (!explicitUrl && /^www\./i.test(s)) explicitUrl = `https://${s}`;
+    if (!explicitUrl){
+      const domainMatch = s.match(/^([a-z0-9.-]+\.[a-z]{2,}[^\s]*)/i);
+      if (domainMatch) explicitUrl = `https://${domainMatch[1]}`;
+    }
+    if (!explicitUrl && /^\/(?!\/)/.test(s)) explicitUrl = s;
+    if (!explicitUrl && /^data:image\//i.test(s)) explicitUrl = s;
+
+    return cleanUrl(explicitUrl);
+  }
+
   function normaliseImageUrl(rawUrl, fallback){
-    let u = extractFirstUrl(rawUrl) || String(rawUrl || "").trim();
-    u = cleanUrl(u) || cleanUrl(fallback);
+    let u = explicitUrlCandidate(rawUrl) || explicitUrlCandidate(fallback);
     if (u && u.includes("sharepoint.com")) u = toSharePointDirectDownload(u);
     return u;
   }
   function normaliseDeptHeadingImageUrl(rawUrl){
-    const s = String(rawUrl || "").trim();
+    const s = stripStoredPageMeta(rawUrl);
     if (!s) return "";
 
     // Event Overview day heading image is considered valid only when an actual URL is provided.
-    let explicitUrl = extractFirstUrl(s);
-    if (!explicitUrl && /^www\./i.test(s)) explicitUrl = `https://${s}`;
+    let explicitUrl = explicitUrlCandidate(s);
     if (!explicitUrl) return "";
 
     return normaliseImageUrl(explicitUrl, "");
+  }
+
+  function getNodeSystemMeta(node){
+    const direct = node?.systemMeta && typeof node.systemMeta === "object" ? node.systemMeta : null;
+    const fields = node?.fields && typeof node.fields === "object" ? node.fields : {};
+    return mergeStoredPageMeta(
+      direct,
+      fields.meta,
+      fields.metadata,
+      node?.technical,
+      node?.additional
+    ) || {};
+  }
+
+  function getMetaLayoutId(meta){
+    const rendererLayouts = [
+      "hero",
+      "section-cover",
+      "dept-table",
+      "dept-stack",
+      "labour-days",
+      "pm",
+      "team",
+      "exp",
+      "experts",
+      "fpvisual",
+      "visual",
+      "venue-hero",
+      "summary",
+      "thankyou",
+      "critical-path",
+      "sustainability",
+      "about-us",
+      "event-overview"
+    ];
+
+    const layoutId = toToken(metaString(meta, ["layoutId", "layout-id", "qtcLayout", "qtc_layout", "pageLayout", "page_layout"]));
+    if (layoutId) return rendererLayouts.includes(layoutId) ? layoutId : "";
+
+    const layout = toToken(metaString(meta, ["layout"]));
+    return rendererLayouts.includes(layout) ? layout : "";
+  }
+
+  function getMetaRenderPrefix(meta){
+    const raw = metaString(meta, ["renderType", "render-type", "pageType", "page_type", "prefix", "type"]);
+    const token = toToken(raw);
+    if (token === "section") return "Section";
+    if (token === "dept" || token === "department") return "Dept";
+    if (token === "normal" || token === "row" || token === "support") return "";
+
+    const layoutId = getMetaLayoutId(meta);
+    if (["hero", "section-cover", "event-overview"].includes(layoutId)) return "Section";
+    if (layoutId) return "Dept";
+
+    const templateKey = metaString(meta, ["templateKey", "template_key"]);
+    if (templateKey === CONFIG.meta.eventOverviewRootTemplateKey) return "Section";
+    if (templateKey === CONFIG.meta.eventOverviewDeptTemplateKey) return "Dept";
+
+    return "";
+  }
+
+  function getMetaImageUrl(meta){
+    return normaliseImageUrl(metaString(meta, [
+      "imageUrl",
+      "image_url",
+      "imgUrl",
+      "img_url",
+      "url",
+      "assetUrl",
+      "asset_url",
+      "backgroundUrl",
+      "background_url",
+      "technicalUrl",
+      "technical_url"
+    ]), "");
+  }
+
+  function normaliseLayoutMode(value){
+    const token = toToken(value);
+    if (["columns", "three-columns", "three-column", "three-cols", "no-image-multi", "multi-column"].includes(token)){
+      return "columns";
+    }
+    if (["no-image", "noimg", "no-image-table", "text-table", "table-no-image", "no-image-split", "split-no-image"].includes(token)){
+      return "no-image";
+    }
+    if (["image", "half-image", "image-split", "split-image", "half-page-image"].includes(token)){
+      return "image";
+    }
+    return "";
+  }
+
+  function getRequestedDeptLayoutMode(node){
+    const meta = getNodeSystemMeta(node);
+    return normaliseLayoutMode(metaString(meta, [
+      "deptLayout",
+      "dept_layout",
+      "layoutMode",
+      "layout_mode",
+      "layout",
+      "deptVariant",
+      "dept_variant",
+      "variant"
+    ]));
+  }
+
+  function isLabourDepartmentNode(node){
+    const meta = getNodeSystemMeta(node);
+    const kind = toToken(metaString(meta, ["pageKind", "page_kind", "contentKind", "content_kind", "kind", "templateKey", "template_key"]));
+    if (kind === "labour" || kind === "labor" || kind === "labour-page" || kind === "labor-page") return true;
+
+    const title = normalizeHeadingMatchText(stripSideSuffix(String(node?.title || "")));
+    return /^labou?r\b/.test(title);
+  }
+
+  function getDeptHeadingImageUrl(deptNode){
+    const mode = getRequestedDeptLayoutMode(deptNode);
+    if (mode === "columns" || mode === "no-image") return "";
+
+    const metaUrl = getMetaImageUrl(getNodeSystemMeta(deptNode));
+    return metaUrl || normaliseImageUrl(deptNode?.technical, "");
+  }
+
+  function getNodeImageUrl(node, fallback){
+    return getMetaImageUrl(getNodeSystemMeta(node)) || normaliseImageUrl(node?.technical, fallback || "");
+  }
+
+  function getMetaSplitSide(meta){
+    const direct = toToken(metaString(meta, [
+      "splitSide",
+      "split_side",
+      "split-side",
+      "imageSide",
+      "image_side",
+      "image-side",
+      "side"
+    ]));
+    if (direct === "left" || direct === "right") return direct;
+
+    const suffix = toToken(metaString(meta, ["titleSuffix", "title_suffix"]));
+    if (suffix === "left" || suffix === "right") return suffix;
+    return "";
+  }
+
+  function getNodeSplitSide(node){
+    if (!node || typeof node !== "object") return "";
+    return getMetaSplitSide(getNodeSystemMeta(node)) ||
+      parseSideSuffix(node?.rawTitle) ||
+      parseSideSuffix(node?.title);
+  }
+
+  function getSplitSideHint(value){
+    return value && typeof value === "object" ? getNodeSplitSide(value) : parseSideSuffix(value);
+  }
+
+  function getMetaSummaryMode(meta){
+    const direct = toToken(metaString(meta, [
+      "summaryMode",
+      "summary_mode",
+      "summary-mode",
+      "projectSummaryMode",
+      "project_summary_mode",
+      "project-summary-mode"
+    ]));
+    const suffix = toToken(metaString(meta, ["titleSuffix", "title_suffix"]));
+    const token = direct || suffix;
+    if (token === "none" || token === "dept" || token === "section") return token;
+    if (token === "department") return "dept";
+    return "";
+  }
+
+  function getNodeSummaryMode(node){
+    return getMetaSummaryMode(getNodeSystemMeta(node)) || extractSummaryMode(node?.rawTitle || node?.title || "");
   }
 
   function cleanLeadingVirtualMarker(s){
@@ -2307,7 +2629,7 @@
   }
   function pickSplitSide(){
     for (let i = 0; i < arguments.length; i++){
-      const side = parseSideSuffix(arguments[i]);
+      const side = getSplitSideHint(arguments[i]);
       if (side) return side;
     }
     return nextSplitSide();
@@ -2734,10 +3056,11 @@
       effectiveFlag[i] = thisFlag;
 
       const prof = getFlagProfile(thisFlag);
-      const thisOptionalScope = (hasParent ? !!stack[stack.length - 1].optionalScope : false) || thisFlag === OPTIONAL_FLAG;
+      const rowExcludedFromProjectTotal = !!row.excludeFromProjectTotal || isMetaExcludedFromProjectTotal(row.systemMeta);
+      const thisOptionalScope = (hasParent ? !!stack[stack.length - 1].optionalScope : false) || thisFlag === OPTIONAL_FLAG || rowExcludedFromProjectTotal;
 
       visible[i] = visAllowedHere && prof.rootVisible;
-      costed[i]  = costAllowedHere && prof.rootCost;
+      costed[i]  = costAllowedHere && prof.rootCost && !rowExcludedFromProjectTotal;
       optionalScope[i] = thisOptionalScope;
 
       if (row.hiddenByName) visible[i] = false;
@@ -2752,7 +3075,7 @@
         level: lvl,
         flag: thisFlag,
         visAllow:  visAllowedHere  && prof.childrenVisible,
-        costAllow: costAllowedHere && prof.childrenCost,
+        costAllow: costAllowedHere && prof.childrenCost && !rowExcludedFromProjectTotal,
         hidePriceAllow: hideAllowedHere || triggersHideChildPrices,
         optionalScope: thisOptionalScope
       });
@@ -2980,6 +3303,13 @@
   }
   function buildPreparedDeptNode(node){
     const clonedNode = cloneDocumentNode(node);
+    const excludeDeptFromProjectTotal = !!clonedNode?.excludeFromProjectTotal || isMetaExcludedFromProjectTotal(clonedNode?.systemMeta);
+    if (excludeDeptFromProjectTotal){
+      clonedNode.rows = (clonedNode.rows || []).map(row => ({
+        ...row,
+        excludeFromProjectTotal: true
+      }));
+    }
     const prepared = prepareCostingRows(clonedNode?.rows || []);
     prepared.headingImageUrl = getDeptHeadingImageUrl(clonedNode);
     prepared.sectionRawTitle = String(clonedNode?.business?.sectionRawTitle || "").trim();
@@ -3094,6 +3424,8 @@
       const warehouseNotes = txtAnyMultiline(tr, sourceSelectors.warehouseNotes);
       const additional= txtAnyMultiline(tr, sourceSelectors.additional);
       const technical = txtAny(tr, sourceSelectors.technical);
+      const metaText  = txtAnyMultiline(tr, sourceSelectors.meta || []);
+      const systemMeta = mergeStoredPageMeta(additional, technical, metaText);
 
       const imageUrl  = txtAny(tr, sourceSelectors.imageUrl);
 
@@ -3106,25 +3438,32 @@
       const levelNum = flagToInt(level);
       const nameInfo = stripLeadingSlashes(name);
       const pref = parseHeadingPrefix(nameInfo.name);
+      const metaPrefix = getMetaRenderPrefix(systemMeta);
 
       const isHeading = looksLikeHeadingType(type);
-      const isPageHeading = isHeading && (pref.prefix === "Section" || pref.prefix === "Dept");
+      const isPageHeading = isHeading && (pref.prefix === "Section" || pref.prefix === "Dept" || metaPrefix === "Section" || metaPrefix === "Dept");
+      const pagePrefix = pref.prefix || metaPrefix;
+      const pageTitle = pref.prefix
+        ? pref.title
+        : (isPageHeading ? extractTitleDirectives(nameInfo.name).title : pref.title);
 
       return {
         isHeading,
         isPageHeading,
-        pagePrefix: pref.prefix,
-        pageTitle: pref.title,
-        pageRawTitle: pref.rawTitle,
+        pagePrefix,
+        pageTitle,
+        pageRawTitle: pref.prefix ? pref.rawTitle : nameInfo.name,
         pageDirectives: pref.directives || {},
-        pageExcludeFromProjectTotal: isPageHeading ? !!pref.excludeFromProjectTotal : false,
-        hiddenHeading: isPageHeading ? nameInfo.hidden : false,
+        pageExcludeFromProjectTotal: isPageHeading ? (!!pref.excludeFromProjectTotal || !!nameInfo.optional || !!pref.optional || isMetaExcludedFromProjectTotal(systemMeta)) : false,
+        hiddenHeading: isPageHeading ? (!!nameInfo.hidden || isMetaHidden(systemMeta)) : false,
+        optionalHeading: isPageHeading ? (!!nameInfo.optional || !!pref.optional || isMetaExcludedFromProjectTotal(systemMeta)) : false,
 
         type, level, levelNum: Number.isFinite(levelNum) ? levelNum : 0,
         name, nameStripped: nameInfo.name,
-        hiddenByName: (!isPageHeading && nameInfo.hidden),
+        hiddenByName: (!isPageHeading && (!!nameInfo.hidden || isMetaHidden(systemMeta))),
+        optionalByName: (!isPageHeading && (!!nameInfo.optional || isMetaExcludedFromProjectTotal(systemMeta))),
 
-        altName, warehouseNotes, additional, technical,
+        altName, warehouseNotes, additional, technical, metaText, systemMeta,
         image_url: imageUrl,
         price, qty, flag, flagged, listId
       };
@@ -3158,9 +3497,11 @@
           rawTitle: r.pageRawTitle || r.pageTitle,
           directives: r.pageDirectives || {},
           excludeFromProjectTotal: !!r.pageExcludeFromProjectTotal,
+          optionalHeading: !!r.optionalHeading,
           hidden: !!r.hiddenHeading,
           technical: r.technical,
           additional: r.additional,
+          systemMeta: r.systemMeta || null,
           rows: [],
           children: [],
           parent
@@ -3181,6 +3522,7 @@
           hidden: false,
           technical: "",
           additional: "",
+          systemMeta: null,
           rows: [],
           children: [],
           parent: root
@@ -3193,8 +3535,8 @@
       const hiddenByHeadingScope = hiddenHeadingStack.length > 0;
 
       if (r.isHeading && !r.isPageHeading){
-        // "//" on a plain heading hides that heading and its nested subtree from render,
-        // while item costs still contribute to subtotal/total calculations.
+        // Hidden metadata, or a legacy "//" marker, hides this plain heading subtree
+        // from render while item costs still contribute to subtotal/total calculations.
         if (r.hiddenByName){
           hiddenHeadingStack.push(lvl);
           continue;
@@ -3206,7 +3548,9 @@
           type: "subheading",
           levelNum: r.levelNum,
           hiddenByName: !!r.hiddenByName || hiddenByHeadingScope,
-          text: r.nameStripped.replace(/^\/\//, "").trim() || "Section",
+          excludeFromProjectTotal: !!r.optionalByName,
+          systemMeta: r.systemMeta || null,
+          text: r.nameStripped.replace(/^\/\//, "").replace(/^\$\s*/, "").trim() || "Section",
           flag: r.flag,
           flagged: r.flagged
         });
@@ -3215,8 +3559,10 @@
           type: "item",
           levelNum: r.levelNum,
           hiddenByName: !!r.hiddenByName || hiddenByHeadingScope,
+          excludeFromProjectTotal: !!r.optionalByName,
+          systemMeta: r.systemMeta || null,
 
-          name: String(r.nameStripped || "").trim(),
+          name: String(r.nameStripped || "").replace(/^\$\s*/, "").trim(),
           warehouseNotes: r.warehouseNotes,
           altName: r.altName,
           additional: r.additional,
@@ -3499,8 +3845,11 @@
     return groups.filter(g => (g.items || []).length > 0);
   }
   function shouldRenderLabourDayLayout(sectionTitle, deptNode, rows){
-    const deptName = normalizeHeadingMatchText(stripSideSuffix(String(deptNode?.title || "")));
-    if (!/^labour\b/.test(deptName)) return false;
+    const requestedMode = getRequestedDeptLayoutMode(deptNode);
+    if (requestedMode === "columns" && isLabourDepartmentNode(deptNode)) return true;
+    if (requestedMode === "image" || requestedMode === "no-image") return false;
+
+    if (!isLabourDepartmentNode(deptNode)) return false;
     if (!isLabourSectionTitle(sectionTitle)) return false;
 
     const r = rows || [];
@@ -3510,10 +3859,6 @@
 
     const dayNamedGroups = groups.filter(g => /^day/i.test(String(g.title || "").trim()));
     return dayNamedGroups.length >= 2;
-  }
-
-  function getDeptHeadingImageUrl(deptNode){
-    return normaliseImageUrl(deptNode?.technical, "");
   }
 
   function buildNoImageCostingBlock(sectionTitle, deptNode){
@@ -3664,7 +4009,7 @@
     const page = cloneTemplate("heroTemplate");
     page.classList.add("layout-hero", "on-dark");
 
-    applyBg(page, sectionNode.technical);
+    applyBg(page, getNodeImageUrl(sectionNode));
 
     const dateVal = String(runtime?.hero?.eventDate || runtime?.eventStart || "").trim();
     const dateEl = page.querySelector("[data-hero-event-date]");
@@ -3687,10 +4032,11 @@
     page.classList.add("layout-section-cover");
     if (isOurProposal) page.classList.add("layout-section-proposal");
 
-    applyBg(page, sectionNode.technical);
+    const bgUrl = getNodeImageUrl(sectionNode);
+    applyBg(page, bgUrl);
     setPageHeadingHtml(page.querySelector("[data-section-title]"), name);
 
-    attachPageBgAutoContrast(page, sectionNode.technical, "bg-light");
+    attachPageBgAutoContrast(page, bgUrl, "bg-light");
     return page;
   }
 
@@ -3702,7 +4048,7 @@
     page.classList.add("layout-venuehero");
 
     const img = page.querySelector("[data-venue-bg]");
-    const u = normaliseImageUrl(deptNode.technical, "");
+    const u = getNodeImageUrl(deptNode);
 
     if (img){
       img.removeAttribute("name");
@@ -3744,7 +4090,7 @@
 
     let imgUrl = cleanUrl(person.image_url);
     if (!imgUrl){
-      imgUrl = extractFirstUrl(deptNode.technical) || cleanUrl(deptNode.technical);
+      imgUrl = getNodeImageUrl(deptNode);
     }
     if (imgUrl && imgUrl.includes("sharepoint.com")) imgUrl = toSharePointDirectDownload(imgUrl);
 
@@ -3867,7 +4213,7 @@
 
     const wrap = page.querySelector(".visual-image");
     const img  = page.querySelector("[data-visual-img]");
-    const u = normaliseImageUrl(deptNode.technical, firstItemImageUrl(deptNode.rows || []));
+    const u = getNodeImageUrl(deptNode, firstItemImageUrl(deptNode.rows || []));
 
     if (!u){
       wrap.classList.add("is-empty");
@@ -3890,10 +4236,7 @@
     const img  = page.querySelector("[data-fpv-img]");
     const frame = page.querySelector("[data-fpv-iframe]");
 
-    const raw = String(deptNode?.technical || "").trim();
-    let explicitUrl = extractFirstUrl(raw);
-    if (!explicitUrl && /^www\./i.test(raw)) explicitUrl = `https://${raw}`;
-    const u = normaliseImageUrl(explicitUrl || raw, "");
+    const u = getNodeImageUrl(deptNode);
 
     const useFrame = isCanvaUrl(u);
 
@@ -3933,12 +4276,12 @@
 
     const isExperts = !!opts.isExperts;
     const sectionRaw = String(deptNode?.business?.sectionRawTitle || findNearestSectionRawTitle(deptNode) || "").trim();
-    const side = parseSideSuffix(deptNode?.title) || parseSideSuffix(sectionRaw) || "right";
+    const side = getNodeSplitSide(deptNode) || getNodeSplitSide(findNearestSectionNode(deptNode)) || parseSideSuffix(sectionRaw) || "right";
     page.classList.add(side === "left" ? "img-left" : "img-right");
 
     if (isExperts) page.classList.add("layout-experts");
 
-    setExpImage(page, deptNode.technical, firstItemImageUrl(deptNode.rows || []));
+    setExpImage(page, getNodeImageUrl(deptNode, firstItemImageUrl(deptNode.rows || [])), "");
     setPageHeadingHtml(page.querySelector("[data-exp-title]"), stripSideSuffix(String(deptNode.title || "").trim()));
 
     const b = String(deptNode.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
@@ -4037,20 +4380,16 @@
     const map = new Map();
     const order = [];
 
-    function isLabourTitle(t){
-      const s = String(t || "").trim();
-      return /^labour\b/i.test(s);
-    }
     function isUnderLabourDept(node){
       let n = node;
       while (n){
-        if (n.nodeType === "page" && n.prefix === "Dept" && isLabourTitle(n.title)) return true;
+        if (n.nodeType === "page" && n.prefix === "Dept" && isLabourDepartmentNode(n)) return true;
         n = n.parent || null;
       }
       return false;
     }
     function summaryBucketForDept(node){
-      if (isLabourTitle(node.title) || isUnderLabourDept(node)){
+      if (isLabourDepartmentNode(node) || isUnderLabourDept(node)){
         return { key: "labour", label: "Labour" };
       }
       const label = String(node.title || "").trim();
@@ -4207,7 +4546,7 @@
       ? payload.summaryRows
       : buildProjectSummaryRows(
           payload.root,
-          extractSummaryMode(deptNode?.rawTitle || deptNode?.title || "")
+          getNodeSummaryMode(deptNode)
         );
     const rows = (summaryRows || [])
       .map(row => clonePlainValue(row));
@@ -4248,10 +4587,10 @@
       }
     }
 
-    const halfUrl = normaliseImageUrl(deptNode.technical, "");
+    const halfUrl = getDeptHeadingImageUrl(deptNode);
     if (halfUrl){
       const sectionRawTitle = String(deptNode?.business?.sectionRawTitle || findNearestSectionRawTitle(deptNode) || "").trim();
-      applySplitSideClass(page, pickSplitSide(deptNode?.title, sectionRawTitle, sectionTitle));
+      applySplitSideClass(page, pickSplitSide(deptNode, findNearestSectionNode(deptNode), sectionRawTitle, sectionTitle));
       setHalfImage(page, halfUrl, "");
     } else {
       setHalfImage(page, "", "");
@@ -4333,9 +4672,10 @@
       String(opts.pageClass).split(/\s+/).filter(Boolean).forEach(cls => page.classList.add(cls));
     }
 
-    applyBg(page, deptNode.technical);
+    applyBg(page, getNodeImageUrl(deptNode));
 
-    setPageHeadingHtml(page.querySelector("[data-ty-title]"), opts.titleHtml || "Thank you");
+    const titleText = String(deptNode?.meta?.title || deptNode.title || "").trim();
+    setPageHeadingHtml(page.querySelector("[data-ty-title]"), titleText || opts.titleHtml || "Thank you");
 
     const b = String(deptNode.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
     const bEl = page.querySelector("[data-ty-blurb]");
@@ -4449,7 +4789,7 @@
   function renderSustainability(deptNode){
     const page = cloneTemplate("sustainabilityTemplate");
     page.classList.add("layout-sustainability", "on-dark");
-    const bgUrl = normaliseImageUrl(deptNode?.technical, "");
+    const bgUrl = getNodeImageUrl(deptNode);
     const bgEl = page.querySelector(".bg");
     if (bgEl){
       if (bgUrl){
@@ -4481,7 +4821,7 @@ Continuously redefining our environmental benchmarks, we hold ourselves accounta
 
     const underWrap = page.querySelector(".about-underimg");
     const imgEl = page.querySelector("[data-about-underimg]");
-    const u = normaliseImageUrl(deptNode?.technical, "");
+    const u = getNodeImageUrl(deptNode);
 
     if (imgEl){
       imgEl.removeAttribute("name");
@@ -4505,6 +4845,11 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
   /* Event Overview (unchanged logic) */
   function isEventOverviewSection(sectionNode){
+    const meta = getNodeSystemMeta(sectionNode);
+    if (String(meta?.editor || "") === CONFIG.meta.eventOverviewEditor) return true;
+    if (metaString(meta, ["templateKey", "template_key"]) === CONFIG.meta.eventOverviewRootTemplateKey) return true;
+    if (getMetaLayoutId(meta) === "event-overview") return true;
+
     const name = normalizeHeadingMatchText(stripSideSuffix(sectionNode?.title || ""));
     const target = normalizeHeadingMatchText(CONFIG.eventOverviewSectionName || "event overview");
     return name === target || name.includes(target) || (name.includes("event") && name.includes("overview"));
@@ -4785,6 +5130,15 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
   function decorateDocumentTree(node, parent){
     if (!node || typeof node !== "object") return node;
     node.parent = parent || null;
+    if (parent?.excludeFromProjectTotal){
+      node.excludeFromProjectTotal = true;
+    }
+    if (isMetaExcludedFromProjectTotal(node.systemMeta)){
+      node.excludeFromProjectTotal = true;
+    }
+    if (isMetaHidden(node.systemMeta)){
+      node.hidden = true;
+    }
     node.type = node.nodeType === "root"
       ? "document"
       : (node.prefix === "Section" ? "section" : (node.prefix === "Dept" ? "department" : node.nodeType));
@@ -4817,7 +5171,14 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
   function resolveDepartmentLayoutId(node, sectionTitle){
     const business = node?.business || {};
     const nodeMeta = node?.meta || {};
-    if (nodeMeta.layout) return nodeMeta.layout;
+    const requestedMode = getRequestedDeptLayoutMode(node);
+    const explicitLayout = String(nodeMeta.layout || "").trim();
+    if (explicitLayout === "dept-table"){
+      if (isLabourDepartmentNode(node) && requestedMode === "columns") return "labour-days";
+      if (requestedMode === "no-image") return "dept-stack";
+      return "dept-table";
+    }
+    if (explicitLayout) return explicitLayout;
     if (business.isLabourLayout) return "labour-days";
     const layoutKind = business.layoutKind || resolveDeptKind(node, sectionTitle);
     if (isFPVisualDeptTitle(node?.title || "")) return "fpvisual";
@@ -4825,15 +5186,23 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
   }
   function buildNodeMeta(node){
     const directives = (node && typeof node.directives === "object") ? node.directives : {};
+    const storageMeta = getNodeSystemMeta(node);
+    const metaLayout = getMetaLayoutId(storageMeta);
     const titleVariant = extractInlineLayoutVariant(node);
     const displayTitle = String(titleVariant.title || node?.title || "").trim();
+    const resolvedLayout = String(metaLayout || directives.layout || directives["layout-id"] || "").trim();
+    const storedVariant = toToken(metaString(storageMeta, ["layoutVariant", "layout_variant", "layout-variant", "variant", "style"]));
+    const resolvedVariant = resolvedLayout === "thankyou" && storedVariant === "alt"
+      ? "alt"
+      : String(directives.variant || directives.style || directives["layout-variant"] || titleVariant.variant || "").trim();
     return {
       directives,
+      storage: clonePlainValue(storageMeta || {}),
       rawTitle: String(node?.rawTitle || node?.title || "").trim(),
       title: displayTitle,
       slug: toToken(String(displayTitle || "").replace(/<[^>]*>/g, " ")),
-      layout: String(directives.layout || directives["layout-id"] || "").trim(),
-      variant: String(directives.variant || directives.style || directives["layout-variant"] || titleVariant.variant || "").trim(),
+      layout: resolvedLayout,
+      variant: resolvedVariant,
       theme: String(directives.theme || directives["layout-theme"] || "").trim(),
       pageClass: String(directives.pageclass || directives["page-class"] || directives.class || "").trim()
     };
@@ -4863,9 +5232,11 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
       title: node.title,
       rawTitle: node.rawTitle,
       excludeFromProjectTotal: !!node.excludeFromProjectTotal,
+      optionalHeading: !!node.optionalHeading,
       hidden: !!node.hidden,
       technical: node.technical,
       additional: node.additional,
+      systemMeta: clonePlainValue(node.systemMeta || null),
       directives: clonePlainValue(node.directives || {}),
       meta: clonePlainValue(node.meta || {}),
       business: clonePlainValue(node.business || {}),
@@ -5228,17 +5599,27 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     },
     normaliseRow(row){
       if (!row) return row;
+      const additionalInfo = extractStoredPageMeta(row.additional);
+      const technicalInfo = extractStoredPageMeta(row.technical);
+      const metaInfo = extractStoredPageMeta(row.metaText);
+      const systemMeta = mergeStoredPageMeta(row.systemMeta, additionalInfo.meta, technicalInfo.meta, metaInfo.meta);
       return {
         ...row,
         altName: String(row.altName || "").trim(),
         warehouseNotes: this.normaliseMultiline(row.warehouseNotes),
-        additional: this.normaliseMultiline(row.additional),
-        technical: String(row.technical || "").trim(),
+        additional: this.normaliseMultiline(additionalInfo.baseText),
+        technical: String(technicalInfo.baseText || "").trim(),
+        metaText: String(metaInfo.baseText || "").trim(),
+        systemMeta,
         image_url: normaliseImageUrl(row.image_url, ""),
         flag: this.normaliseFlag(row.flag),
         flagged: this.normaliseFlag(row.flagged),
-        hiddenByName: !!row.hiddenByName,
-        hiddenHeading: !!row.hiddenHeading
+        hiddenByName: !!row.hiddenByName || (!row.isPageHeading && isMetaHidden(systemMeta)),
+        hiddenHeading: !!row.hiddenHeading || (!!row.isPageHeading && isMetaHidden(systemMeta)),
+        optionalByName: !!row.optionalByName || (!row.isPageHeading && isMetaExcludedFromProjectTotal(systemMeta)),
+        optionalHeading: !!row.optionalHeading || (!!row.isPageHeading && isMetaExcludedFromProjectTotal(systemMeta)),
+        pageExcludeFromProjectTotal: !!row.pageExcludeFromProjectTotal || (!!row.isPageHeading && isMetaExcludedFromProjectTotal(systemMeta)),
+        excludeFromProjectTotal: !!row.excludeFromProjectTotal || isMetaExcludedFromProjectTotal(systemMeta)
       };
     }
   };
@@ -5389,6 +5770,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
       const business = ensureBusinessBucket(state.node);
       const sectionTitle = business.sectionTitle || state.sectionTitle || "";
       business.layoutKind = resolveDeptKind(state.node, sectionTitle);
+      business.requestedDeptLayoutMode = getRequestedDeptLayoutMode(state.node);
       business.hasHeadingImage = !!getDeptHeadingImageUrl(state.node);
       business.isLabourLayout = shouldRenderLabourDayLayout(sectionTitle, state.node, state.node.rows || []);
       business.hidden = !!state.node.hidden;
@@ -5506,7 +5888,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
       runtime,
       sectionTitle: String(source.sectionTitle || "").trim(),
       node: cloneDocumentNode(source.node),
-      summaryRows: clonePlainValue(buildProjectSummaryRows(source.root, extractSummaryMode(source.node?.title || ""))),
+      summaryRows: clonePlainValue(buildProjectSummaryRows(source.root, getNodeSummaryMode(source.node))),
       discountPercent: getProposalDiscountPercent(runtime)
     };
   }
@@ -5518,10 +5900,13 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     };
   }
   function buildDeptStackLayoutData(source){
+    const deptNodes = Array.isArray(source.deptNodes) && source.deptNodes.length
+      ? source.deptNodes
+      : (source.node ? [source.node] : []);
     return {
       runtime: buildRuntimeSnapshot(source.root),
       sectionTitle: String(source.sectionTitle || "").trim(),
-      deptNodes: (source.deptNodes || []).map(node => buildPreparedDeptNode(node))
+      deptNodes: deptNodes.map(node => buildPreparedDeptNode(node))
     };
   }
   function buildLabourDayLayoutData(source){
@@ -5541,7 +5926,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     const overviewDays = (source.overviewDays || []).map(node => {
       const clonedDay = cloneDocumentNode(node);
       clonedDay.schedule = prepareScheduleRows(clonedDay.rows || []);
-      clonedDay.dayImageUrl = normaliseDeptHeadingImageUrl(clonedDay?.technical);
+      clonedDay.dayImageUrl = getMetaImageUrl(getNodeSystemMeta(clonedDay)) || normaliseDeptHeadingImageUrl(clonedDay?.technical);
       return clonedDay;
     });
     return {
@@ -5761,7 +6146,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
     while (cursor < preparedRows.length){
       const sectionRawTitle = String(prepared.sectionRawTitle || deptNode?.business?.sectionRawTitle || findNearestSectionRawTitle(deptNode) || "").trim();
-      const splitSide = halfUrl ? pickSplitSide(deptNode?.title, sectionRawTitle, data?.sectionTitle) : "";
+      const splitSide = halfUrl ? pickSplitSide(deptNode, findNearestSectionNode(deptNode), sectionRawTitle, data?.sectionTitle) : "";
       const pageTitle = titleWithContinuedSuffix(stripSideSuffix(String(deptNode.title || "").trim()), pageIndex);
       const modelBase = createLayoutModelData(data, {
         node: cloneDocumentNode(deptNode),
@@ -6099,7 +6484,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     let pageIndex = 0;
 
     while (cursor < scheduleRows.length || pageIndex === 0){
-      const splitSide = dayImgUrl ? pickSplitSide(dayNode?.title, data?.node?.title) : "";
+      const splitSide = dayImgUrl ? pickSplitSide(dayNode, data?.node) : "";
       const dayTitle = titleWithContinuedSuffix(stripSideSuffix(String(dayNode?.title || "").trim()), pageIndex);
       const modelBase = createLayoutModelData(data, {
         mode: "overview-day",
@@ -6177,7 +6562,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     };
 
     for (const dayNode of days){
-      const imgUrl = String(dayNode?.dayImageUrl || normaliseDeptHeadingImageUrl(dayNode?.technical) || "").trim();
+      const imgUrl = String(dayNode?.dayImageUrl || getMetaImageUrl(getNodeSystemMeta(dayNode)) || normaliseDeptHeadingImageUrl(dayNode?.technical) || "").trim();
       if (imgUrl){
         flushPending();
         const dayOverviewBlurb = String(dayNode?.additional || "").trim();
@@ -6496,7 +6881,9 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
           child.prefix === "Dept" &&
           !child.hidden &&
           !child._plannedInOverview &&
+          (!child.meta?.layout || child.meta.layout === "dept-table") &&
           child.business?.layoutKind === "table-split" &&
+          !child.business?.requestedDeptLayoutMode &&
           !child.business?.hasHeadingImage &&
           !child.business?.isLabourLayout;
 
@@ -6509,7 +6896,9 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
               next.prefix === "Dept" &&
               !next.hidden &&
               !next._plannedInOverview &&
+              (!next.meta?.layout || next.meta.layout === "dept-table") &&
               next.business?.layoutKind === "table-split" &&
+              !next.business?.requestedDeptLayoutMode &&
               !next.business?.hasHeadingImage &&
               !next.business?.isLabourLayout;
             if (!canJoin) break;
@@ -7357,7 +7746,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
   });
 
   const StrictWorkflow = Object.freeze({
-    directiveSyntax: [
+    legacyDirectiveSyntax: [
       "$dept[layout=thankyou,variant=minimal,theme=light]: Thank you",
       "Dept: Thank you :: variant=minimal, theme=light",
       "Dept: Thank you - Alt"
@@ -7857,7 +8246,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 <table id="sourceItems" style="width:100%; border-collapse:collapse;">
 	<tbody>
 		<tr class="src-row" name="items:">
-			<td style="display:none"><span name="items:type">{{items.type}}</span> <span name="items:level">{{items.level}}</span> <span name="items:list_id">{{items.list_id}}</span> <span name="items:name">{{items.name}}</span> <span name="items:alt_name">{{items.alt_name}}</span> <span name="items:warehouse_notes">{{items.warehouse_notes}}</span> <span name="items:warehouse_notes_html">{{items.warehouse_notes_html}}</span> <span name="items:additional">{{items.additional}}</span> <span name="items:technical">{{items.technical}}</span> <span name="items:image_url">{{items.image_url}}</span> <span name="items:qty">{{items.qty}}</span> <span name="items:price">{{items.price}}</span> <span name="items:flagged">{{items.flagged}}</span> <span name="items:flag">{{items.flag}}</span></td>
+			<td style="display:none"><span name="items:type">{{items.type}}</span> <span name="items:level">{{items.level}}</span> <span name="items:list_id">{{items.list_id}}</span> <span name="items:name">{{items.name}}</span> <span name="items:alt_name">{{items.alt_name}}</span> <span name="items:warehouse_notes">{{items.warehouse_notes}}</span> <span name="items:warehouse_notes_html">{{items.warehouse_notes_html}}</span> <span name="items:additional">{{items.additional}}</span> <span name="items:technical">{{items.technical}}</span> <span name="items:meta">{{items.meta}}</span> <span name="items:metadata">{{items.metadata}}</span> <span name="items:page_meta">{{items.page_meta}}</span> <span name="items:image_url">{{items.image_url}}</span> <span name="items:qty">{{items.qty}}</span> <span name="items:price">{{items.price}}</span> <span name="items:flagged">{{items.flagged}}</span> <span name="items:flag">{{items.flag}}</span></td>
 		</tr>
 	</tbody>
 </table>

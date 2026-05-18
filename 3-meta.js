@@ -6,7 +6,7 @@
    * Keep this aligned with QTC-V2.html and 6-editor2.js.
    */
   var meta = {
-    version: "2026-05-05.01",
+    version: "2026-05-18.01",
     purpose: "Names the WisePageMeta envelope and editor/template identifiers stored in HireHop technical fields.",
 
     envelope: {
@@ -30,6 +30,26 @@
     labourDay: {
       editor: "genericLabourDay",
       version: 1
+    },
+
+    controlFields: {
+      renderType: "section|dept|normal",
+      layoutId: "renderer page layout id",
+      hidden: "hide heading/page from final render",
+      excludeFromProjectTotal: "exclude this heading or item from project total rollups",
+      imageUrl: "renderer image source",
+      splitSide: "left|right",
+      summaryMode: "none|dept|section",
+      layoutVariant: "alternate renderer variant, for example alt",
+      pageKind: "special renderer family, for example labour",
+      deptLayout: "labour or costing department layout mode: image|no-image|columns"
+    },
+
+    legacyTextMarkers: {
+      hidden: "//",
+      excludeFromProjectTotal: "$",
+      renderPrefix: "Section:/Dept:",
+      suffixes: "- Left/- Right/- Alt/- Dept/- Section"
     }
   };
 
@@ -39,7 +59,9 @@
       envelope: meta.envelope,
       eventOverview: meta.eventOverview,
       genericPage: meta.genericPage,
-      labourDay: meta.labourDay
+      labourDay: meta.labourDay,
+      controlFields: meta.controlFields,
+      legacyTextMarkers: meta.legacyTextMarkers
     };
   };
 

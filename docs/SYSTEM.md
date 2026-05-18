@@ -47,7 +47,7 @@ Load these in HireHop:
 The system has three sources of truth:
 
 - HireHop's supplying-list tree and item records.
-- Hidden `WisePageMeta` JSON stored inside HireHop technical/memo fields.
+- Hidden `WisePageMeta` JSON stored inside HireHop technical/memo fields. Page control logic belongs here: `renderType`, `layoutId`, `hidden`, `excludeFromProjectTotal`, `imageUrl`, `splitSide`, `summaryMode`, `layoutVariant`, `pageKind`, and `deptLayout` (`image`, `no-image`, or `columns`).
 - The QTC renderer's layout mappings and templates.
 
 When these disagree, the user experience becomes confusing. Most future improvements should reduce disagreement between those three layers.
