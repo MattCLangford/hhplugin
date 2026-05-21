@@ -1,0 +1,13 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "node",
+    "MS_TENANT_ID": "<tenant-id>",
+    "MS_CLIENT_ID": "<client-id>",
+    "MS_CLIENT_SECRET": "put-your-rotated-secret-here-locally-only",
+    "ABSENCE_MAILBOX": "<absence-mailbox>",
+    "ABSENCE_CALENDAR_ID": "<calendar-id>",
+    "ALLOWED_ORIGINS": "https://hirehop.example"
+  }
+}
