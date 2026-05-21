@@ -31,6 +31,7 @@ MS_CLIENT_SECRET=<rotated secret>
 ABSENCE_MAILBOX=<absence-mailbox>
 ABSENCE_CALENDAR_ID=<calendar id>
 ALLOWED_ORIGINS=<allowed browser origin 1>,<allowed browser origin 2>
+CAPTRACK_ABSENCE_PROXY_URL=<capacity-absence function url including function key>
 ```
 
 ## Deploy From Local PowerShell
@@ -62,3 +63,23 @@ window.WiseCapacityTrackerConfig.absence = {
 ```
 
 The tracker appends `start`, `end`, and `timezone` query parameters automatically.
+
+## Private Config Script
+
+For HireHop, avoid putting the `capacity-absence` function URL in the public plugin repo. Instead, set this app setting:
+
+```text
+CAPTRACK_ABSENCE_PROXY_URL=https://<YOUR_FUNCTION_APP_NAME>.azurewebsites.net/api/capacity-absence?code=<FUNCTION_KEY>
+```
+
+Then deploy and copy the **Get Function Url** value for `captrack-config`.
+
+Put that `captrack-config` URL in the HireHop plugin string immediately before `7-captrack.js`. The config function returns JavaScript like:
+
+```js
+window.WiseCapacityTrackerConfig = window.WiseCapacityTrackerConfig || {};
+window.WiseCapacityTrackerConfig.absence = window.WiseCapacityTrackerConfig.absence || {};
+window.WiseCapacityTrackerConfig.absence.proxyUrl = "https://...";
+```
+
+This keeps the private proxy URL out of the public GitHub repo. Browser-loaded config is still visible to authenticated HireHop users, so regenerate keys if the URL is shared outside the company.
