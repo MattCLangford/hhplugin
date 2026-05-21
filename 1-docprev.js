@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-18.3"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-21.1"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -47,7 +47,7 @@
         label: "Default",
         previewMode: "page",
         params: {
-          doc: "166",
+          doc: "167",
           engine: "1"
         }
       },
