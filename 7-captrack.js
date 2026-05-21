@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-18.7-ms365-absence-test",
+    version: "2026-05-21.1-absence-proxy",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -130,6 +130,8 @@
       error: "",
       feedUrl: "",
       feedUrlSource: "",
+      proxyUrl: "",
+      proxyUrlSource: "",
       feedKey: "",
       loadedAt: 0,
       events: [],
@@ -155,6 +157,8 @@
     refreshAbsences: function () { return ensureAbsenceFeed({ force: true, renderOnComplete: true }); },
     setAbsenceFeedUrl: setAbsenceFeedUrl,
     clearAbsenceFeedUrl: clearAbsenceFeedUrl,
+    setAbsenceProxyUrl: setAbsenceProxyUrl,
+    clearAbsenceProxyUrl: clearAbsenceProxyUrl,
     setMs365AbsenceAccessToken: setMs365AbsenceAccessToken,
     clearMs365AbsenceAccessToken: clearMs365AbsenceAccessToken,
     describe: describe,
@@ -170,6 +174,7 @@
       buildTimelineRange: buildTimelineRange,
       groupProjects: groupProjects,
       parseIcsEvents: parseIcsEvents,
+      parseAbsenceJsonEvents: parseAbsenceJsonEvents,
       normalisePersonName: normalisePersonName
     }
   };
@@ -257,6 +262,42 @@
     return describeAbsenceFeed();
   }
 
+  function setAbsenceProxyUrl(url) {
+    var proxyUrl = normaliseAbsenceProxyUrl(url);
+    if (!proxyUrl) {
+      clearAbsenceProxyUrl();
+      return describeAbsenceFeed();
+    }
+
+    state.absence.proxyUrl = proxyUrl;
+    state.absence.proxyUrlSource = "runtime";
+    state.absence.configured = true;
+    state.absence.loaded = false;
+    state.absence.error = "";
+    state.absence.loadedAt = 0;
+    state.absence.feedKey = "";
+    state.absence.events = [];
+    state.absence.byPersonKey = {};
+
+    ensureAbsenceFeed({ force: true, renderOnComplete: true });
+    return describeAbsenceFeed();
+  }
+
+  function clearAbsenceProxyUrl() {
+    state.absence.proxyUrl = "";
+    state.absence.proxyUrlSource = "";
+    state.absence.loading = false;
+    state.absence.loaded = false;
+    state.absence.error = "";
+    state.absence.feedKey = "";
+    state.absence.loadedAt = 0;
+    state.absence.events = [];
+    state.absence.byPersonKey = {};
+    state.absence.promise = null;
+    if ($("#" + CFG.overlayId).hasClass("is-visible")) render();
+    return describeAbsenceFeed();
+  }
+
   function setMs365AbsenceAccessToken(accessToken, calendarId, userPath) {
     var token = asText(accessToken);
     var id = asText(calendarId);
@@ -303,7 +344,7 @@
   function describeAbsenceFeed() {
     var resolved = resolveAbsenceSource();
     return {
-      configured: !!resolved.url || !!resolved.graph,
+      configured: !!resolved.url || !!resolved.graph || !!resolved.proxy,
       source: resolved.source || "",
       loading: !!state.absence.loading,
       loaded: !!state.absence.loaded,
@@ -698,13 +739,13 @@
     }
 
     var resolved = resolveAbsenceSource();
-    state.absence.configured = !!resolved.url || !!resolved.graph;
+    state.absence.configured = !!resolved.url || !!resolved.graph || !!resolved.proxy;
     if (resolved.url) {
       state.absence.feedUrl = resolved.url;
       state.absence.feedUrlSource = resolved.source;
     }
 
-    if (!resolved.url && !resolved.graph) {
+    if (!resolved.url && !resolved.graph && !resolved.proxy) {
       clearAbsenceRuntimeState();
       return Promise.resolve(describeAbsenceFeed());
     }
@@ -751,7 +792,67 @@
 
   function fetchAbsenceSource(source) {
     if (source && source.graph) return fetchGraphAbsenceEvents(source.graph);
+    if (source && source.proxy) return fetchAbsenceProxy(source.proxy);
     return fetchAbsenceFeed(source.url).then(parseIcsEvents);
+  }
+
+  function fetchAbsenceProxy(proxy) {
+    var url = buildAbsenceProxyUrl(proxy.url);
+    var options = {
+      method: "GET",
+      credentials: proxy.credentials || "omit",
+      referrerPolicy: "no-referrer",
+      headers: {
+        Accept: "application/json,text/calendar,text/plain,*/*"
+      }
+    };
+
+    if (window.AbortController) {
+      var controller = new window.AbortController();
+      var timeout = setTimeout(function () { controller.abort(); }, Math.max(3000, Number(CFG.absenceFeed.requestTimeoutMs) || 15000));
+      options.signal = controller.signal;
+      return window.fetch(url, options).then(function (response) {
+        clearTimeout(timeout);
+        return readAbsenceProxyResponse(response);
+      }, function (error) {
+        clearTimeout(timeout);
+        throw error;
+      });
+    }
+
+    return window.fetch(url, options).then(readAbsenceProxyResponse);
+  }
+
+  function readAbsenceProxyResponse(response) {
+    return response.text().then(function (text) {
+      var contentType = asText(response.headers && response.headers.get ? response.headers.get("content-type") : "").toLowerCase();
+      if (!response.ok) {
+        var error = new Error("Absence proxy returned HTTP " + response.status + ".");
+        error.status = response.status;
+        error.source = "proxy";
+        throw error;
+      }
+      if (contentType.indexOf("json") !== -1 || /^\s*[\[{]/.test(text)) {
+        var json = tryParseJson(text);
+        if (!json) {
+          var jsonError = new Error("Absence proxy did not return valid JSON.");
+          jsonError.source = "proxy";
+          throw jsonError;
+        }
+        return parseAbsenceJsonEvents(json);
+      }
+      return parseIcsEvents(text);
+    });
+  }
+
+  function buildAbsenceProxyUrl(url) {
+    var selected = getSelectedDateRange();
+    var separator = url.indexOf("?") === -1 ? "?" : "&";
+    return url + separator + $.param({
+      start: formatDateInput(selected.start),
+      end: formatDateInput(selected.end),
+      timezone: getGraphTimezone()
+    });
   }
 
   function fetchAbsenceFeed(url) {
@@ -900,6 +1001,8 @@
     if (error && error.name === "AbortError") return "BrightHR absence feed timed out.";
     if (error && error.source === "graph" && error.status === 401) return "Microsoft 365 calendar token expired or was rejected.";
     if (error && error.source === "graph" && error.status) return "Microsoft Graph returned HTTP " + error.status + ".";
+    if (error && error.source === "proxy" && error.status) return "Absence service returned HTTP " + error.status + ".";
+    if (error && error.source === "proxy") return "Absence service could not be read.";
     if (error && error.status) return "BrightHR absence feed returned HTTP " + error.status + ".";
     return "BrightHR absence feed could not be read. The feed may be blocked by browser CORS or unavailable.";
   }
@@ -919,6 +1022,9 @@
     var graph = resolveGraphAbsenceConfig();
     if (graph) return { graph: graph, source: "ms365-token" };
 
+    var proxy = resolveAbsenceProxyConfig();
+    if (proxy) return { proxy: proxy, source: proxy.source };
+
     var feed = resolveAbsenceFeedUrl();
     return { url: feed.url, source: feed.source };
   }
@@ -934,6 +1040,32 @@
       calendarId: calendarId,
       userPath: asText(graph.userPath) || "me"
     };
+  }
+
+  function resolveAbsenceProxyConfig() {
+    var runtimeUrl = normaliseAbsenceProxyUrl(state.absence.proxyUrl);
+    if (runtimeUrl) return { url: runtimeUrl, source: state.absence.proxyUrlSource || "runtime-proxy" };
+
+    var globalUrl = normaliseAbsenceProxyUrl(window.WiseCapacityTrackerAbsenceProxyUrl);
+    if (globalUrl) return { url: globalUrl, source: "window-proxy" };
+
+    var config = window.WiseCapacityTrackerConfig;
+    var proxyConfig = config && typeof config === "object" ? (config.absenceProxy || (config.absence && config.absence.proxy)) : null;
+    var configUrl = "";
+    if (typeof proxyConfig === "string") configUrl = proxyConfig;
+    else if (proxyConfig && typeof proxyConfig === "object") configUrl = proxyConfig.url || proxyConfig.proxyUrl;
+    if (!configUrl && config && typeof config === "object") configUrl = config.absenceProxyUrl || (config.absence && config.absence.proxyUrl);
+
+    configUrl = normaliseAbsenceProxyUrl(configUrl);
+    if (configUrl) {
+      return {
+        url: configUrl,
+        source: "window-config-proxy",
+        credentials: normaliseFetchCredentials(proxyConfig && proxyConfig.credentials)
+      };
+    }
+
+    return null;
   }
 
   function resolveAbsenceFeedUrl() {
@@ -966,7 +1098,17 @@
         getSelectedRangeKey()
       ].join(":");
     }
+    if (source && source.proxy) return getAbsenceFeedKey(source.proxy.url) + ":" + getSelectedRangeKey();
     return getAbsenceFeedKey(source && source.url);
+  }
+
+  function normaliseAbsenceProxyUrl(url) {
+    return normaliseAbsenceFeedUrl(url);
+  }
+
+  function normaliseFetchCredentials(value) {
+    var text = asText(value).toLowerCase();
+    return text === "include" || text === "same-origin" ? text : "omit";
   }
 
   function normaliseAbsenceFeedUrl(url) {
@@ -1001,6 +1143,83 @@
     try {
       if (window.localStorage) window.localStorage.removeItem(CFG.absenceFeed.localStorageKey);
     } catch (e) {}
+  }
+
+  function parseAbsenceJsonEvents(payload) {
+    var rows = [];
+    if (Array.isArray(payload)) rows = payload;
+    else if (payload && Array.isArray(payload.events)) rows = payload.events;
+    else if (payload && Array.isArray(payload.absences)) rows = payload.absences;
+    else if (payload && Array.isArray(payload.value)) rows = payload.value;
+
+    var events = [];
+    for (var i = 0; i < rows.length; i++) {
+      var event = absenceJsonEventToAbsence(rows[i], i);
+      if (event) events.push(event);
+    }
+    return events;
+  }
+
+  function absenceJsonEventToAbsence(row, index) {
+    if (!row || typeof row !== "object") return null;
+
+    var personKey = asText(firstJsonValue(row, ["personKey", "nameKey", "employeeKey"]));
+    var summary = cleanRoleValue(firstJsonText(row, ["name", "person", "employee", "summary", "title", "subject"])) || personKey;
+    var candidates = getAbsenceNameCandidates(summary);
+    if (personKey) addAbsenceNameCandidate(candidates, personKey);
+    if (!candidates.length) return null;
+
+    var startValue = firstJsonValue(row, ["start", "startDate", "dateFrom", "from"]);
+    var endExclusiveValue = firstJsonValue(row, ["endExclusive", "exclusiveEnd"]);
+    var endValue = endExclusiveValue !== "" ? endExclusiveValue : firstJsonValue(row, ["end", "endDate", "dateTo", "to"]);
+    var start = parseAbsenceJsonDate(startValue);
+    if (!start) return null;
+
+    var explicitAllDay = firstJsonValue(row, ["allDay", "isAllDay"]);
+    var allDay = explicitAllDay === "" ? (isDateOnlyAbsenceValue(startValue) && (!endValue || isDateOnlyAbsenceValue(endValue))) : parseAbsenceJsonBoolean(explicitAllDay);
+    var endExclusive = parseAbsenceJsonDate(endValue);
+    if (endExclusiveValue === "" && allDay && parseAbsenceJsonBoolean(firstJsonValue(row, ["endInclusive", "inclusiveEnd", "dateToInclusive"]))) {
+      endExclusive = endExclusive ? addDays(startOfDay(endExclusive), 1) : null;
+    }
+    if (!endExclusive) endExclusive = allDay ? addDays(start, 1) : new Date(start.getTime());
+    if (endExclusive.getTime() <= start.getTime()) endExclusive = allDay ? addDays(start, 1) : addDays(startOfDay(start), 1);
+
+    return {
+      uid: asText(firstJsonValue(row, ["uid", "id", "eventId"])) || ("proxy-absence-" + index),
+      summary: summary,
+      nameCandidates: candidates,
+      start: allDay ? startOfDay(start) : start,
+      endExclusive: allDay ? startOfDay(endExclusive) : endExclusive,
+      allDay: allDay
+    };
+  }
+
+  function firstJsonText(object, keys) {
+    return customFieldToText(firstJsonValue(object, keys));
+  }
+
+  function firstJsonValue(object, keys) {
+    var value = firstValue(object, keys);
+    if (value !== "") return value;
+    return firstValueByNormalisedKey(object, keys);
+  }
+
+  function parseAbsenceJsonDate(value) {
+    if (value && typeof value === "object") {
+      value = value.dateTime || value.date || value.value || value.display || value.text || "";
+    }
+    return parseHireHopDate(value);
+  }
+
+  function parseAbsenceJsonBoolean(value) {
+    if (value === true || value === false) return value;
+    var text = asText(value).toLowerCase();
+    return text === "1" || text === "true" || text === "yes" || text === "y";
+  }
+
+  function isDateOnlyAbsenceValue(value) {
+    if (value && typeof value === "object") value = value.dateTime || value.date || value.value || "";
+    return /^\d{4}-\d{1,2}-\d{1,2}$/.test(asText(value)) || /^\d{8}$/.test(asText(value));
   }
 
   function parseIcsEvents(text) {
