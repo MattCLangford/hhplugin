@@ -2,10 +2,10 @@
   "name": "wise-capacity-absence-proxy",
   "version": "1.0.0",
   "description": "Azure Functions proxy that returns sanitized Microsoft 365 absence calendar ranges for the Wise Capacity Tracker.",
-  "main": "src/functions/capacityAbsence.js",
+  "main": "src/functions/*.js",
   "scripts": {
     "start": "func start",
-    "test": "node --check src/functions/capacityAbsence.js"
+    "test": "node --check src/functions/capacityAbsence.js && node --check src/functions/captrackConfig.js"
   },
   "dependencies": {
     "@azure/functions": "^4.7.2"
