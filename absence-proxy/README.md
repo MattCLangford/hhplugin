@@ -32,6 +32,7 @@ ABSENCE_MAILBOX=<absence-mailbox>
 ABSENCE_CALENDAR_ID=<calendar id>
 ALLOWED_ORIGINS=<allowed browser origin 1>,<allowed browser origin 2>
 CAPTRACK_ABSENCE_PROXY_URL=<capacity-absence function url including function key>
+PERSON_ALIASES_JSON={"abigail surname":"abbi surname"}
 ```
 
 ## Deploy From Local PowerShell
@@ -83,3 +84,21 @@ window.WiseCapacityTrackerConfig.absence.proxyUrl = "https://...";
 ```
 
 This keeps the private proxy URL out of the public GitHub repo. Browser-loaded config is still visible to authenticated HireHop users, so regenerate keys if the URL is shared outside the company.
+
+## Person Aliases
+
+If the calendar and HireHop use different names, set aliases in Azure app settings. The proxy normalises both sides before matching.
+
+Preferred:
+
+```text
+PERSON_ALIASES_JSON={"abigail surname":"abbi surname"}
+```
+
+Compact alternative:
+
+```text
+PERSON_ALIASES=abigail surname=abbi surname
+```
+
+Use the exact name from the calendar event on the left and the HireHop role-field name on the right.

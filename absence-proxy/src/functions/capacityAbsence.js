@@ -23,7 +23,8 @@ app.http("capacity-absence", {
       const range = readRange(request);
       const accessToken = await getGraphAccessToken(settings);
       const graphEvents = await readCalendarView(settings, range, accessToken, context);
-      const events = graphEvents.map(toSafeAbsenceEvent).filter(Boolean);
+      const aliases = readPersonAliases();
+      const events = graphEvents.map((event) => toSafeAbsenceEvent(event, aliases)).filter(Boolean);
 
       return jsonResponse(200, {
         events,
@@ -201,10 +202,39 @@ async function readJsonResponse(response) {
   }
 }
 
-function toSafeAbsenceEvent(event) {
+function readPersonAliases() {
+  const aliases = {};
+  const raw = String(process.env.PERSON_ALIASES_JSON || "").trim();
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      Object.keys(parsed || {}).forEach((key) => {
+        const from = normalisePersonName(key);
+        const to = normalisePersonName(parsed[key]);
+        if (from && to) aliases[from] = to;
+      });
+    } catch (error) {
+      throw publicError(500, "invalid_alias_configuration", "PERSON_ALIASES_JSON must be valid JSON.");
+    }
+  }
+
+  const compact = String(process.env.PERSON_ALIASES || "").trim();
+  compact.split(",").forEach((pair) => {
+    const parts = pair.split("=");
+    if (parts.length !== 2) return;
+    const from = normalisePersonName(parts[0]);
+    const to = normalisePersonName(parts[1]);
+    if (from && to) aliases[from] = to;
+  });
+
+  return aliases;
+}
+
+function toSafeAbsenceEvent(event, aliases) {
   const subject = cleanText(event && event.subject);
   const person = extractPersonName(subject);
-  const personKey = normalisePersonName(person);
+  const rawPersonKey = normalisePersonName(person);
+  const personKey = aliases[rawPersonKey] || rawPersonKey;
   if (!personKey) return null;
 
   const start = graphDate(event && event.start);
@@ -255,6 +285,13 @@ function cleanText(value) {
 
 function stableId(value) {
   return crypto.createHash("sha256").update(value).digest("hex").slice(0, 24);
+}
+
+function publicError(status, publicCode, message) {
+  const error = new Error(message || publicCode);
+  error.status = status;
+  error.publicCode = publicCode;
+  return error;
 }
 
 function getCorsHeaders(request) {
