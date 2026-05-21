@@ -7,14 +7,14 @@
        ============================================================ */
     @font-face{
       font-family: "Lato";
-      src: url("https://myhirehop.com/php_functions/attach_download.php?id=3588&c=3198") format("truetype");
+      src: url("https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD6lJoksMuqQJ_oOKp6WBLWAfgep63azuFq_CEw2F10XIk") format("woff2");
       font-weight: 300;
       font-style: normal;
       font-display: swap;
     }
     @font-face{
       font-family: "Albra Sans";
-      src: url("https://myhirehop.com/php_functions/attach_download.php?id=3587&c=3198") format("truetype");
+      src: url("https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQC213_G_ZaoSp-sFEn3vF2dAf8RPihIYW4iMwnTB4CJaBM") format("woff2");
       font-weight: 400;
       font-style: normal;
       font-display: swap;
@@ -1795,11 +1795,11 @@
       margin: "0mm"
     }),
     assets: Object.freeze({
-      expOverlayLeftUrl: "https://myhirehop.com/php_functions/attach_download.php?id=3612&c=3198",
-      expOverlayRightUrl: "https://myhirehop.com/php_functions/attach_download.php?id=3607&c=3198",
-      logoLightUrl: "https://myhirehop.com/php_functions/attach_download.php?id=3670&c=3198",
-      logoDarkUrl: "https://myhirehop.com/php_functions/attach_download.php?id=3610&c=3198",
-      heroLogoUrl: "https://myhirehop.com/php_functions/attach_download.php?id=3671&c=3198"
+      expOverlayLeftUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQDHy_X8dr81SIeGG0NAVqhaAd5_A_wSPodxL4CQbjYSHxM",
+      expOverlayRightUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQA2VdnZp9bVTqV3FarEEW__AXeiGB--kNc-KfFQWUS_zoo",
+      logoLightUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQCCJmVqOV60Q7G-z78uHM_gASWUQXTiKHR_GOI1yWZoV-o",
+      logoDarkUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg",
+      heroLogoUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQDDcE3TTtX6S4p58a35qb5UAWO5pN8Fn_zBQf9Pov1j-Ek"
     }),
     selectors: Object.freeze({
       fields: Object.freeze({
@@ -2263,7 +2263,7 @@
       if (u.pathname.toLowerCase().includes("/_layouts/15/download.aspx")){
         return u.toString();
       }
-      const m = u.pathname.match(/^\/:(?:i|w|x|p|v|f):\/(?:s|g)\/([^\/]+)\/([^\/]+)/i);
+      const m = u.pathname.match(/^\/:(?:i|u|w|x|p|v|f):\/(?:s|g)\/([^\/]+)\/([^\/]+)/i);
       if (m){
         const siteName = m[1];
         const token    = m[2];
@@ -4119,6 +4119,18 @@
     if (!role) roleEl.style.display = "none";
     if (!blurb) blurbEl.style.display = "none";
 
+    const chevronEl = page.querySelector(".pm-chevron");
+    const chevronUrl = String(CONFIG.expOverlayRightUrl || "").trim();
+    if (chevronEl){
+      if (chevronUrl){
+        chevronEl.setAttribute("src", chevronUrl);
+        chevronEl.style.display = "";
+      } else {
+        chevronEl.removeAttribute("src");
+        chevronEl.style.display = "none";
+      }
+    }
+
     return page;
   }
 
@@ -4302,8 +4314,13 @@
         chev.removeAttribute("src");
       } else {
         const src = CONFIG.getExpOverlayUrl(side);
-        chev.src = src;
-        chev.style.display = "";
+        if (src){
+          chev.src = src;
+          chev.style.display = "";
+        } else {
+          chev.removeAttribute("src");
+          chev.style.display = "none";
+        }
       }
     }
 
@@ -7823,7 +7840,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
 <div class="bg-overlay">&nbsp;</div>
 
-<div class="hero-center"><img alt="Wise Productions" class="hero-logo" src="https://myhirehop.com/php_functions/attach_download.php?id=3609&amp;c=3198" /></div>
+<div class="hero-center"><img alt="Wise Productions" class="hero-logo" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQCPkGxljndoS70gzaL4YTmQAf7Rfl_V28sGYzgUEyvnBg4" /></div>
 
 <div class="hero-meta">
 <div class="hero-line"><span class="hero-label">CLIENT:</span> <span name="job:company">{{job.company}}</span></div>
@@ -7848,7 +7865,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
 <div class="chevrons">&nbsp;</div>
 
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="section-title-wrap">
 <div class="section-title" data-section-title="">&nbsp;</div>
@@ -7866,7 +7883,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
 <section id="deptSplitTemplate" style="display:none">
 <div class="dept-header">
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="room-reminder" data-room-reminder="">&nbsp;</div>
 
@@ -7897,7 +7914,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 <!-- CRITICAL PATH -->
 
 <section id="criticalPathTemplate" style="display:none">
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="cp-reminder" data-cp-reminder="">&nbsp;</div>
 
@@ -7937,7 +7954,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
 <div class="about-underimg is-empty"><img alt="" data-about-underimg="" /></div>
 
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="about-center">
 <div>
@@ -7958,7 +7975,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 <!-- EVENT OVERVIEW (single day) -->
 
 <section id="eventOverviewTemplate" style="display:none">
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="overview-kicker">The brief</div>
 
@@ -7988,7 +8005,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 <!-- EVENT OVERVIEW (two days) -->
 
 <section id="eventOverviewTwoColTemplate" style="display:none">
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="overview-kicker">The brief</div>
 
@@ -8029,7 +8046,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 <section id="expTemplate" style="display:none">
 <div class="exp-image is-empty"><img alt="" data-exp-image="" /></div>
 <img alt="" class="exp-chevron" data-exp-chevron="" />
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="exp-main">
 <div class="exp-title" data-exp-title="">&nbsp;</div>
@@ -8050,7 +8067,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 <!-- PM -->
 
 <section id="pmTemplate" style="display:none">
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="pm-title" data-pm-title="">&nbsp;</div>
 
@@ -8065,7 +8082,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
 <div class="pm-band">
 <div class="pm-avatar"><img alt="" data-pm-img="" /></div>
-<img alt="" class="pm-chevron" src="https://myhirehop.com/php_functions/attach_download.php?id=3607&amp;c=3198" /></div>
+<img alt="" class="pm-chevron" /></div>
 </div>
 
 <div class="footer-bar">
@@ -8083,7 +8100,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
 <div class="split-band2">&nbsp;</div>
 
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="team-title" data-team-title="">&nbsp;</div>
 
@@ -8104,7 +8121,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
 <div class="bg-overlay">&nbsp;</div>
 
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="venue-text">
 <div class="venue-kicker">Your venue</div>
@@ -8129,7 +8146,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
 <div class="bg-overlay">&nbsp;</div>
 
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="ty-body">
 <div class="ty-title-wrap">
@@ -8214,7 +8231,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 <!-- VISUAL -->
 
 <section id="visualTemplate" style="display:none">
-<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="/images/logo.jpg" /></div>
+<div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="visual-stage">
 <div class="visual-text">
