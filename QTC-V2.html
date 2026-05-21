@@ -445,10 +445,19 @@
     .layout-dept-stack-noimg.single-table-noimg-two-col .dept-single-meta .dept-blurb.is-empty{
       display: none;
     }
+    .layout-dept-stack-noimg.labour-single-table-noimg-two-col .dept-single-meta .room-reminder,
+    .layout-dept-stack-noimg.labour-single-table-noimg-two-col .dept-single-meta .dept-title,
+    .layout-dept-stack-noimg.labour-single-table-noimg-two-col .dept-single-meta .dept-blurb{
+      text-align: right;
+    }
     .layout-dept-stack-noimg.single-table-noimg-two-col .dept-single-table .table-wrap{
       margin-left: 0;
       width: 100%;
       max-width: 100%;
+    }
+    .layout-dept-stack-noimg.labour-single-table-noimg-two-col .dept-single-table .table-wrap{
+      width: 75%;
+      max-width: 75%;
     }
     .layout-dept-stack-noimg.single-table-noimg-two-col .dept-single-table{
       display: flex;
@@ -456,6 +465,12 @@
       justify-content: center;
       min-height: 0;
       height: 100%;
+    }
+    .layout-dept-stack-noimg.labour-single-table-noimg-two-col .dept-single-table{
+      justify-content: flex-start;
+      align-items: flex-start;
+      padding-top: 8mm;
+      box-sizing: border-box;
     }
     .layout-labour-days .dept-header .room-reminder,
     .layout-labour-days .dept-header .dept-title,
@@ -6241,7 +6256,12 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     const safeNodes = (data?.deptNodes || []).filter(Boolean);
     const page = cloneTemplate("deptSplitTemplate");
     page.classList.add("layout-dept-split", "layout-dept-stack-noimg");
-    if (safeNodes.length === 1) page.classList.add("single-table", "single-table-noimg-two-col");
+    if (safeNodes.length === 1){
+      page.classList.add("single-table", "single-table-noimg-two-col");
+      if (isLabourDepartmentNode(safeNodes[0])){
+        page.classList.add("labour-single-table-noimg-two-col");
+      }
+    }
 
     setHalfImage(page, "", "");
     const reminderEl = page.querySelector("[data-room-reminder]");
