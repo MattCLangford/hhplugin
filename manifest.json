@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-06-12.1",
+  "version": "2026-06-12.2",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -61,8 +61,8 @@
     {
       "file": "8-stagedesigner.js",
       "status": "active",
-      "cacheVersion": "0.1",
-      "role": "Simple staging designer that generates HireHop supplying-list stock rows from stage width, depth, height, carpet, fascia, and stair unit choices.",
+      "cacheVersion": "0.2",
+      "role": "Simple staging designer that generates HireHop listed stock rows for hire components and custom placeholder rows for carpet and fascia/felt consumables.",
       "recommendedLoadOrder": 8
     }
   ],

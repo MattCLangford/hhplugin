@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.1",
+    version: "2026-06-12.2",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -20,7 +20,6 @@
     metaEnd: "[/WiseStageDesigner]",
     marker: "wise-stage-designer",
     itemsSave: getHireHopEndpoint("itemsSave", "/php_functions/items_save.php"),
-    itemsDelete: getHireHopEndpoint("itemsDelete", "/php_functions/items_delete.php"),
     itemsTab: getHireHopSelector("itemsTab", "#items_tab"),
     toolbarHost: getHireHopSelector("toolbarHost", "#items_tab > div:first-child"),
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -30,6 +29,10 @@
     rateLimitRetryMs: getHireHopNumberValue("timings", "rateLimitRetryMs", 65000),
     saveMaxAttempts: getHireHopNumberValue("timings", "saveMaxAttempts", 2),
     deckIncrementM: 0.5,
+    carpetOverhangM: 0.2,
+    stairCarpetLinearM: 1.2,
+    feltOverlapAllowanceM: 0.5,
+    stairFeltLinearM: 1.5,
     fasciaMode: "front+sides",
     legRule: "per-deck-corners"
   };
@@ -146,7 +149,7 @@
             '<div id="' + CFG.statusId + '" class="wsd-status"></div>' +
             '<div class="wsd-actions">' +
               '<button type="button" class="wsd-btn" data-wsd-close>Cancel</button>' +
-              '<button id="' + CFG.saveId + '" type="button" class="wsd-btn wsd-btn-primary">Add / update stage kit</button>' +
+              '<button id="' + CFG.saveId + '" type="button" class="wsd-btn wsd-btn-primary">Add stage kit</button>' +
             '</div>' +
           '</div>' +
         '</div>' +
@@ -224,17 +227,10 @@
     setStatus("Saving stage kit...", "info");
 
     try {
-      var tree = getTree();
-      var stageFolderId = target && target.stageFolderId ? String(target.stageFolderId) : "";
-      var stageNode = target && target.stageNode ? target.stageNode : null;
       var parentId = target && target.parentId ? String(target.parentId) : "0";
 
-      if (stageFolderId && stageNode) {
-        await deleteGeneratedStageRows(tree, stageNode, jobId);
-      }
-
-      var savedHeading = await saveStageHeading(jobId, parentId, stageFolderId, spec, kit);
-      stageFolderId = String(savedHeading.id || stageFolderId || "");
+      var savedHeading = await saveStageHeading(jobId, parentId, "", spec, kit);
+      var stageFolderId = String(savedHeading.id || "");
       if (!stageFolderId) throw new Error("HireHop did not return the stage folder ID.");
 
       for (var i = 0; i < kit.lines.length; i++) {
@@ -280,18 +276,20 @@
       addStockLine(lines, getStairItemForHeight(spec.height), spec.treads, "Access", "User-specified stair units/treads.");
     }
 
-    var carpetArea = roundQuantity(spec.width * spec.depth);
-    var fasciaRun = calculateFasciaRun(spec);
-    addCustomLine(lines, "Carpet - " + spec.carpetColour + " (placeholder m2)", carpetArea, "Consumable placeholder. Replace with the stocked carpet item when available.", "Consumables");
-    addCustomLine(lines, "Fascia - " + spec.fasciaColour + " (placeholder linear m)", fasciaRun, "Consumable placeholder. Fascia run uses front plus both sides.", "Consumables");
+    var consumables = calculateConsumables(spec);
+    addCarpetConsumableLines(lines, spec, consumables);
+    addCustomLine(lines, "Fascia felt - " + spec.fasciaColour + " (1.8m roll linear m)", consumables.feltLinearM, "Consumable placeholder. Includes fascia run, overlap allowance, and tread felt allowance.", "Consumables");
 
     return {
       spec: spec,
       lines: lines,
       deckCount: deckCount,
       legCount: legCount,
-      carpetArea: carpetArea,
-      fasciaRun: fasciaRun
+      carpetArea: consumables.topArea,
+      carpetLinearM: consumables.carpetLinearM,
+      fasciaRun: consumables.baseFasciaRun,
+      feltLinearM: consumables.feltLinearM,
+      consumables: consumables
     };
   }
 
@@ -381,6 +379,88 @@
     return roundQuantity(spec.width + (spec.depth * 2));
   }
 
+  function calculateConsumables(spec) {
+    var overhang = Number(CFG.carpetOverhangM || 0);
+    var coveredWidth = roundQuantity(spec.width + (overhang * 2));
+    var coveredDepth = roundQuantity(spec.depth + (overhang * 2));
+    var topArea = roundQuantity(coveredWidth * coveredDepth);
+    var carpetRolls = calculateCarpetRolls(coveredDepth, coveredWidth);
+    var stairCarpetLinearM = roundQuantity(spec.treads * CFG.stairCarpetLinearM);
+    var baseFasciaRun = calculateFasciaRun(spec);
+    var feltLinearM = roundQuantity(baseFasciaRun + CFG.feltOverlapAllowanceM + (spec.treads * CFG.stairFeltLinearM));
+
+    return {
+      overhang: overhang,
+      coveredWidth: coveredWidth,
+      coveredDepth: coveredDepth,
+      topArea: topArea,
+      carpetRolls: carpetRolls,
+      stairCarpetLinearM: stairCarpetLinearM,
+      carpetLinearM: roundQuantity(sumCarpetRollLinearM(carpetRolls) + stairCarpetLinearM),
+      baseFasciaRun: baseFasciaRun,
+      feltLinearM: feltLinearM
+    };
+  }
+
+  function calculateCarpetRolls(coveredDepth, coveredWidth) {
+    var remaining = roundQuantity(coveredDepth);
+    var rolls = [];
+
+    while (remaining > 0.01) {
+      if (remaining > 4) {
+        addCarpetRoll(rolls, 4, coveredWidth);
+        remaining = roundQuantity(remaining - 4);
+      } else if (remaining > 2) {
+        addCarpetRoll(rolls, 4, coveredWidth);
+        remaining = 0;
+      } else {
+        addCarpetRoll(rolls, 2, coveredWidth);
+        remaining = 0;
+      }
+    }
+
+    return rolls;
+  }
+
+  function addCarpetRoll(rolls, width, linearM) {
+    for (var i = 0; i < rolls.length; i++) {
+      if (Number(rolls[i].width || 0) === Number(width)) {
+        rolls[i].linearM = roundQuantity(Number(rolls[i].linearM || 0) + Number(linearM || 0));
+        return;
+      }
+    }
+    rolls.push({ width: width, linearM: roundQuantity(linearM) });
+  }
+
+  function sumCarpetRollLinearM(rolls) {
+    var total = 0;
+    for (var i = 0; i < (rolls || []).length; i++) total += Number(rolls[i].linearM || 0);
+    return roundQuantity(total);
+  }
+
+  function addCarpetConsumableLines(lines, spec, consumables) {
+    for (var i = 0; i < consumables.carpetRolls.length; i++) {
+      var roll = consumables.carpetRolls[i];
+      addCustomLine(
+        lines,
+        "Carpet - " + spec.carpetColour + " (" + formatDimension(roll.width) + "m roll linear m)",
+        roll.linearM,
+        "Consumable placeholder. Stage top cover includes " + Math.round(consumables.overhang * 1000) + "mm overhang per edge.",
+        "Consumables"
+      );
+    }
+
+    if (consumables.stairCarpetLinearM > 0) {
+      addCustomLine(
+        lines,
+        "Carpet - " + spec.carpetColour + " (tread allowance linear m)",
+        consumables.stairCarpetLinearM,
+        "Consumable placeholder. Allowance for covering stair/tread units.",
+        "Consumables"
+      );
+    }
+  }
+
   async function saveStageHeading(jobId, parentId, id, spec, kit) {
     return postItemsSave({
       parent: String(parentId || "0"),
@@ -438,63 +518,6 @@
     return postItemsSave(payload, "");
   }
 
-  async function deleteGeneratedStageRows(tree, stageNode, jobId) {
-    if (!tree || !stageNode) return;
-    var ids = [];
-    var children = getDirectChildNodes(tree, stageNode);
-
-    for (var i = 0; i < children.length; i++) {
-      var child = children[i];
-      if (!child || !child.data || Number(child.data.kind) !== 3) continue;
-      if (!isGeneratedStageNode(child)) continue;
-      var id = getNodeDataId(child);
-      if (id) ids.push(id);
-    }
-
-    if (ids.length) {
-      setStatus("Removing old generated stage rows...", "info");
-      await deleteItemsDirect(ids, jobId, 3);
-    }
-  }
-
-  async function deleteItemsDirect(ids, jobId, kind) {
-    var idList = [];
-    for (var i = 0; i < (ids || []).length; i++) {
-      if (ids[i]) idList.push(String(ids[i]));
-    }
-    if (!idList.length) return;
-
-    var prefix = getTreeNodePrefixForKind(kind);
-    var prefixed = [];
-    for (var p = 0; p < idList.length; p++) prefixed.push(prefix + idList[p]);
-
-    var payload = { ids: prefixed.join(","), job: String(jobId || ""), no_availability: "0" };
-    var attempts = 0;
-
-    while (attempts < CFG.saveMaxAttempts) {
-      attempts += 1;
-      await throttleWrite();
-
-      var response = await fetch(CFG.itemsDelete, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
-        body: $.param(payload)
-      });
-
-      var text = await response.text();
-      var json = tryParseJson(text);
-
-      if (!response.ok) throw new Error("items_delete failed with status " + response.status);
-      if (isRateLimitResponse(json) && attempts < CFG.saveMaxAttempts) {
-        await waitForRateLimit();
-        continue;
-      }
-      if (json && typeof json.error !== "undefined") throw new Error(readServerMessage(json.error, "Could not delete old stage rows."));
-      return;
-    }
-  }
-
   async function postItemsSave(payload, fallbackId) {
     var attempts = 0;
 
@@ -538,12 +561,14 @@
 
     if (headingNode && isGeneratedStageNode(headingNode)) {
       var parsed = extractStageMeta(getNodeTechnical(headingNode));
+      var parent = getParentHeadingNode(tree, headingNode);
       return {
-        mode: "update",
-        stageNode: headingNode,
-        stageFolderId: getNodeDataId(headingNode),
+        mode: "create",
+        sourceStageFolderId: getNodeDataId(headingNode),
+        stageNode: null,
+        stageFolderId: "",
         parentId: getParentHeadingDataId(tree, headingNode),
-        parentTitle: getNodeTitle(getParentHeadingNode(tree, headingNode)) || "selected parent",
+        parentTitle: getNodeTitle(parent) || "selected parent",
         spec: parsed && parsed.spec ? parsed.spec : null
       };
     }
@@ -568,7 +593,7 @@
 
   function getTargetSubtitle(target) {
     if (!target) return "Creates a generated stage kit in the supplying list.";
-    if (target.mode === "update") return "Updating the selected generated stage folder.";
+    if (target.sourceStageFolderId) return "Creates another generated stage folder beside the selected stage.";
     return "Creates a generated stage folder under " + (target.parentTitle || "the selected heading") + ".";
   }
 
@@ -616,7 +641,9 @@
         deckCount: kit.deckCount,
         legCount: kit.legCount,
         carpetArea: kit.carpetArea,
+        carpetLinearM: kit.carpetLinearM,
         fasciaRun: kit.fasciaRun,
+        feltLinearM: kit.feltLinearM,
         legRule: CFG.legRule,
         fasciaMode: CFG.fasciaMode
       }
@@ -678,8 +705,8 @@
       '<div class="wsd-stage-metrics">' +
         '<span>' + esc(String(kit.deckCount)) + ' decks</span>' +
         '<span>' + esc(String(kit.legCount)) + ' legs</span>' +
-        '<span>' + esc(formatDimension(kit.carpetArea)) + ' m2 carpet</span>' +
-        '<span>' + esc(formatDimension(kit.fasciaRun)) + ' m fascia</span>' +
+        '<span>' + esc(formatDimension(kit.carpetLinearM)) + ' m carpet</span>' +
+        '<span>' + esc(formatDimension(kit.feltLinearM)) + ' m felt</span>' +
       '</div>';
   }
 
@@ -757,7 +784,7 @@
   function setBusy(isBusy) {
     $("#" + CFG.bodyId).find("input,select,button").prop("disabled", !!isBusy);
     $("#" + CFG.closeId + ",[data-wsd-close]").prop("disabled", !!isBusy);
-    $("#" + CFG.saveId).prop("disabled", !!isBusy).text(isBusy ? "Saving..." : "Add / update stage kit");
+    $("#" + CFG.saveId).prop("disabled", !!isBusy).text(isBusy ? "Saving..." : "Add stage kit");
   }
 
   function setStatus(message, tone) {
@@ -1164,11 +1191,6 @@
     return first || 0;
   }
 
-  function getTreeNodePrefixForKind(kind) {
-    var prefixes = getHireHopModuleSection("kindPrefixes") || { 0: "a", 1: "b", 2: "c", 3: "d", 4: "e", 5: "f", 6: "g" };
-    return prefixes[String(Number(kind))] || "";
-  }
-
   function getExternalHireHopModule() {
     var module = window[HIREHOP_MODULE_GLOBAL];
     return module && typeof module === "object" ? module : null;
@@ -1243,7 +1265,11 @@
           deckIncrementM: CFG.deckIncrementM,
           legRule: CFG.legRule,
           fasciaMode: CFG.fasciaMode,
-          consumables: "Carpet and fascia are custom placeholder rows until stocked consumable IDs are available."
+          carpetOverhangM: CFG.carpetOverhangM,
+          stairCarpetLinearM: CFG.stairCarpetLinearM,
+          feltOverlapAllowanceM: CFG.feltOverlapAllowanceM,
+          stairFeltLinearM: CFG.stairFeltLinearM,
+          consumables: "Carpet and fascia/felt are custom placeholder rows until stocked consumable IDs are available. Hire components are saved as listed stock rows using list_id."
         },
         stock: STOCK
       };
