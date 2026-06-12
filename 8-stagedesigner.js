@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.18",
+    version: "2026-06-12.19",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -52,7 +52,7 @@
     salesConsumablesCategoryName: "Unit 10 Consumables",
     salesConsumablesCategoryId: "1062",
     customColourValue: "__custom__",
-    stockSearchTerms: ["Deck Panel", "LiteDeck", "Litedeck", "Deck Leg", "Scaff Leg", "Stairs/Tread", "Step Unit", "Tread Kit", "Facia", "Fascia", "Staging"],
+    stockSearchTerms: ["Deck Panel", "LiteDeck", "Litedeck", "Deck Leg", "Scaff Leg", "Stairs/Tread", "Step Unit", "Tread Kit", "Facia", "Fascia", "Staging Box", "Staging"],
     fasciaSidesDefault: 3,
     legRule: "per-deck-corners"
   };
@@ -336,6 +336,8 @@
       else missingRequired.push("stair/tread unit for " + String(spec.height) + "mm stage");
     }
 
+    addStagingBoxLine(lines, sumCountValues(deckCounts), catalog, missingRequired);
+
     var consumables = calculateConsumables(spec);
     addCarpetConsumableLines(lines, spec, consumables);
     addFasciaBoardLines(lines, spec, consumables);
@@ -375,6 +377,8 @@
       if (stairItem) addStockLine(lines, stairItem, spec.treads, "Access");
       else missingRequired.push("imperial tread kit for " + formatImperialHeight(spec.height) + " stage");
     }
+
+    addStagingBoxLine(lines, deckPlan.deckCount, catalog, missingRequired);
 
     var consumables = calculateImperialConsumables(spec, catalog);
     addImperialCarpetLines(lines, spec, consumables, catalog, warnings);
@@ -651,6 +655,23 @@
     for (var i = 0; i < keys.length; i++) {
       addStockLine(lines, counts[keys[i]].item, counts[keys[i]].qty, group);
     }
+  }
+
+  function addStagingBoxLine(lines, deckCount, catalog, missingRequired) {
+    deckCount = Number(deckCount || 0);
+    if (deckCount <= 0) return;
+
+    var size = getStagingBoxSize(deckCount);
+    var item = catalog.stagingBoxes && catalog.stagingBoxes[size];
+    if (item) addStockLine(lines, item, 1, "Staging Box");
+    else missingRequired.push(capitalise(size) + " staging box");
+  }
+
+  function getStagingBoxSize(deckCount) {
+    deckCount = Number(deckCount || 0);
+    if (deckCount <= 2) return "small";
+    if (deckCount <= 6) return "medium";
+    return "large";
   }
 
   function planImperialSegments(lengthFt, sizes) {
@@ -1294,7 +1315,7 @@
 
   function looksLikeUsableStageStockName(name) {
     var text = normaliseMatchText(name);
-    return /deck|litedeck|scaff leg|deck leg|stairs|tread|step unit|fas?cia|carpet|felt|roll|cloth|fabric|velour|serge|baize|floor/.test(text);
+    return /deck|litedeck|scaff leg|deck leg|stairs|tread|step unit|fas?cia|staging box|stage box|deck box|litedeck box|carpet|felt|roll|cloth|fabric|velour|serge|baize|floor/.test(text);
   }
 
   function buildLiveStockCatalog(candidates) {
@@ -1316,6 +1337,7 @@
       addCatalogImperialStair(catalog, item);
       addCatalogImperialFascia(catalog, item);
       addCatalogImperialSoftGood(catalog, item);
+      addCatalogStagingBox(catalog, item);
     }
 
     addCatalogWarnings(catalog);
@@ -1331,7 +1353,8 @@
       !catalog.imperial.decks.length ||
       !Object.keys(catalog.imperial.legs || {}).length ||
       !catalog.imperial.stairs.length ||
-      !Object.keys(catalog.imperial.fasciaByHeight || {}).length;
+      !Object.keys(catalog.imperial.fasciaByHeight || {}).length ||
+      !hasAllStagingBoxes(catalog);
   }
 
   function getMissingStockSearchTerms(catalog) {
@@ -1344,7 +1367,15 @@
     if (!Object.keys(catalog.imperial.legs || {}).length) terms.push("Deck Leg");
     if (!catalog.imperial.stairs.length) terms.push("Tread Kit");
     if (!Object.keys(catalog.imperial.fasciaByHeight || {}).length) terms.push("Facia", "Fascia");
+    if (!catalog.stagingBoxes.small) terms.push("Small Staging Box");
+    if (!catalog.stagingBoxes.medium) terms.push("Medium Staging Box");
+    if (!catalog.stagingBoxes.large) terms.push("Large Staging Box");
     return uniqueStrings(terms).slice(0, 14);
+  }
+
+  function hasAllStagingBoxes(catalog) {
+    catalog = normaliseCatalog(catalog);
+    return !!(catalog.stagingBoxes.small && catalog.stagingBoxes.medium && catalog.stagingBoxes.large);
   }
 
   function addCatalogDeck(catalog, item) {
@@ -1485,6 +1516,24 @@
 
     if (isCarpet) catalog.imperial.carpets.push(softGood);
     if (isFelt) catalog.imperial.felts.push(softGood);
+  }
+
+  function addCatalogStagingBox(catalog, item) {
+    if (item.stockType === "sales") return;
+
+    var text = normaliseMatchText([item.name, item.altName, item.description, item.memo].join(" "));
+    if (!/staging box|stage box|deck box|litedeck box/.test(text)) return;
+
+    var size = "";
+    if (/\bsmall\b|\bsml\b/.test(text)) size = "small";
+    else if (/\bmedium\b|\bmed\b/.test(text)) size = "medium";
+    else if (/\blarge\b|\blrg\b/.test(text)) size = "large";
+    if (!size) return;
+
+    var box = cloneStockItem(item);
+    box.key = "staging-box-" + size;
+    box.size = size;
+    catalog.stagingBoxes[size] = chooseBetterStockItem(catalog.stagingBoxes[size], box);
   }
 
   function looksLikeNonConsumableSoftGood(text) {
@@ -2757,6 +2806,7 @@
       decksByKey: {},
       legs: {},
       stairs: [],
+      stagingBoxes: {},
       warnings: [],
       imperialWarnings: [],
       imperial: {
@@ -2776,6 +2826,7 @@
     catalog.decksByKey = catalog.decksByKey || {};
     catalog.legs = catalog.legs || {};
     catalog.stairs = Array.isArray(catalog.stairs) ? catalog.stairs : [];
+    catalog.stagingBoxes = catalog.stagingBoxes || {};
     catalog.warnings = Array.isArray(catalog.warnings) ? catalog.warnings : [];
     catalog.imperialWarnings = Array.isArray(catalog.imperialWarnings) ? catalog.imperialWarnings : [];
     catalog.imperial = catalog.imperial || {};
@@ -3100,6 +3151,13 @@
     counts[key] = Number(counts[key] || 0) + amount;
   }
 
+  function sumCountValues(counts) {
+    var total = 0;
+    var keys = Object.keys(counts || {});
+    for (var i = 0; i < keys.length; i++) total += Number(counts[keys[i]] || 0);
+    return total;
+  }
+
   function readNumberField($scope, field, fallback) {
     var value = Number($scope.find('[data-wsd-field="' + field + '"]').val());
     return isFinite(value) ? value : fallback;
@@ -3310,6 +3368,11 @@
 
   function normaliseWhitespace(value) {
     return $.trim(String(value || "").replace(/\s+/g, " "));
+  }
+
+  function capitalise(value) {
+    var text = String(value || "");
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
   }
 
   function formatLocalDateTime(date) {

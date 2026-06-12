@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-06-12.18",
+  "version": "2026-06-12.19",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -61,8 +61,8 @@
     {
       "file": "8-stagedesigner.js",
       "status": "active",
-      "cacheVersion": "1.8",
-      "role": "Simple metric/imperial staging designer that caches live HireHop hire stock plus imperial sales consumables, limits carpet/fascia colour choices to exact live stock colours with a custom colour fallback, imports stage rows under a generated heading that includes 3/4 sided fascia, and keeps carpet to one combined stage-top/tread row.",
+      "cacheVersion": "1.9",
+      "role": "Simple metric/imperial staging designer that caches live HireHop hire stock plus imperial sales consumables, adds the required small/medium/large staging box by deck count, limits carpet/fascia colour choices to exact live stock colours with a custom colour fallback, imports stage rows under a generated heading that includes 3/4 sided fascia, and keeps carpet to one combined stage-top/tread row.",
       "recommendedLoadOrder": 8
     }
   ],
