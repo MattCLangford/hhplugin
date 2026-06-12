@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.13",
+    version: "2026-06-12.14",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -25,6 +25,7 @@
     searchList: getHireHopEndpoint("searchList", "/php_functions/search_list.php"),
     availabilityList: getHireHopEndpoint("availabilityList", "/php_functions/availability_list.php"),
     hireStockList: getHireHopEndpoint("hireStockList", "/reports/hire_stock_list.php"),
+    salesStockList: getHireHopEndpoint("salesStockList", "/modules/consumables/list.php"),
     itemsTab: getHireHopSelector("itemsTab", "#items_tab"),
     toolbarHost: getHireHopSelector("toolbarHost", "#items_tab > div:first-child"),
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -48,7 +49,9 @@
     stagingCategoryId: "1043",
     stagingCategoryNames: ["Staging", "Unit 10 Stock"],
     stagingCategoryIds: ["1043", "505"],
-    stockSearchTerms: ["Deck Panel", "LiteDeck", "Litedeck", "Deck Leg", "Scaff Leg", "Stairs/Tread", "Step Unit", "Tread Kit", "Facia", "Fascia", "Carpet", "Felt", "Staging"],
+    salesConsumablesCategoryName: "Unit 10 Consumables",
+    salesConsumablesCategoryId: "1062",
+    stockSearchTerms: ["Deck Panel", "LiteDeck", "Litedeck", "Deck Leg", "Scaff Leg", "Stairs/Tread", "Step Unit", "Tread Kit", "Facia", "Fascia", "Staging"],
     fasciaSidesDefault: 3,
     legRule: "per-deck-corners"
   };
@@ -482,7 +485,7 @@
     for (var i = 0; i < consumables.carpetRolls.length; i++) {
       var roll = consumables.carpetRolls[i];
       var carpetItem = findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, roll.width);
-      if (carpetItem) addStockCount(stockCounts, carpetItem, roll.linearM);
+      if (carpetItem) addStockCount(stockCounts, carpetItem, getImperialSoftGoodLineQty(carpetItem, roll.linearM));
       else {
         addCustomLine(lines, "Carpet - " + spec.carpetColour + " " + formatDimension(roll.width) + "ft wide x " + formatDimension(roll.lengthM) + "ft long (stage top)", roll.count, "", "Consumables");
         warnings.push("No live imperial carpet stock matched " + spec.carpetColour + " / " + formatDimension(roll.width) + "ft; added a custom carpet row.");
@@ -491,7 +494,7 @@
 
     if (consumables.stairCarpetLinearFt > 0) {
       var treadCarpet = findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, 0);
-      if (treadCarpet) addStockCount(stockCounts, treadCarpet, consumables.stairCarpetLinearFt);
+      if (treadCarpet) addStockCount(stockCounts, treadCarpet, getImperialSoftGoodLineQty(treadCarpet, consumables.stairCarpetLinearFt));
       else addCustomLine(lines, "Carpet - " + spec.carpetColour + " (tread allowance linear ft)", consumables.stairCarpetLinearFt, "", "Consumables");
     }
 
@@ -519,12 +522,17 @@
   function addImperialFeltLine(lines, spec, consumables, catalog, warnings) {
     var feltItem = findImperialSoftGood(catalog.imperial.felts, spec.fasciaColour, 0);
     if (feltItem) {
-      addStockLine(lines, feltItem, Math.ceil(consumables.feltLinearFt), "Fascia");
+      addStockLine(lines, feltItem, getImperialSoftGoodLineQty(feltItem, consumables.feltLinearFt), "Fascia");
       return;
     }
 
     addCustomLine(lines, getImperialFeltLineName(spec, consumables), consumables.feltLinearFt, "", "Fascia");
     warnings.push("No live imperial felt stock matched " + spec.fasciaColour + "; added a custom felt row.");
+  }
+
+  function getImperialSoftGoodLineQty(item, linearFt) {
+    if (item && item.stockType === "sales") return roundUpLinearMetresFromFeet(linearFt);
+    return Math.ceil(Number(linearFt || 0) - 0.0001);
   }
 
   function getImperialFeltLineName(spec, consumables) {
@@ -586,7 +594,7 @@
     qty = roundQuantity(qty);
     if (!item || qty <= 0) return;
     lines.push({
-      kind: "stock",
+      kind: item.stockType === "sales" ? "sales" : "stock",
       group: group || "Stock",
       listId: String(item.id || ""),
       stockKey: item.key,
@@ -632,18 +640,20 @@
   }
 
   function planImperialSegments(lengthFt, sizes) {
-    var target = Math.max(1, Math.ceil(Number(lengthFt || 0) - 0.0001));
+    var scale = 100;
+    var target = Math.max(1, Math.ceil(Number(lengthFt || 0) * scale - 0.0001));
     var cleanSizes = uniqueNumbers(sizes).filter(function (size) { return size > 0; }).sort(function (a, b) { return b - a; });
     if (!cleanSizes.length) return [];
 
-    var maxSize = cleanSizes[0];
+    var sizeUnits = cleanSizes.map(function (size) { return Math.max(1, Math.round(Number(size || 0) * scale)); });
+    var maxSize = sizeUnits[0];
     var max = target + maxSize;
     var dp = [{ total: 0, count: 0, segments: [] }];
 
     for (var current = 0; current <= max; current++) {
       if (!dp[current]) continue;
       for (var i = 0; i < cleanSizes.length; i++) {
-        var next = current + cleanSizes[i];
+        var next = current + sizeUnits[i];
         if (next > max) continue;
         var candidate = {
           total: next,
@@ -901,6 +911,7 @@
       var candidates = [];
       appendStockCandidates(candidates, readWindowStockCandidates());
       appendStockCandidates(candidates, await fetchHireStockListCandidates());
+      appendStockCandidates(candidates, await fetchSalesStockCandidates());
       appendStockCandidates(candidates, await fetchAvailabilityListCandidates(""));
 
       var catalog = buildLiveStockCatalog(candidates);
@@ -1032,6 +1043,37 @@
     return out;
   }
 
+  async function fetchSalesStockCandidates() {
+    var out = [];
+    var urls = buildSalesStockListUrls();
+
+    for (var i = 0; i < urls.length; i++) {
+      try {
+        var response = await fetch(urls[i].url, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
+        });
+        if (!response.ok) {
+          rememberStockDiagnostic(urls[i].label, response.status, "");
+          continue;
+        }
+        var text = await response.text();
+        var json = tryParseJson(text);
+        if (!json) {
+          rememberStockDiagnostic(urls[i].label, response.status, text);
+          continue;
+        }
+        appendStockCandidates(out, normaliseCandidateList(json, "sales-stock-list"));
+      } catch (err) {
+        rememberStockDiagnostic(urls[i].label, "error", getErrorMessage(err, "Sales stock list failed."));
+        warn("Sales stock list failed", err);
+      }
+    }
+
+    return out;
+  }
+
   function buildAvailabilityListUrls(term) {
     var base = CFG.availabilityList || "/php_functions/availability_list.php";
     var common = {
@@ -1086,6 +1128,21 @@
     return out;
   }
 
+  function buildSalesStockListUrls() {
+    var base = CFG.salesStockList || "/modules/consumables/list.php";
+    var catId = Number(CFG.salesConsumablesCategoryId) || String(CFG.salesConsumablesCategoryId || "");
+    var params = {
+      head: 0,
+      cats: JSON.stringify([catId]),
+      page: 1,
+      rows: 200,
+      del: 0,
+      local: formatLocalDateTime(new Date()),
+      tz: getTimezone()
+    };
+    return [endpointRequest(base, params, "sales-stock-list cat " + String(CFG.salesConsumablesCategoryId || ""))];
+  }
+
   function endpointRequest(base, params, label) {
     return {
       label: label || base,
@@ -1102,6 +1159,18 @@
   function getStockCategoryNames() {
     var names = (CFG.stagingCategoryNames || [CFG.stagingCategoryName]).slice();
     if (names.indexOf(String(CFG.stagingCategoryName)) === -1) names.unshift(String(CFG.stagingCategoryName));
+    return uniqueStrings(names);
+  }
+
+  function getAllowedStockCategoryIds() {
+    var ids = getStockCategoryIds();
+    if (CFG.salesConsumablesCategoryId) ids.push(String(CFG.salesConsumablesCategoryId));
+    return uniqueStrings(ids);
+  }
+
+  function getAllowedStockCategoryNames() {
+    var names = getStockCategoryNames();
+    if (CFG.salesConsumablesCategoryName) names.push(String(CFG.salesConsumablesCategoryName));
     return uniqueStrings(names);
   }
 
@@ -1143,7 +1212,7 @@
 
     var id = cleanStockId(getFirstField(raw, ["stock_id", "STOCK_ID", "ID", "id", "LIST_ID", "list_id", "item_id", "value"]));
     var name = cleanStockName(getFirstField(raw, ["TITLE", "title", "NAME", "name", "label", "text"]));
-    var altName = cleanStockName(getFirstField(raw, ["ALT_NAME", "alt_name", "altName", "subtitle"]));
+    var altName = cleanStockName(getFirstField(raw, ["ALT_NAME", "alt_name", "altName", "ALT_TITLE", "alt_title", "altTitle", "subtitle"]));
     var description = cleanStockName(getFirstField(raw, ["DESCRIPTION", "description", "DESC", "desc"]));
     var memo = cleanStockName(getFirstField(raw, ["MEMO", "memo", "NOTE", "note"]));
     if (!id && raw.__rowText) id = cleanStockId(extractStockIdFromText(raw.__rowText));
@@ -1163,6 +1232,7 @@
       price: parseStockPrice(raw),
       priceType: parseStockPriceType(raw),
       eventBuilderVisible: readEventBuilderVisible(raw),
+      stockType: normaliseStockType(raw, source),
       source: source || ""
     };
   }
@@ -1194,13 +1264,13 @@
 
   function isUsableStagingRecord(item) {
     if (!item || !item.name) return false;
-    if (item.status && !/active/i.test(item.status)) return false;
+    if (!isActiveStockStatus(item.status)) return false;
 
     var categoryText = normaliseMatchText([item.category, item.breadcrumbs].join(" "));
     var hasCategory = !!(item.category || item.breadcrumbs || item.categoryId);
     var categoryMatches = false;
-    var names = getStockCategoryNames();
-    var ids = getStockCategoryIds();
+    var names = getAllowedStockCategoryNames();
+    var ids = getAllowedStockCategoryIds();
     for (var n = 0; n < names.length; n++) {
       if (categoryText.indexOf(normaliseMatchText(names[n])) !== -1) categoryMatches = true;
     }
@@ -1210,6 +1280,14 @@
     if (hasCategory && !categoryMatches) return false;
 
     return looksLikeUsableStageStockName(item.name);
+  }
+
+  function isActiveStockStatus(status) {
+    if (status == null || status === "") return true;
+    var text = normaliseMatchText(status);
+    if (!text) return true;
+    if (text === "0" || text === "active") return true;
+    return /active/.test(text) && !/inactive|deleted|hidden|archived/.test(text);
   }
 
   function looksLikeUsableStageStockName(name) {
@@ -1251,9 +1329,7 @@
       !catalog.imperial.decks.length ||
       !Object.keys(catalog.imperial.legs || {}).length ||
       !catalog.imperial.stairs.length ||
-      !Object.keys(catalog.imperial.fasciaByHeight || {}).length ||
-      !catalog.imperial.carpets.length ||
-      !catalog.imperial.felts.length;
+      !Object.keys(catalog.imperial.fasciaByHeight || {}).length;
   }
 
   function getMissingStockSearchTerms(catalog) {
@@ -1266,8 +1342,6 @@
     if (!Object.keys(catalog.imperial.legs || {}).length) terms.push("Deck Leg");
     if (!catalog.imperial.stairs.length) terms.push("Tread Kit");
     if (!Object.keys(catalog.imperial.fasciaByHeight || {}).length) terms.push("Facia", "Fascia");
-    if (!catalog.imperial.carpets.length) terms.push("Carpet", "Grey Carpet", "Gray Carpet", "Black Carpet");
-    if (!catalog.imperial.felts.length) terms.push("Felt", "Black Felt", "Grey Felt", "Gray Felt");
     return uniqueStrings(terms).slice(0, 14);
   }
 
@@ -1392,11 +1466,13 @@
   }
 
   function addCatalogImperialSoftGood(catalog, item) {
+    if (item.stockType !== "sales") return;
+
     var text = normaliseMatchText([item.name, item.altName, item.description, item.memo].join(" "));
     if (looksLikeNonConsumableSoftGood(text)) return;
 
     var isFelt = /felt/.test(text);
-    var isCarpet = /carpet|floor covering|floorcovering|floor cover|roll|cloth|fabric|velour|serge|baize/.test(text) && !isFelt;
+    var isCarpet = /carpet|floor covering|floorcovering|floor cover/.test(text) && !isFelt;
     if (!isCarpet && !isFelt) return;
 
     var softGood = cloneStockItem(item);
@@ -1484,12 +1560,21 @@
     var text = String(name || "");
     var width = text.match(/(\d+(?:\.\d+)?)\s*(?:ft|')\s*(?:wide|roll|carpet|felt)/i);
     if (width) return roundQuantity(Number(width[1]));
+    var metres = text.match(/(\d+(?:\.\d+)?)\s*m\s*(?:wide|roll|carpet|felt|\))/i);
+    if (metres) return metresToFeet(Number(metres[1]));
+    var centimetres = text.match(/(\d+(?:\.\d+)?)\s*cm\s*(?:wide|roll|carpet|felt|\)|\()/i);
+    if (centimetres) return centimetresToFeet(Number(centimetres[1]));
     return 0;
   }
 
   function inferColourFromName(name) {
     var text = normaliseMatchText(name);
-    var colours = ["black", "grey", "gray", "white", "blue", "red", "green", "purple", "pink", "yellow", "orange"];
+    if (text.indexOf("anthracite") !== -1) return "grey";
+    if (text.indexOf("dark grey") !== -1 || text.indexOf("light grey") !== -1) return "grey";
+    if (text.indexOf("off white") !== -1) return "white";
+    if (text.indexOf("navy blue") !== -1) return "blue";
+    if (text.indexOf("bright red") !== -1) return "red";
+    var colours = ["black", "burgundy", "grey", "gray", "white", "blue", "red", "green", "purple", "pink", "yellow", "orange"];
     for (var i = 0; i < colours.length; i++) {
       if (text.indexOf(colours[i]) !== -1) return colours[i] === "gray" ? "grey" : colours[i];
     }
@@ -1569,6 +1654,7 @@
     var bestScore = Infinity;
     for (var i = 0; i < (items || []).length; i++) {
       var item = items[i];
+      if (item.stockType !== "sales") continue;
       if (looksLikeNonConsumableSoftGood([item.name, item.altName, item.description, item.memo].join(" "))) continue;
       var score = scoreSoftGood(item, colour, widthFt);
       if (score >= bestScore) continue;
@@ -1598,6 +1684,10 @@
   function normaliseColourName(colour) {
     var text = normaliseMatchText(colour);
     if (text === "gray") return "grey";
+    if (text === "anthracite" || text === "dark grey" || text === "light grey") return "grey";
+    if (text === "off white") return "white";
+    if (text === "navy blue") return "blue";
+    if (text === "bright red") return "red";
     return text;
   }
 
@@ -1680,6 +1770,13 @@
     if (line.kind === "stock") {
       return {
         STOCK_ID: String(line.listId || ""),
+        QTY: qty
+      };
+    }
+
+    if (line.kind === "sales") {
+      return {
+        SALES_ID: String(line.listId || ""),
         QTY: qty
       };
     }
@@ -2521,6 +2618,7 @@
       price: Number(item.price || 0),
       priceType: Number(item.priceType || 0),
       categoryId: String(item.categoryId || ""),
+      stockType: String(item.stockType || "hire"),
       colour: String(item.colour || ""),
       unitSystem: String(item.unitSystem || ""),
       eventBuilderVisible: item.eventBuilderVisible === true
@@ -2697,6 +2795,13 @@
     }
   }
 
+  function normaliseStockType(raw, source) {
+    var sourceText = normaliseMatchText(source);
+    if (/sales|consumable/.test(sourceText)) return "sales";
+    if (getFirstField(raw, ["SALES_ID", "sales_id", "salesId"])) return "sales";
+    return "hire";
+  }
+
   function normaliseMatchText(value) {
     return $.trim(String(value || "").toLowerCase().replace(/[^a-z0-9.]+/g, " "));
   }
@@ -2814,6 +2919,22 @@
     return Math.max(1, Math.ceil(value - 0.0001));
   }
 
+  function feetToMetres(value) {
+    return roundQuantity(Number(value || 0) * 0.3048);
+  }
+
+  function metresToFeet(value) {
+    return roundQuantity(Number(value || 0) / 0.3048);
+  }
+
+  function centimetresToFeet(value) {
+    return metresToFeet(Number(value || 0) / 100);
+  }
+
+  function roundUpLinearMetresFromFeet(value) {
+    return roundUpWholeMetre(Number(value || 0) * 0.3048);
+  }
+
   function clamp(value, min, max) {
     value = Number(value || 0);
     return Math.max(min, Math.min(max, value));
@@ -2921,6 +3042,7 @@
   function summariseImportRow(row) {
     if (!row) return "(none)";
     if (row.STOCK_ID) return "STOCK_ID " + row.STOCK_ID + ", QTY " + row.QTY;
+    if (row.SALES_ID) return "SALES_ID " + row.SALES_ID + ", QTY " + row.QTY;
     return "TITLE " + row.TITLE + ", QTY " + row.QTY;
   }
 
@@ -3030,17 +3152,20 @@
           imperialStairCarpetLinearFt: CFG.imperialStairCarpetLinearFt,
           imperialFeltOverlapAllowanceFt: CFG.imperialFeltOverlapAllowanceFt,
           imperialStairFeltLinearFt: CFG.imperialStairFeltLinearFt,
-          consumables: "Metric carpet and fascia/felt remain custom rows. Imperial carpet, felt, and Facia use live stock rows when matching HireHop items are found, with custom fallback rows for missing soft goods."
+          consumables: "Metric carpet and fascia/felt remain custom rows. Imperial carpet and felt use live sales stock rows when matching HireHop consumables are found; imperial Facia and hardware use hire stock."
         },
         liveStock: {
           endpoints: {
             availabilityList: CFG.availabilityList,
             searchList: CFG.searchList,
             hireStockList: CFG.hireStockList,
+            salesStockList: CFG.salesStockList,
             itemsImport: CFG.itemsImport
           },
           categories: getStockCategoryNames(),
           categoryIds: getStockCategoryIds(),
+          salesConsumablesCategory: CFG.salesConsumablesCategoryName,
+          salesConsumablesCategoryId: CFG.salesConsumablesCategoryId,
           searchTerms: CFG.stockSearchTerms.slice(),
           loadedItems: stockState.catalog ? stockState.catalog.items.length : 0,
           error: stockState.error || "",
