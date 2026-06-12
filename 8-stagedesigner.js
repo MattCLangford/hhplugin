@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.10",
+    version: "2026-06-12.11",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -306,7 +306,8 @@
 
     var consumables = calculateConsumables(spec);
     addCarpetConsumableLines(lines, spec, consumables);
-    addCustomLine(lines, getFasciaLineName(spec, consumables), consumables.feltLinearM, "", "Consumables");
+    addFasciaBoardLines(lines, spec, consumables);
+    addCustomLine(lines, getFasciaLineName(spec, consumables), consumables.feltLinearM, "", "Fascia");
 
     return {
       spec: spec,
@@ -424,9 +425,23 @@
   }
 
   function calculateFasciaRun(spec) {
-    var sides = Number(spec && spec.fasciaSides || CFG.fasciaSidesDefault);
-    if (sides >= 4) return roundQuantity((spec.width * 2) + (spec.depth * 2));
-    return roundQuantity(spec.width + (spec.depth * 2));
+    var runs = getFasciaBoardRuns(spec);
+    var total = 0;
+    for (var i = 0; i < runs.length; i++) total += Number(runs[i].length || 0);
+    return roundQuantity(total);
+  }
+
+  function getFasciaBoardRuns(spec) {
+    spec = spec || {};
+    var runs = [
+      { label: "front", length: Number(spec.width || 0) },
+      { label: "left return", length: Number(spec.depth || 0) },
+      { label: "right return", length: Number(spec.depth || 0) }
+    ];
+    if (Number(spec.fasciaSides || CFG.fasciaSidesDefault) >= 4) {
+      runs.push({ label: "rear", length: Number(spec.width || 0) });
+    }
+    return runs;
   }
 
   function calculateConsumables(spec) {
@@ -434,9 +449,11 @@
     var coveredWidth = roundQuantity(spec.width + (overhang * 2));
     var coveredDepth = roundQuantity(spec.depth + (overhang * 2));
     var topArea = roundQuantity(coveredWidth * coveredDepth);
-    var carpetRolls = calculateCarpetRolls(coveredDepth, coveredWidth);
+    var carpetRolls = calculateCarpetRolls(spec.width, spec.depth, overhang);
     var stairCarpetLinearM = roundQuantity(spec.treads * CFG.stairCarpetLinearM);
+    var fasciaBoardRuns = getFasciaBoardRuns(spec);
     var baseFasciaRun = calculateFasciaRun(spec);
+    var fasciaBoardCount = calculateFasciaBoardCount(fasciaBoardRuns);
     var stairFeltLinearM = roundQuantity(spec.treads * CFG.stairFeltLinearM);
     var feltLinearM = roundQuantity(baseFasciaRun + CFG.feltOverlapAllowanceM + stairFeltLinearM);
 
@@ -448,6 +465,8 @@
       carpetRolls: carpetRolls,
       stairCarpetLinearM: stairCarpetLinearM,
       carpetLinearM: roundQuantity(sumCarpetRollLinearM(carpetRolls) + stairCarpetLinearM),
+      fasciaBoardRuns: fasciaBoardRuns,
+      fasciaBoardCount: fasciaBoardCount,
       baseFasciaRun: baseFasciaRun,
       feltOverlapAllowanceM: CFG.feltOverlapAllowanceM,
       stairFeltLinearM: stairFeltLinearM,
@@ -464,34 +483,84 @@
       formatDimension(consumables.feltLinearM) + "m linear m)";
   }
 
-  function calculateCarpetRolls(coveredDepth, coveredWidth) {
-    var remaining = roundQuantity(coveredDepth);
+  function calculateCarpetRolls(stageWidth, stageDepth, overhang) {
+    var alongWidth = buildCarpetPlan(stageWidth, stageDepth, overhang, "width");
+    var alongDepth = buildCarpetPlan(stageDepth, stageWidth, overhang, "depth");
+    return chooseCarpetPlan(alongWidth, alongDepth).rolls;
+  }
+
+  function buildCarpetPlan(lengthM, coverM, overhang, orientation) {
+    var cutLength = roundUpWholeMetre(Number(lengthM || 0) + (Number(overhang || 0) * 2));
+    var widths = resolveCarpetWidths(coverM);
     var rolls = [];
+
+    for (var i = 0; i < widths.length; i++) {
+      addCarpetRoll(rolls, widths[i], cutLength, orientation);
+    }
+
+    return {
+      orientation: orientation,
+      rolls: rolls,
+      pieceCount: countCarpetPieces(rolls),
+      linearM: sumCarpetRollLinearM(rolls),
+      wasteM: roundQuantity(sumCarpetRollWidths(rolls) - Number(coverM || 0))
+    };
+  }
+
+  function chooseCarpetPlan(a, b) {
+    if (Number(a.linearM || 0) !== Number(b.linearM || 0)) return Number(a.linearM || 0) < Number(b.linearM || 0) ? a : b;
+    if (Number(a.pieceCount || 0) !== Number(b.pieceCount || 0)) return Number(a.pieceCount || 0) < Number(b.pieceCount || 0) ? a : b;
+    if (Number(a.wasteM || 0) !== Number(b.wasteM || 0)) return Number(a.wasteM || 0) < Number(b.wasteM || 0) ? a : b;
+    return a;
+  }
+
+  function resolveCarpetWidths(coverM) {
+    var remaining = roundQuantity(coverM);
+    var widths = [];
 
     while (remaining > 0.01) {
       if (remaining > 4) {
-        addCarpetRoll(rolls, 4, coveredWidth);
+        widths.push(4);
         remaining = roundQuantity(remaining - 4);
       } else if (remaining > 2) {
-        addCarpetRoll(rolls, 4, coveredWidth);
+        widths.push(4);
         remaining = 0;
       } else {
-        addCarpetRoll(rolls, 2, coveredWidth);
+        widths.push(2);
         remaining = 0;
       }
     }
 
-    return rolls;
+    return widths;
   }
 
-  function addCarpetRoll(rolls, width, linearM) {
+  function addCarpetRoll(rolls, width, lengthM, orientation) {
     for (var i = 0; i < rolls.length; i++) {
-      if (Number(rolls[i].width || 0) === Number(width)) {
-        rolls[i].linearM = roundQuantity(Number(rolls[i].linearM || 0) + Number(linearM || 0));
+      if (Number(rolls[i].width || 0) === Number(width) && Number(rolls[i].lengthM || 0) === Number(lengthM)) {
+        rolls[i].count += 1;
+        rolls[i].linearM = roundQuantity(Number(rolls[i].linearM || 0) + Number(lengthM || 0));
         return;
       }
     }
-    rolls.push({ width: width, linearM: roundQuantity(linearM) });
+    rolls.push({
+      width: width,
+      lengthM: roundQuantity(lengthM),
+      count: 1,
+      linearM: roundQuantity(lengthM),
+      orientation: orientation
+    });
+  }
+
+  function countCarpetPieces(rolls) {
+    var total = 0;
+    for (var i = 0; i < (rolls || []).length; i++) total += Number(rolls[i].count || 0);
+    return total;
+  }
+
+  function sumCarpetRollWidths(rolls) {
+    var total = 0;
+    for (var i = 0; i < (rolls || []).length; i++) total += Number(rolls[i].width || 0) * Number(rolls[i].count || 0);
+    return roundQuantity(total);
   }
 
   function sumCarpetRollLinearM(rolls) {
@@ -500,14 +569,20 @@
     return roundQuantity(total);
   }
 
+  function calculateFasciaBoardCount(runs) {
+    var total = 0;
+    for (var i = 0; i < (runs || []).length; i++) total += Math.ceil(Number(runs[i].length || 0));
+    return total;
+  }
+
   function addCarpetConsumableLines(lines, spec, consumables) {
     for (var i = 0; i < consumables.carpetRolls.length; i++) {
       var roll = consumables.carpetRolls[i];
       addCustomLine(
         lines,
-        "Carpet - " + spec.carpetColour + " (" + formatDimension(roll.width) + "m roll linear m)",
-        roll.linearM,
-        "Consumable placeholder. Stage top cover includes " + Math.round(consumables.overhang * 1000) + "mm overhang per edge.",
+        "Carpet - " + spec.carpetColour + " " + formatDimension(roll.width) + "m wide x " + formatDimension(roll.lengthM) + "m long (stage top)",
+        roll.count,
+        "",
         "Consumables"
       );
     }
@@ -517,8 +592,23 @@
         lines,
         "Carpet - " + spec.carpetColour + " (tread allowance linear m)",
         consumables.stairCarpetLinearM,
-        "Consumable placeholder. Allowance for covering stair/tread units.",
+        "",
         "Consumables"
+      );
+    }
+  }
+
+  function addFasciaBoardLines(lines, spec, consumables) {
+    var runs = consumables.fasciaBoardRuns || [];
+    for (var i = 0; i < runs.length; i++) {
+      var run = runs[i];
+      var qty = Math.ceil(Number(run.length || 0));
+      addCustomLine(
+        lines,
+        "Fascia board - " + run.label + " " + formatDimension(run.length) + "m run (" + String(spec.height) + "mm high x 1m sections)",
+        qty,
+        "",
+        "Fascia"
       );
     }
   }
@@ -1913,6 +2003,11 @@
 
   function roundQuantity(value) {
     return Math.round(Number(value || 0) * 100) / 100;
+  }
+
+  function roundUpWholeMetre(value) {
+    value = Number(value || 0);
+    return Math.max(1, Math.ceil(value - 0.0001));
   }
 
   function clamp(value, min, max) {

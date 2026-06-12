@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-06-12.10",
+  "version": "2026-06-12.11",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -61,8 +61,8 @@
     {
       "file": "8-stagedesigner.js",
       "status": "active",
-      "cacheVersion": "1.0",
-      "role": "Simple staging designer that caches live Staging-category HireHop stock, imports stage rows under a generated heading, and creates custom placeholder rows for carpet and fascia/felt consumables with selectable 3- or 4-side fascia runs.",
+      "cacheVersion": "1.1",
+      "role": "Simple staging designer that caches live Staging-category HireHop stock, imports stage rows under a generated heading, and creates custom placeholder rows for optimised carpet roll cuts, fascia board sections, and fascia/felt consumables with selectable 3- or 4-side fascia runs.",
       "recommendedLoadOrder": 8
     }
   ],
