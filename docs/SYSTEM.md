@@ -35,7 +35,7 @@ Load these in HireHop:
 
 `7-captrack.js` is the Wise capacity tracker. It opens as a full-page planning view and uses project-level Wise custom fields for event naming, status, revenue, tier, client, venue, and role allocation.
 
-`8-stagedesigner.js` adds a simple staging kit designer to the supplying list toolbar. It loads and caches live HireHop items from the Staging category via the availability product list, imports the generated stage rows under a stage heading using `items_import.php`, and creates custom placeholder rows only for consumables until carpet and fascia stock IDs are available. Fascia/felt can be specified as 3 or 4 sides; the custom rows include optimised carpet roll cuts, individual 1m fascia board sections by run, and the calculated felt run, overlap, tread allowance, and total linear metres.
+`8-stagedesigner.js` adds a simple staging kit designer to the supplying list toolbar. It loads and caches live HireHop items from the metric Staging category and the imperial Unit 10 Stock staging family, imports the generated stage rows under a stage heading using `items_import.php`, and keeps the existing metric consumable behaviour intact. Imperial mode uses live Litedeck, deck leg, tread kit, Facia, carpet, and felt stock where matching HireHop items are found, while metric mode still creates custom rows for optimised carpet roll cuts, individual 1m fascia board sections by run, and the calculated felt run, overlap, tread allowance, and total linear metres.
 
 ## Reference And Legacy Files
 

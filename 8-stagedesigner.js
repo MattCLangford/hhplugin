@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.11",
+    version: "2026-06-12.12",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -38,9 +38,17 @@
     stairCarpetLinearM: 1.2,
     feltOverlapAllowanceM: 0.5,
     stairFeltLinearM: 1.5,
+    imperialDeckIncrementFt: 2,
+    imperialCarpetOverhangFt: 1,
+    imperialCarpetDefaultRollWidthFt: 12,
+    imperialStairCarpetLinearFt: 4,
+    imperialFeltOverlapAllowanceFt: 2,
+    imperialStairFeltLinearFt: 5,
     stagingCategoryName: "Staging",
     stagingCategoryId: "1043",
-    stockSearchTerms: ["Deck Panel", "LiteDeck", "Scaff Leg", "Stairs/Tread", "Step Unit", "Staging"],
+    stagingCategoryNames: ["Staging", "Unit 10 Stock"],
+    stagingCategoryIds: ["1043", "505"],
+    stockSearchTerms: ["Deck Panel", "LiteDeck", "Litedeck", "Deck Leg", "Scaff Leg", "Stairs/Tread", "Step Unit", "Tread Kit", "Facia", "Fascia", "Carpet", "Felt", "Staging"],
     fasciaSidesDefault: 3,
     legRule: "per-deck-corners"
   };
@@ -143,9 +151,10 @@
               '<div class="wsd-kit-panel" data-wsd-kit>' + kitSummaryHtml(kit) + '</div>' +
             '</div>' +
             '<form class="wsd-controls" autocomplete="off">' +
-              controlNumberHtml("width", "Width", spec.width, 0.5, 40, 0.5, "m") +
-              controlNumberHtml("depth", "Depth", spec.depth, 0.5, 30, 0.5, "m") +
-              controlSelectHtml("height", "Height", String(spec.height), getLegHeightOptions(), "mm") +
+              controlSelectHtml("unitSystem", "System", spec.unitSystem || "metric", getUnitSystemOptions(), "") +
+              controlNumberHtml("width", "Width", spec.width, getLengthMin(spec), getLengthMax(spec), getLengthStep(spec), getLengthUnitLabel(spec)) +
+              controlNumberHtml("depth", "Depth", spec.depth, getLengthMin(spec), getLengthMax(spec), getLengthStep(spec), getLengthUnitLabel(spec)) +
+              controlSelectHtml("height", "Height", String(spec.height), getLegHeightOptions(stockState.catalog, spec.unitSystem), getHeightUnitSuffix(spec)) +
               controlTextHtml("carpetColour", "Carpet colour", spec.carpetColour || "Black") +
               controlTextHtml("fasciaColour", "Fascia colour", spec.fasciaColour || "Black") +
               controlSelectHtml("fasciaSides", "Fascia sides", String(spec.fasciaSides || CFG.fasciaSidesDefault), getFasciaSideOptions(), "") +
@@ -176,7 +185,14 @@
     });
 
     $overlay.find("input,select").on("input change", function () {
-      state.currentSpec = readSpecFromModal();
+      var previous = state.currentSpec || defaultSpec();
+      var next = readSpecFromModal();
+      if ($(this).attr("data-wsd-field") === "unitSystem" && previous.unitSystem !== next.unitSystem) {
+        state.currentSpec = convertSpecUnit(previous, next.unitSystem, stockState.catalog);
+        writeSpecToModal(state.currentSpec);
+      } else {
+        state.currentSpec = next;
+      }
       updateDesigner();
     });
 
@@ -195,6 +211,7 @@
   function updateDesigner() {
     var spec = normaliseSpec(state.currentSpec || readSpecFromModal(), stockState.catalog);
     state.currentSpec = spec;
+    syncUnitControls(spec, stockState.catalog);
     var kit = calculateStageKit(spec, stockState.catalog);
 
     var $overlay = $("#" + CFG.overlayId);
@@ -206,10 +223,12 @@
 
   function readSpecFromModal() {
     var $overlay = $("#" + CFG.overlayId);
+    var unitSystem = normaliseUnitSystem($overlay.find('[data-wsd-field="unitSystem"]').val() || "metric");
     return {
+      unitSystem: unitSystem,
       width: readNumberField($overlay, "width", 4),
       depth: readNumberField($overlay, "depth", 3),
-      height: readNumberField($overlay, "height", 600),
+      height: readNumberField($overlay, "height", unitSystem === "imperial" ? 24 : 600),
       carpetColour: $.trim(String($overlay.find('[data-wsd-field="carpetColour"]').val() || "Black")),
       fasciaColour: $.trim(String($overlay.find('[data-wsd-field="fasciaColour"]').val() || "Black")),
       fasciaSides: readNumberField($overlay, "fasciaSides", CFG.fasciaSidesDefault),
@@ -277,6 +296,11 @@
   function calculateStageKit(input, catalog) {
     catalog = normaliseCatalog(catalog);
     var spec = normaliseSpec(input, catalog);
+    if (spec.unitSystem === "imperial") return calculateImperialStageKit(spec, catalog);
+    return calculateMetricStageKit(spec, catalog);
+  }
+
+  function calculateMetricStageKit(spec, catalog) {
     var deckCounts = calculateDeckCounts(spec.width, spec.depth);
     var deckCount = 0;
     var lines = [];
@@ -322,6 +346,194 @@
       missingRequired: uniqueStrings(missingRequired),
       warnings: uniqueStrings(warnings)
     };
+  }
+
+  function calculateImperialStageKit(spec, catalog) {
+    var lines = [];
+    var missingRequired = [];
+    var warnings = catalog.imperialWarnings ? catalog.imperialWarnings.slice() : [];
+    var stockCounts = {};
+    var deckPlan = calculateImperialDeckPlan(spec.width, spec.depth, catalog, missingRequired);
+
+    addStockCountsToLines(lines, deckPlan.counts, "Decks");
+
+    var legCount = deckPlan.deckCount * 4;
+    var legItem = catalog.imperial.legs[String(spec.height)];
+    if (legItem) addStockLine(lines, legItem, legCount, "Legs");
+    else if (legCount > 0) missingRequired.push(formatImperialHeight(spec.height) + " deck leg");
+
+    if (spec.treads > 0) {
+      var stairItem = getImperialStairItemForHeight(spec.height, catalog);
+      if (stairItem) addStockLine(lines, stairItem, spec.treads, "Access");
+      else missingRequired.push("imperial tread kit for " + formatImperialHeight(spec.height) + " stage");
+    }
+
+    var consumables = calculateImperialConsumables(spec, catalog);
+    addImperialCarpetLines(lines, spec, consumables, catalog, warnings);
+    addImperialFasciaLines(stockCounts, spec, consumables, catalog, missingRequired);
+    addStockCountsToLines(lines, stockCounts, "Fascia");
+    addImperialFeltLine(lines, spec, consumables, catalog, warnings);
+
+    return {
+      spec: spec,
+      lines: lines,
+      deckCount: deckPlan.deckCount,
+      legCount: legCount,
+      carpetArea: consumables.topArea,
+      carpetLinearM: consumables.carpetLinearFt,
+      fasciaRun: consumables.baseFasciaRun,
+      feltLinearM: consumables.feltLinearFt,
+      consumables: consumables,
+      missingRequired: uniqueStrings(missingRequired),
+      warnings: uniqueStrings(warnings)
+    };
+  }
+
+  function calculateImperialDeckPlan(widthFt, depthFt, catalog, missingRequired) {
+    var counts = {};
+    var deckCount = 0;
+    var depthOptions = getImperialDeckDepthOptions(catalog);
+    if (!depthOptions.length) {
+      missingRequired.push("imperial LiteDeck panels");
+      return { counts: counts, deckCount: 0 };
+    }
+
+    var rowDepths = planImperialSegments(depthFt, depthOptions);
+    for (var r = 0; r < rowDepths.length; r++) {
+      var rowDepth = rowDepths[r];
+      var widthOptions = getImperialDeckWidthOptions(catalog, rowDepth);
+      if (!widthOptions.length) {
+        missingRequired.push("imperial LiteDeck panel with " + formatDimension(rowDepth) + "ft side");
+        continue;
+      }
+
+      var rowWidths = planImperialSegments(widthFt, widthOptions);
+      for (var w = 0; w < rowWidths.length; w++) {
+        var deckItem = findImperialDeckItem(catalog, rowWidths[w], rowDepth);
+        if (!deckItem) {
+          missingRequired.push("imperial LiteDeck " + formatDimension(rowWidths[w]) + "ft x " + formatDimension(rowDepth) + "ft");
+          continue;
+        }
+        addStockCount(counts, deckItem, 1);
+        deckCount += 1;
+      }
+    }
+
+    return { counts: counts, deckCount: deckCount };
+  }
+
+  function calculateImperialConsumables(spec, catalog) {
+    var overhang = Number(CFG.imperialCarpetOverhangFt || 0);
+    var coveredWidth = roundQuantity(spec.width + (overhang * 2));
+    var coveredDepth = roundQuantity(spec.depth + (overhang * 2));
+    var topArea = roundQuantity(coveredWidth * coveredDepth);
+    var carpetRolls = calculateImperialCarpetRolls(spec, catalog);
+    var stairCarpetLinearFt = roundQuantity(spec.treads * CFG.imperialStairCarpetLinearFt);
+    var fasciaBoardRuns = getFasciaBoardRuns(spec);
+    var baseFasciaRun = calculateFasciaRun(spec);
+    var stairFeltLinearFt = roundQuantity(spec.treads * CFG.imperialStairFeltLinearFt);
+    var feltLinearFt = roundQuantity(baseFasciaRun + CFG.imperialFeltOverlapAllowanceFt + stairFeltLinearFt);
+
+    return {
+      overhang: overhang,
+      coveredWidth: coveredWidth,
+      coveredDepth: coveredDepth,
+      topArea: topArea,
+      carpetRolls: carpetRolls,
+      stairCarpetLinearFt: stairCarpetLinearFt,
+      carpetLinearFt: roundQuantity(sumCarpetRollLinearM(carpetRolls) + stairCarpetLinearFt),
+      fasciaBoardRuns: fasciaBoardRuns,
+      baseFasciaRun: baseFasciaRun,
+      feltOverlapAllowanceFt: CFG.imperialFeltOverlapAllowanceFt,
+      stairFeltLinearFt: stairFeltLinearFt,
+      feltLinearFt: feltLinearFt
+    };
+  }
+
+  function calculateImperialCarpetRolls(spec, catalog) {
+    var widths = getImperialCarpetRollWidths(catalog, spec.carpetColour);
+    if (!widths.length) widths = [CFG.imperialCarpetDefaultRollWidthFt];
+
+    var alongWidth = buildCarpetPlanWithWidths(spec.width, spec.depth, CFG.imperialCarpetOverhangFt, widths, "width");
+    var alongDepth = buildCarpetPlanWithWidths(spec.depth, spec.width, CFG.imperialCarpetOverhangFt, widths, "depth");
+    return chooseCarpetPlan(alongWidth, alongDepth).rolls;
+  }
+
+  function buildCarpetPlanWithWidths(lengthFt, coverFt, overhangFt, widths, orientation) {
+    var cutLength = roundUpWholeMetre(Number(lengthFt || 0) + (Number(overhangFt || 0) * 2));
+    var selectedWidths = planImperialSegments(coverFt, widths);
+    var rolls = [];
+
+    for (var i = 0; i < selectedWidths.length; i++) {
+      addCarpetRoll(rolls, selectedWidths[i], cutLength, orientation);
+    }
+
+    return {
+      orientation: orientation,
+      rolls: rolls,
+      pieceCount: countCarpetPieces(rolls),
+      linearM: sumCarpetRollLinearM(rolls),
+      wasteM: roundQuantity(sumCarpetRollWidths(rolls) - Number(coverFt || 0))
+    };
+  }
+
+  function addImperialCarpetLines(lines, spec, consumables, catalog, warnings) {
+    var stockCounts = {};
+    for (var i = 0; i < consumables.carpetRolls.length; i++) {
+      var roll = consumables.carpetRolls[i];
+      var carpetItem = findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, roll.width);
+      if (carpetItem) addStockCount(stockCounts, carpetItem, roll.linearM);
+      else {
+        addCustomLine(lines, "Carpet - " + spec.carpetColour + " " + formatDimension(roll.width) + "ft wide x " + formatDimension(roll.lengthM) + "ft long (stage top)", roll.count, "", "Consumables");
+        warnings.push("No live imperial carpet stock matched " + spec.carpetColour + " / " + formatDimension(roll.width) + "ft; added a custom carpet row.");
+      }
+    }
+
+    if (consumables.stairCarpetLinearFt > 0) {
+      var treadCarpet = findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, 0);
+      if (treadCarpet) addStockCount(stockCounts, treadCarpet, consumables.stairCarpetLinearFt);
+      else addCustomLine(lines, "Carpet - " + spec.carpetColour + " (tread allowance linear ft)", consumables.stairCarpetLinearFt, "", "Consumables");
+    }
+
+    addStockCountsToLines(lines, stockCounts, "Consumables");
+  }
+
+  function addImperialFasciaLines(stockCounts, spec, consumables, catalog, missingRequired) {
+    var fasciaItems = catalog.imperial.fasciaByHeight[String(spec.height)] || [];
+    if (!fasciaItems.length) {
+      missingRequired.push(formatImperialHeight(spec.height) + " imperial Facia");
+      return;
+    }
+
+    for (var i = 0; i < consumables.fasciaBoardRuns.length; i++) {
+      var run = consumables.fasciaBoardRuns[i];
+      var lengths = planImperialSegments(run.length, getImperialFasciaLengths(fasciaItems));
+      for (var j = 0; j < lengths.length; j++) {
+        var fasciaItem = findImperialFasciaItem(fasciaItems, lengths[j]);
+        if (fasciaItem) addStockCount(stockCounts, fasciaItem, 1);
+        else missingRequired.push(formatImperialHeight(spec.height) + " x " + formatDimension(lengths[j]) + "ft Facia");
+      }
+    }
+  }
+
+  function addImperialFeltLine(lines, spec, consumables, catalog, warnings) {
+    var feltItem = findImperialSoftGood(catalog.imperial.felts, spec.fasciaColour, 0);
+    if (feltItem) {
+      addStockLine(lines, feltItem, Math.ceil(consumables.feltLinearFt), "Fascia");
+      return;
+    }
+
+    addCustomLine(lines, getImperialFeltLineName(spec, consumables), consumables.feltLinearFt, "", "Fascia");
+    warnings.push("No live imperial felt stock matched " + spec.fasciaColour + "; added a custom felt row.");
+  }
+
+  function getImperialFeltLineName(spec, consumables) {
+    return "Fascia felt - " + spec.fasciaColour +
+      " (" + String(spec.fasciaSides) + " sides: " +
+      formatDimension(consumables.baseFasciaRun) + "ft run + " +
+      formatDimension(consumables.feltOverlapAllowanceFt) + "ft overlap + " +
+      formatDimension(consumables.stairFeltLinearFt) + "ft treads = " +
+      formatDimension(consumables.feltLinearFt) + "ft linear ft)";
   }
 
   function calculateDeckCounts(width, depth) {
@@ -398,6 +610,71 @@
       price: 0,
       priceType: 0
     });
+  }
+
+  function addStockCount(counts, item, qty) {
+    qty = roundQuantity(qty);
+    if (!item || qty <= 0) return;
+    var key = String(item.id || item.key || item.name || "");
+    if (!key) return;
+    if (!counts[key]) counts[key] = { item: item, qty: 0 };
+    counts[key].qty = roundQuantity(Number(counts[key].qty || 0) + qty);
+  }
+
+  function addStockCountsToLines(lines, counts, group) {
+    var keys = Object.keys(counts || {});
+    keys.sort(function (a, b) {
+      return String(counts[a].item.name || "").localeCompare(String(counts[b].item.name || ""));
+    });
+    for (var i = 0; i < keys.length; i++) {
+      addStockLine(lines, counts[keys[i]].item, counts[keys[i]].qty, group);
+    }
+  }
+
+  function planImperialSegments(lengthFt, sizes) {
+    var target = Math.max(1, Math.ceil(Number(lengthFt || 0) - 0.0001));
+    var cleanSizes = uniqueNumbers(sizes).filter(function (size) { return size > 0; }).sort(function (a, b) { return b - a; });
+    if (!cleanSizes.length) return [];
+
+    var maxSize = cleanSizes[0];
+    var max = target + maxSize;
+    var dp = [{ total: 0, count: 0, segments: [] }];
+
+    for (var current = 0; current <= max; current++) {
+      if (!dp[current]) continue;
+      for (var i = 0; i < cleanSizes.length; i++) {
+        var next = current + cleanSizes[i];
+        if (next > max) continue;
+        var candidate = {
+          total: next,
+          count: dp[current].count + 1,
+          segments: dp[current].segments.concat([cleanSizes[i]])
+        };
+        if (!dp[next] || isBetterSegmentPlan(candidate, dp[next], target)) dp[next] = candidate;
+      }
+    }
+
+    var best = null;
+    for (var total = target; total <= max; total++) {
+      if (!dp[total]) continue;
+      if (!best || isBetterSegmentPlan(dp[total], best, target)) best = dp[total];
+    }
+
+    return best ? best.segments : [];
+  }
+
+  function isBetterSegmentPlan(candidate, current, target) {
+    var candidateWaste = Math.max(0, Number(candidate.total || 0) - target);
+    var currentWaste = Math.max(0, Number(current.total || 0) - target);
+    if (candidateWaste !== currentWaste) return candidateWaste < currentWaste;
+    if (candidate.count !== current.count) return candidate.count < current.count;
+    return largestSegment(candidate.segments) > largestSegment(current.segments);
+  }
+
+  function largestSegment(segments) {
+    var largest = 0;
+    for (var i = 0; i < (segments || []).length; i++) largest = Math.max(largest, Number(segments[i] || 0));
+    return largest;
   }
 
   function getStairItemForHeight(height, catalog) {
@@ -756,7 +1033,6 @@
 
   function buildAvailabilityListUrls(term) {
     var base = CFG.availabilityList || "/php_functions/availability_list.php";
-    var catId = Number(CFG.stagingCategoryId) || CFG.stagingCategoryId;
     var common = {
       head: 0,
       date: formatLocalDateTime(new Date()),
@@ -773,32 +1049,48 @@
       virtual: 1,
       version: 2
     };
-    var cats = [catId];
+    var out = [];
+    var ids = getStockCategoryIds();
 
-    return [
-      endpointRequest(base, extendObject(common, { head: CFG.stagingCategoryId, cats: "" }), "availability head " + term),
-      endpointRequest(base, extendObject(common, { cats: JSON.stringify(cats) }), "availability cats-json " + term),
-      endpointRequest(base, extendObject(common, { cats: CFG.stagingCategoryId }), "availability cats-id " + term),
-      endpointRequest(base, extendObject(common, { cat: CFG.stagingCategoryId }), "availability cat " + term),
-      endpointRequest(base, extendObject(common, { headings_sel: CFG.stagingCategoryId }), "availability heading " + term)
-    ];
+    for (var i = 0; i < ids.length; i++) {
+      var catId = Number(ids[i]) || ids[i];
+      var cats = [catId];
+      out.push(endpointRequest(base, extendObject(common, { head: ids[i], cats: "" }), "availability head " + ids[i] + " " + term));
+      out.push(endpointRequest(base, extendObject(common, { cats: JSON.stringify(cats) }), "availability cats-json " + ids[i] + " " + term));
+      out.push(endpointRequest(base, extendObject(common, { cats: ids[i] }), "availability cats-id " + ids[i] + " " + term));
+      out.push(endpointRequest(base, extendObject(common, { cat: ids[i] }), "availability cat " + ids[i] + " " + term));
+      out.push(endpointRequest(base, extendObject(common, { headings_sel: ids[i] }), "availability heading " + ids[i] + " " + term));
+    }
+
+    return out;
   }
 
   function buildSearchListUrls(term) {
     var base = CFG.searchList || "/php_functions/search_list.php";
-    return [
-      endpointRequest(base, { term: term, stock: 1, category: CFG.stagingCategoryName }, "search term " + term),
-      endpointRequest(base, { q: term, stock: 1, category_id: CFG.stagingCategoryId }, "search q " + term),
-      endpointRequest(base, { search: term, stock: 1, cat: CFG.stagingCategoryId }, "search generic " + term)
-    ];
+    var out = [endpointRequest(base, { term: term, stock: 1 }, "search unscoped " + term)];
+    var names = getStockCategoryNames();
+    var ids = getStockCategoryIds();
+
+    for (var n = 0; n < names.length; n++) {
+      out.push(endpointRequest(base, { term: term, stock: 1, category: names[n] }, "search term " + names[n] + " " + term));
+    }
+    for (var i = 0; i < ids.length; i++) {
+      out.push(endpointRequest(base, { q: term, stock: 1, category_id: ids[i] }, "search q " + ids[i] + " " + term));
+      out.push(endpointRequest(base, { search: term, stock: 1, cat: ids[i] }, "search generic " + ids[i] + " " + term));
+    }
+
+    return out;
   }
 
   function buildHireStockListUrls() {
     var base = CFG.hireStockList || "/reports/hire_stock_list.php";
-    return [
-      endpointRequest(base, { cat: CFG.stagingCategoryId, depot: 0, local: formatLocalDateTime(new Date()), tz: getTimezone() }, "hire-stock-list cat"),
-      endpointRequest(base, { cat: 0, depot: 0, local: formatLocalDateTime(new Date()), tz: getTimezone() }, "hire-stock-list all")
-    ];
+    var out = [];
+    var ids = getStockCategoryIds();
+    for (var i = 0; i < ids.length; i++) {
+      out.push(endpointRequest(base, { cat: ids[i], depot: 0, local: formatLocalDateTime(new Date()), tz: getTimezone() }, "hire-stock-list cat " + ids[i]));
+    }
+    out.push(endpointRequest(base, { cat: 0, depot: 0, local: formatLocalDateTime(new Date()), tz: getTimezone() }, "hire-stock-list all"));
+    return out;
   }
 
   function endpointRequest(base, params, label) {
@@ -806,6 +1098,18 @@
       label: label || base,
       url: base + (base.indexOf("?") === -1 ? "?" : "&") + $.param(params || {})
     };
+  }
+
+  function getStockCategoryIds() {
+    var ids = (CFG.stagingCategoryIds || [CFG.stagingCategoryId]).slice();
+    if (ids.indexOf(String(CFG.stagingCategoryId)) === -1) ids.unshift(String(CFG.stagingCategoryId));
+    return uniqueStrings(ids);
+  }
+
+  function getStockCategoryNames() {
+    var names = (CFG.stagingCategoryNames || [CFG.stagingCategoryName]).slice();
+    if (names.indexOf(String(CFG.stagingCategoryName)) === -1) names.unshift(String(CFG.stagingCategoryName));
+    return uniqueStrings(names);
   }
 
   function normaliseCandidateList(value, source) {
@@ -846,6 +1150,7 @@
 
     var id = cleanStockId(getFirstField(raw, ["stock_id", "STOCK_ID", "ID", "id", "LIST_ID", "list_id", "item_id", "value"]));
     var name = cleanStockName(getFirstField(raw, ["TITLE", "title", "NAME", "name", "label", "text"]));
+    var altName = cleanStockName(getFirstField(raw, ["ALT_NAME", "alt_name", "altName", "subtitle"]));
     if (!id && raw.__rowText) id = cleanStockId(extractStockIdFromText(raw.__rowText));
     if (!name && raw.__rowText) name = extractStockNameFromText(raw.__rowText);
     if (!id || !name) return null;
@@ -853,6 +1158,7 @@
     return {
       id: String(id),
       name: name,
+      altName: altName,
       category: readStockCategoryName(raw),
       categoryId: readStockCategoryId(raw),
       breadcrumbs: readStockBreadcrumbs(raw),
@@ -895,7 +1201,15 @@
 
     var categoryText = normaliseMatchText([item.category, item.breadcrumbs].join(" "));
     var hasCategory = !!(item.category || item.breadcrumbs || item.categoryId);
-    var categoryMatches = categoryText.indexOf(normaliseMatchText(CFG.stagingCategoryName)) !== -1 || String(item.categoryId || "") === String(CFG.stagingCategoryId);
+    var categoryMatches = false;
+    var names = getStockCategoryNames();
+    var ids = getStockCategoryIds();
+    for (var n = 0; n < names.length; n++) {
+      if (categoryText.indexOf(normaliseMatchText(names[n])) !== -1) categoryMatches = true;
+    }
+    for (var c = 0; c < ids.length; c++) {
+      if (String(item.categoryId || "") === String(ids[c])) categoryMatches = true;
+    }
     if (hasCategory && !categoryMatches) return false;
 
     return looksLikeUsableStageStockName(item.name);
@@ -903,7 +1217,7 @@
 
   function looksLikeUsableStageStockName(name) {
     var text = normaliseMatchText(name);
-    return /deck|litedeck|scaff leg|stairs|tread|step unit/.test(text);
+    return /deck|litedeck|scaff leg|deck leg|stairs|tread|step unit|fas?cia|carpet|felt/.test(text);
   }
 
   function buildLiveStockCatalog(candidates) {
@@ -920,6 +1234,11 @@
       addCatalogDeck(catalog, item);
       addCatalogLeg(catalog, item);
       addCatalogStair(catalog, item);
+      addCatalogImperialDeck(catalog, item);
+      addCatalogImperialLeg(catalog, item);
+      addCatalogImperialStair(catalog, item);
+      addCatalogImperialFascia(catalog, item);
+      addCatalogImperialSoftGood(catalog, item);
     }
 
     addCatalogWarnings(catalog);
@@ -977,6 +1296,292 @@
     catalog.stairs.push(stair);
   }
 
+  function addCatalogImperialDeck(catalog, item) {
+    var text = normaliseMatchText(item.name + " " + (item.altName || ""));
+    if (!/litedeck|stage deck/.test(text)) return;
+    if (/handrail|triangle|quarter|circle|brace|coupler/.test(text)) return;
+
+    var dims = parseImperialRectangle(item.name);
+    if (!dims || dims.widthFt <= 0 || dims.depthFt <= 0) return;
+
+    var deck = cloneStockItem(item);
+    deck.key = "imperial-deck-" + formatDimension(dims.widthFt) + "x" + formatDimension(dims.depthFt);
+    deck.widthFt = dims.widthFt;
+    deck.depthFt = dims.depthFt;
+    deck.unitSystem = "imperial";
+    catalog.imperial.decks.push(deck);
+  }
+
+  function addCatalogImperialLeg(catalog, item) {
+    var text = normaliseMatchText(item.name + " " + (item.altName || ""));
+    if (!/deck leg|screw jack/.test(text)) return;
+    if (/tread/.test(text)) return;
+
+    var height = parseImperialLegHeight(item.name);
+    if (!height) return;
+
+    var leg = cloneStockItem(item);
+    leg.key = "imperial-leg-" + String(height);
+    leg.height = height;
+    leg.heightIn = height;
+    leg.unitSystem = "imperial";
+    catalog.imperial.legs[String(height)] = chooseBetterStockItem(catalog.imperial.legs[String(height)], leg);
+  }
+
+  function addCatalogImperialStair(catalog, item) {
+    var text = normaliseMatchText(item.name + " " + (item.altName || ""));
+    if (!/tread|step/.test(text)) return;
+    if (/fas?cia|scaff leg/.test(text)) return;
+
+    var stair = cloneStockItem(item);
+    stair.key = "imperial-stair-" + String(item.id || catalog.imperial.stairs.length);
+    stair.minHeight = 0;
+    stair.maxHeight = 9999;
+    if (/single|one step|1 step/.test(text)) stair.maxHeight = 12;
+    else if (/two|2 step/.test(text)) stair.maxHeight = 24;
+
+    var upTo = item.name.match(/up\s+to\s+(\d+)\s*ft/i);
+    if (upTo) stair.maxHeight = Number(upTo[1]) * 12;
+
+    catalog.imperial.stairs.push(stair);
+  }
+
+  function addCatalogImperialFascia(catalog, item) {
+    var text = normaliseMatchText(item.name);
+    if (!/fas?cia/.test(text)) return;
+
+    var dims = parseImperialRectangle(item.name);
+    if (!dims || dims.heightIn <= 0 || dims.lengthFt <= 0) return;
+
+    var fascia = cloneStockItem(item);
+    fascia.key = "imperial-fascia-" + String(dims.heightIn) + "x" + formatDimension(dims.lengthFt);
+    fascia.height = dims.heightIn;
+    fascia.heightIn = dims.heightIn;
+    fascia.lengthFt = dims.lengthFt;
+    fascia.unitSystem = "imperial";
+
+    var key = String(dims.heightIn);
+    if (!catalog.imperial.fasciaByHeight[key]) catalog.imperial.fasciaByHeight[key] = [];
+    catalog.imperial.fasciaByHeight[key].push(fascia);
+  }
+
+  function addCatalogImperialSoftGood(catalog, item) {
+    var text = normaliseMatchText(item.name + " " + (item.altName || ""));
+    var isCarpet = /carpet/.test(text);
+    var isFelt = /felt/.test(text);
+    if (!isCarpet && !isFelt) return;
+
+    var softGood = cloneStockItem(item);
+    softGood.key = (isCarpet ? "imperial-carpet-" : "imperial-felt-") + String(item.id || "");
+    softGood.colour = inferColourFromName(item.name);
+    softGood.widthFt = parseImperialRollWidth(item.name);
+    softGood.unitSystem = "imperial";
+
+    if (isCarpet) catalog.imperial.carpets.push(softGood);
+    if (isFelt) catalog.imperial.felts.push(softGood);
+  }
+
+  function parseImperialRectangle(name) {
+    var match = String(name || "").match(/(\d+(?:\.\d+)?\s*ft\s*\d*(?:\.\d+)?|\d+(?:\.\d+)?\s*(?:in|["']))\s*x\s*(\d+(?:\.\d+)?\s*ft\s*\d*(?:\.\d+)?|\d+(?:\.\d+)?\s*(?:in|["']))/i);
+    if (!match) return null;
+
+    var first = match[1];
+    var second = match[2];
+    var firstHeight = parseImperialHeightToken(first);
+    var firstLength = parseImperialLengthToken(first);
+    var secondLength = parseImperialLengthToken(second);
+
+    if (/fas?cia/i.test(String(name || ""))) {
+      return {
+        heightIn: firstHeight,
+        lengthFt: secondLength,
+        widthFt: 0,
+        depthFt: 0
+      };
+    }
+
+    return {
+      widthFt: firstLength,
+      depthFt: secondLength,
+      heightIn: 0,
+      lengthFt: 0
+    };
+  }
+
+  function parseImperialLegHeight(name) {
+    var text = String(name || "");
+    var quoted = text.match(/(\d+(?:\.\d+)?)\s*"/);
+    if (quoted) return roundQuantity(Number(quoted[1]));
+
+    var inches = text.match(/(\d+(?:\.\d+)?)\s*in\b/i);
+    if (inches) return roundQuantity(Number(inches[1]));
+
+    var feet = text.match(/(\d+(?:\.\d+)?)\s*ft\b/i);
+    if (feet) return roundQuantity(Number(feet[1]) * 12);
+
+    return 0;
+  }
+
+  function parseImperialHeightToken(token) {
+    token = $.trim(String(token || "").toLowerCase());
+    var ftIn = token.match(/(\d+(?:\.\d+)?)\s*ft\s*(\d+(?:\.\d+)?)?/);
+    if (ftIn) return roundQuantity((Number(ftIn[1]) * 12) + Number(ftIn[2] || 0));
+
+    var inches = token.match(/(\d+(?:\.\d+)?)\s*(?:in|")/);
+    if (inches) return roundQuantity(Number(inches[1]));
+
+    var quoteFeet = token.match(/(\d+(?:\.\d+)?)\s*'/);
+    if (quoteFeet) return roundQuantity(Number(quoteFeet[1]) * 12);
+
+    return 0;
+  }
+
+  function parseImperialLengthToken(token) {
+    token = $.trim(String(token || "").toLowerCase());
+    var feet = token.match(/(\d+(?:\.\d+)?)\s*(?:ft|')/);
+    if (feet) return roundQuantity(Number(feet[1]));
+
+    var inches = token.match(/(\d+(?:\.\d+)?)\s*(?:in|")/);
+    if (inches) return roundQuantity(Number(inches[1]) / 12);
+
+    return 0;
+  }
+
+  function parseImperialRollWidth(name) {
+    var text = String(name || "");
+    var width = text.match(/(\d+(?:\.\d+)?)\s*(?:ft|')\s*(?:wide|roll|carpet|felt)/i);
+    if (width) return roundQuantity(Number(width[1]));
+    return 0;
+  }
+
+  function inferColourFromName(name) {
+    var text = normaliseMatchText(name);
+    var colours = ["black", "grey", "gray", "white", "blue", "red", "green", "purple", "pink", "yellow", "orange"];
+    for (var i = 0; i < colours.length; i++) {
+      if (text.indexOf(colours[i]) !== -1) return colours[i] === "gray" ? "grey" : colours[i];
+    }
+    return "";
+  }
+
+  function getImperialDeckDepthOptions(catalog) {
+    var out = [];
+    for (var i = 0; i < catalog.imperial.decks.length; i++) {
+      out.push(catalog.imperial.decks[i].widthFt);
+      out.push(catalog.imperial.decks[i].depthFt);
+    }
+    return uniqueNumbers(out);
+  }
+
+  function getImperialDeckWidthOptions(catalog, rowDepth) {
+    var out = [];
+    for (var i = 0; i < catalog.imperial.decks.length; i++) {
+      var deck = catalog.imperial.decks[i];
+      if (dimensionsClose(deck.depthFt, rowDepth)) out.push(deck.widthFt);
+      if (dimensionsClose(deck.widthFt, rowDepth)) out.push(deck.depthFt);
+    }
+    return uniqueNumbers(out);
+  }
+
+  function findImperialDeckItem(catalog, widthFt, depthFt) {
+    var best = null;
+    for (var i = 0; i < catalog.imperial.decks.length; i++) {
+      var deck = catalog.imperial.decks[i];
+      if (!dimensionsMatchImperial(deck.widthFt, deck.depthFt, widthFt, depthFt)) continue;
+      best = chooseBetterStockItem(best, deck);
+    }
+    return best;
+  }
+
+  function getImperialStairItemForHeight(height, catalog) {
+    var best = null;
+    var bestMax = Infinity;
+    for (var i = 0; i < catalog.imperial.stairs.length; i++) {
+      var stair = catalog.imperial.stairs[i];
+      if (Number(stair.maxHeight || 9999) < Number(height || 0)) continue;
+      if (Number(stair.maxHeight || 9999) < bestMax) {
+        best = stair;
+        bestMax = Number(stair.maxHeight || 9999);
+      }
+    }
+    return best || catalog.imperial.stairs[0] || null;
+  }
+
+  function getImperialFasciaLengths(items) {
+    var out = [];
+    for (var i = 0; i < (items || []).length; i++) out.push(items[i].lengthFt);
+    return uniqueNumbers(out);
+  }
+
+  function findImperialFasciaItem(items, lengthFt) {
+    var best = null;
+    for (var i = 0; i < (items || []).length; i++) {
+      if (!dimensionsClose(items[i].lengthFt, lengthFt)) continue;
+      best = chooseBetterStockItem(best, items[i]);
+    }
+    return best;
+  }
+
+  function getImperialCarpetRollWidths(catalog, colour) {
+    var out = [];
+    for (var i = 0; i < catalog.imperial.carpets.length; i++) {
+      var item = catalog.imperial.carpets[i];
+      if (!colourMatches(item.colour, colour)) continue;
+      if (item.widthFt > 0) out.push(item.widthFt);
+    }
+    return uniqueNumbers(out);
+  }
+
+  function findImperialSoftGood(items, colour, widthFt) {
+    var best = null;
+    var bestScore = Infinity;
+    for (var i = 0; i < (items || []).length; i++) {
+      var item = items[i];
+      var score = scoreSoftGood(item, colour, widthFt);
+      if (score >= bestScore) continue;
+      best = item;
+      bestScore = score;
+    }
+    return best;
+  }
+
+  function scoreSoftGood(item, colour, widthFt) {
+    var score = 0;
+    var requestedColour = normaliseColourName(colour);
+    if (requestedColour && item.colour && item.colour !== requestedColour) score += 20;
+    else if (requestedColour && item.colour === requestedColour) score -= 5;
+    else if (requestedColour && !item.colour) score += 2;
+
+    if (Number(widthFt || 0) > 0) {
+      if (item.widthFt > 0) score += Math.abs(Number(item.widthFt || 0) - Number(widthFt || 0));
+      else score += 3;
+    }
+
+    if (item.eventBuilderVisible) score -= 1;
+    if (item.price > 0) score += item.price / 1000;
+    return score;
+  }
+
+  function normaliseColourName(colour) {
+    var text = normaliseMatchText(colour);
+    if (text === "gray") return "grey";
+    return text;
+  }
+
+  function colourMatches(itemColour, requestedColour) {
+    var requested = normaliseColourName(requestedColour);
+    var item = normaliseColourName(itemColour);
+    return !requested || !item || item === requested;
+  }
+
+  function dimensionsClose(a, b) {
+    return Math.abs(Number(a || 0) - Number(b || 0)) < 0.001;
+  }
+
+  function dimensionsMatchImperial(a, b, width, depth) {
+    return (dimensionsClose(a, width) && dimensionsClose(b, depth)) ||
+      (dimensionsClose(a, depth) && dimensionsClose(b, width));
+  }
+
   function addCatalogWarnings(catalog) {
     var requiredDecks = ["deck-2x1", "deck-2x0.5", "deck-1x1", "deck-1x0.5", "deck-0.5x0.5"];
     for (var i = 0; i < requiredDecks.length; i++) {
@@ -984,6 +1589,13 @@
     }
     if (!Object.keys(catalog.legs).length) catalog.warnings.push("Missing live scaff leg stock.");
     if (!catalog.stairs.length) catalog.warnings.push("Missing live stair/tread stock.");
+
+    if (!catalog.imperial.decks.length) catalog.imperialWarnings.push("Missing live imperial LiteDeck stock.");
+    if (!Object.keys(catalog.imperial.legs).length) catalog.imperialWarnings.push("Missing live imperial deck leg stock.");
+    if (!catalog.imperial.stairs.length) catalog.imperialWarnings.push("Missing live imperial tread kit stock.");
+    if (!Object.keys(catalog.imperial.fasciaByHeight).length) catalog.imperialWarnings.push("Missing live imperial Facia stock.");
+    if (!catalog.imperial.carpets.length) catalog.imperialWarnings.push("Missing live imperial carpet stock.");
+    if (!catalog.imperial.felts.length) catalog.imperialWarnings.push("Missing live imperial felt stock.");
   }
 
   async function saveStageHeading(jobId, parentId, id, spec, kit) {
@@ -1206,6 +1818,7 @@
 
   function defaultSpec() {
     return {
+      unitSystem: "metric",
       width: 4,
       depth: 3,
       height: 600,
@@ -1218,9 +1831,24 @@
 
   function parseSpecFromStageTitle(title) {
     var raw = String(title || "");
-    var match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d+(?:\.\d+)?)m?\s*@\s*(\d{3,4})mm\s+(.+?)\s*\/\s*(.+?)\s*-\s*(\d+)\s*treads?/i);
+    var match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)ft\s*x\s*(\d+(?:\.\d+)?)ft\s*@\s*(.+?)\s+(.+?)\s*\/\s*(.+?)\s*-\s*(\d+)\s*treads?/i);
     if (match) {
       return {
+        unitSystem: "imperial",
+        width: Number(match[1]),
+        depth: Number(match[2]),
+        height: parseImperialHeightToken(match[3]),
+        carpetColour: $.trim(match[4]) || "Black",
+        fasciaColour: $.trim(match[5]) || "Black",
+        fasciaSides: CFG.fasciaSidesDefault,
+        treads: Number(match[6])
+      };
+    }
+
+    match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d+(?:\.\d+)?)m?\s*@\s*(\d{3,4})mm\s+(.+?)\s*\/\s*(.+?)\s*-\s*(\d+)\s*treads?/i);
+    if (match) {
+      return {
+        unitSystem: "metric",
         width: Number(match[1]),
         depth: Number(match[2]),
         height: Number(match[3]),
@@ -1234,6 +1862,7 @@
     match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d{3,4})mm/i);
     if (!match) return null;
     return {
+      unitSystem: "metric",
       width: Number(match[1]),
       depth: Number(match[2]),
       height: Number(match[3]),
@@ -1246,13 +1875,16 @@
 
   function normaliseSpec(spec, catalog) {
     spec = spec || {};
-    var heights = getLegHeights(catalog);
-    var height = Number(spec.height || 600);
-    if (heights.indexOf(height) === -1) height = closestNumber(height, heights, 600);
+    var unitSystem = normaliseUnitSystem(spec.unitSystem);
+    var heights = getLegHeights(catalog, unitSystem);
+    var fallbackHeight = unitSystem === "imperial" ? 24 : 600;
+    var height = Number(spec.height || fallbackHeight);
+    if (heights.indexOf(height) === -1) height = closestNumber(height, heights, fallbackHeight);
 
     return {
-      width: clamp(roundToIncrement(spec.width, CFG.deckIncrementM), 0.5, 40),
-      depth: clamp(roundToIncrement(spec.depth, CFG.deckIncrementM), 0.5, 30),
+      unitSystem: unitSystem,
+      width: clamp(roundToIncrement(spec.width, getLengthStep({ unitSystem: unitSystem })), getLengthMin({ unitSystem: unitSystem }), getLengthMax({ unitSystem: unitSystem })),
+      depth: clamp(roundToIncrement(spec.depth, getLengthStep({ unitSystem: unitSystem })), getLengthMin({ unitSystem: unitSystem }), getLengthMax({ unitSystem: unitSystem })),
       height: height,
       carpetColour: $.trim(String(spec.carpetColour || "Black")) || "Black",
       fasciaColour: $.trim(String(spec.fasciaColour || "Black")) || "Black",
@@ -1262,12 +1894,21 @@
   }
 
   function getStageFolderTitle(spec) {
+    if (spec.unitSystem === "imperial") {
+      return "Stage - " + formatDimension(spec.width) + "ft x " + formatDimension(spec.depth) + "ft @ " +
+        formatImperialHeight(spec.height) + " " + spec.carpetColour + " / " + spec.fasciaColour + " - " +
+        String(spec.treads) + " " + (Number(spec.treads) === 1 ? "tread" : "treads");
+    }
+
     return "Stage - " + formatDimension(spec.width) + "m x " + formatDimension(spec.depth) + "m @ " +
       String(spec.height) + "mm " + spec.carpetColour + " / " + spec.fasciaColour + " - " +
       String(spec.treads) + " " + (Number(spec.treads) === 1 ? "tread" : "treads");
   }
 
   function getStageSpecLabel(spec) {
+    if (spec.unitSystem === "imperial") {
+      return formatDimension(spec.width) + "ft x " + formatDimension(spec.depth) + "ft x " + formatImperialHeight(spec.height);
+    }
     return formatDimension(spec.width) + "m x " + formatDimension(spec.depth) + "m x " + String(spec.height) + "mm";
   }
 
@@ -1284,8 +1925,9 @@
   }
 
   function stagePreviewHtml(spec, kit) {
-    var cols = Math.max(1, Math.round(spec.width / CFG.deckIncrementM));
-    var rows = Math.max(1, Math.round(spec.depth / CFG.deckIncrementM));
+    var unitLabel = getLengthUnitLabel(spec);
+    var cols = Math.max(1, Math.round(spec.width / getLengthStep(spec)));
+    var rows = Math.max(1, Math.round(spec.depth / getLengthStep(spec)));
     var cellCount = Math.min(cols * rows, 800);
     var cells = [];
     for (var i = 0; i < cellCount; i++) cells.push('<span></span>');
@@ -1307,8 +1949,8 @@
       '<div class="wsd-stage-metrics">' +
         '<span>' + esc(String(kit.deckCount)) + ' decks</span>' +
         '<span>' + esc(String(kit.legCount)) + ' legs</span>' +
-        '<span>' + esc(formatDimension(kit.carpetLinearM)) + ' m carpet</span>' +
-        '<span>' + esc(String(spec.fasciaSides)) + ' sides / ' + esc(formatDimension(kit.feltLinearM)) + ' m felt</span>' +
+        '<span>' + esc(formatDimension(kit.carpetLinearM)) + ' ' + esc(unitLabel) + ' carpet</span>' +
+        '<span>' + esc(String(spec.fasciaSides)) + ' sides / ' + esc(formatDimension(kit.feltLinearM)) + ' ' + esc(unitLabel) + ' felt</span>' +
       '</div>';
   }
 
@@ -1359,7 +2001,7 @@
         '<span>' + esc(label) + '</span>' +
         '<div class="wsd-input-wrap">' +
           '<input data-wsd-field="' + escAttr(field) + '" type="number" value="' + escAttr(formatDimension(value)) + '" min="' + escAttr(min) + '" max="' + escAttr(max) + '" step="' + escAttr(step) + '">' +
-          (suffix ? '<em>' + esc(suffix) + '</em>' : '') +
+          (suffix ? '<em data-wsd-suffix-for="' + escAttr(field) + '">' + esc(suffix) + '</em>' : '') +
         '</div>' +
       '</label>';
   }
@@ -1380,15 +2022,25 @@
     for (var i = 0; i < options.length; i++) {
       html += '<option value="' + escAttr(options[i].value) + '"' + (String(options[i].value) === String(value) ? ' selected' : '') + '>' + esc(options[i].label) + '</option>';
     }
-    html += '</select>' + (suffix ? '<em>' + esc(suffix) + '</em>' : '') + '</div></label>';
+    html += '</select>' + (suffix || field === "height" ? '<em data-wsd-suffix-for="' + escAttr(field) + '">' + esc(suffix || "") + '</em>' : '') + '</div></label>';
     return html;
   }
 
-  function getLegHeightOptions(catalog) {
-    var heights = getLegHeights(catalog);
+  function getUnitSystemOptions() {
+    return [
+      { value: "metric", label: "Metric" },
+      { value: "imperial", label: "Imperial" }
+    ];
+  }
+
+  function getLegHeightOptions(catalog, unitSystem) {
+    var heights = getLegHeights(catalog, unitSystem);
     var out = [];
     for (var i = 0; i < heights.length; i++) {
-      out.push({ value: String(heights[i]), label: String(heights[i]) });
+      out.push({
+        value: String(heights[i]),
+        label: normaliseUnitSystem(unitSystem) === "imperial" ? formatImperialHeight(heights[i]) : String(heights[i])
+      });
     }
     return out;
   }
@@ -1400,8 +2052,12 @@
     ];
   }
 
-  function getLegHeights(catalog) {
+  function getLegHeights(catalog, unitSystem) {
     catalog = normaliseCatalog(catalog);
+    if (normaliseUnitSystem(unitSystem) === "imperial") {
+      var imperialLive = Object.keys(catalog.imperial.legs || {}).map(function (value) { return Number(value); }).filter(function (value) { return isFinite(value) && value > 0; }).sort(function (a, b) { return a - b; });
+      return imperialLive.length ? imperialLive : [8, 12, 18, 24, 36];
+    }
     var live = Object.keys(catalog.legs || {}).map(function (value) { return Number(value); }).filter(function (value) { return isFinite(value) && value > 0; }).sort(function (a, b) { return a - b; });
     return live.length ? live : [200, 270, 300, 400, 600, 800, 1000, 1200, 1600];
   }
@@ -1411,7 +2067,8 @@
     if (!$select.length) return;
 
     var current = state.currentSpec && state.currentSpec.height ? String(state.currentSpec.height) : String($select.val() || "");
-    var options = getLegHeightOptions(catalog);
+    var unitSystem = state.currentSpec && state.currentSpec.unitSystem ? state.currentSpec.unitSystem : "metric";
+    var options = getLegHeightOptions(catalog, unitSystem);
     var html = "";
     var found = false;
     for (var i = 0; i < options.length; i++) {
@@ -1421,6 +2078,83 @@
     $select.html(html);
     if (found) $select.val(current);
     else if (options.length) $select.val(String(options[0].value));
+  }
+
+  function syncUnitControls(spec, catalog) {
+    var $overlay = $("#" + CFG.overlayId);
+    if (!$overlay.length) return;
+
+    $overlay.find('[data-wsd-field="unitSystem"]').val(spec.unitSystem);
+    $overlay.find('[data-wsd-field="width"],[data-wsd-field="depth"]').attr({
+      min: getLengthMin(spec),
+      max: getLengthMax(spec),
+      step: getLengthStep(spec)
+    });
+    $overlay.find('[data-wsd-suffix-for="width"],[data-wsd-suffix-for="depth"]').text(getLengthUnitLabel(spec));
+    $overlay.find('[data-wsd-suffix-for="height"]').text(getHeightUnitSuffix(spec));
+    syncHeightOptions(catalog);
+  }
+
+  function writeSpecToModal(spec) {
+    var $overlay = $("#" + CFG.overlayId);
+    if (!$overlay.length) return;
+
+    spec = normaliseSpec(spec, stockState.catalog);
+    $overlay.find('[data-wsd-field="unitSystem"]').val(spec.unitSystem);
+    $overlay.find('[data-wsd-field="width"]').val(formatDimension(spec.width));
+    $overlay.find('[data-wsd-field="depth"]').val(formatDimension(spec.depth));
+    $overlay.find('[data-wsd-field="height"]').val(String(spec.height));
+    $overlay.find('[data-wsd-field="carpetColour"]').val(spec.carpetColour);
+    $overlay.find('[data-wsd-field="fasciaColour"]').val(spec.fasciaColour);
+    $overlay.find('[data-wsd-field="fasciaSides"]').val(String(spec.fasciaSides));
+    $overlay.find('[data-wsd-field="treads"]').val(String(spec.treads));
+    syncUnitControls(spec, stockState.catalog);
+  }
+
+  function convertSpecUnit(spec, nextUnitSystem, catalog) {
+    spec = normaliseSpec(spec || defaultSpec(), catalog);
+    nextUnitSystem = normaliseUnitSystem(nextUnitSystem);
+    if (spec.unitSystem === nextUnitSystem) return spec;
+
+    if (nextUnitSystem === "imperial") {
+      return normaliseSpec(extendObject(spec, {
+        unitSystem: "imperial",
+        width: spec.width * 3.28084,
+        depth: spec.depth * 3.28084,
+        height: spec.height / 25.4
+      }), catalog);
+    }
+
+    return normaliseSpec(extendObject(spec, {
+      unitSystem: "metric",
+      width: spec.width * 0.3048,
+      depth: spec.depth * 0.3048,
+      height: spec.height * 25.4
+    }), catalog);
+  }
+
+  function normaliseUnitSystem(value) {
+    return String(value || "").toLowerCase() === "imperial" ? "imperial" : "metric";
+  }
+
+  function getLengthStep(spec) {
+    return normaliseUnitSystem(spec && spec.unitSystem) === "imperial" ? CFG.imperialDeckIncrementFt : CFG.deckIncrementM;
+  }
+
+  function getLengthMin(spec) {
+    return normaliseUnitSystem(spec && spec.unitSystem) === "imperial" ? 2 : 0.5;
+  }
+
+  function getLengthMax(spec) {
+    return normaliseUnitSystem(spec && spec.unitSystem) === "imperial" ? 80 : 40;
+  }
+
+  function getLengthUnitLabel(spec) {
+    return normaliseUnitSystem(spec && spec.unitSystem) === "imperial" ? "ft" : "m";
+  }
+
+  function getHeightUnitSuffix(spec) {
+    return normaliseUnitSystem(spec && spec.unitSystem) === "imperial" ? "" : "mm";
   }
 
   function setBusy(isBusy) {
@@ -1689,7 +2423,16 @@
       decksByKey: {},
       legs: {},
       stairs: [],
-      warnings: []
+      warnings: [],
+      imperialWarnings: [],
+      imperial: {
+        decks: [],
+        legs: {},
+        stairs: [],
+        fasciaByHeight: {},
+        carpets: [],
+        felts: []
+      }
     };
   }
 
@@ -1700,6 +2443,14 @@
     catalog.legs = catalog.legs || {};
     catalog.stairs = Array.isArray(catalog.stairs) ? catalog.stairs : [];
     catalog.warnings = Array.isArray(catalog.warnings) ? catalog.warnings : [];
+    catalog.imperialWarnings = Array.isArray(catalog.imperialWarnings) ? catalog.imperialWarnings : [];
+    catalog.imperial = catalog.imperial || {};
+    catalog.imperial.decks = Array.isArray(catalog.imperial.decks) ? catalog.imperial.decks : [];
+    catalog.imperial.legs = catalog.imperial.legs || {};
+    catalog.imperial.stairs = Array.isArray(catalog.imperial.stairs) ? catalog.imperial.stairs : [];
+    catalog.imperial.fasciaByHeight = catalog.imperial.fasciaByHeight || {};
+    catalog.imperial.carpets = Array.isArray(catalog.imperial.carpets) ? catalog.imperial.carpets : [];
+    catalog.imperial.felts = Array.isArray(catalog.imperial.felts) ? catalog.imperial.felts : [];
     return catalog;
   }
 
@@ -1723,14 +2474,21 @@
       key: item.key || "",
       id: String(item.id || ""),
       name: String(item.name || ""),
+      altName: String(item.altName || ""),
       width: Number(item.width || 0),
       depth: Number(item.depth || 0),
+      widthFt: Number(item.widthFt || 0),
+      depthFt: Number(item.depthFt || 0),
+      lengthFt: Number(item.lengthFt || 0),
+      heightIn: Number(item.heightIn || 0),
       height: Number(item.height || 0),
       minHeight: Number(item.minHeight || 0),
       maxHeight: Number(item.maxHeight || 0),
       price: Number(item.price || 0),
       priceType: Number(item.priceType || 0),
       categoryId: String(item.categoryId || ""),
+      colour: String(item.colour || ""),
+      unitSystem: String(item.unitSystem || ""),
       eventBuilderVisible: item.eventBuilderVisible === true
     };
   }
@@ -1937,6 +2695,18 @@
     return out;
   }
 
+  function uniqueNumbers(items) {
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < (items || []).length; i++) {
+      var value = roundQuantity(items[i]);
+      if (!isFinite(value) || value <= 0 || seen[String(value)]) continue;
+      seen[String(value)] = true;
+      out.push(value);
+    }
+    return out;
+  }
+
   function normaliseIdList(ids) {
     if (ids == null) return [];
     var raw = Array.isArray(ids) ? ids : String(ids).split(",");
@@ -2031,6 +2801,15 @@
   function formatDimension(value) {
     var n = roundQuantity(value);
     return String(n).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+  }
+
+  function formatImperialHeight(value) {
+    var inches = Math.round(Number(value || 0));
+    var feet = Math.floor(inches / 12);
+    var remainder = inches % 12;
+    if (feet > 0 && remainder > 0) return String(feet) + "ft" + String(remainder);
+    if (feet > 0) return String(feet) + "ft";
+    return String(inches) + "in";
   }
 
   function getPreviewFaceHeight(height) {
@@ -2203,16 +2982,21 @@
     describe: function () {
       return {
         version: CFG.version,
-        role: "Simple staging spec designer that caches live Staging-category HireHop stock and generates supplying-list rows from width, depth, height, carpet, fascia sides, fascia colour, and stair units.",
+        role: "Simple metric/imperial staging spec designer that caches live HireHop stock and generates supplying-list rows from width, depth, height, carpet, fascia sides, fascia colour, and stair units.",
         assumptions: {
           deckIncrementM: CFG.deckIncrementM,
+          imperialDeckIncrementFt: CFG.imperialDeckIncrementFt,
           legRule: CFG.legRule,
           fasciaSidesDefault: CFG.fasciaSidesDefault,
           carpetOverhangM: CFG.carpetOverhangM,
           stairCarpetLinearM: CFG.stairCarpetLinearM,
           feltOverlapAllowanceM: CFG.feltOverlapAllowanceM,
           stairFeltLinearM: CFG.stairFeltLinearM,
-          consumables: "Carpet and fascia/felt are custom placeholder rows until stocked consumable IDs are available. Hire components are saved as listed stock rows using list_id."
+          imperialCarpetOverhangFt: CFG.imperialCarpetOverhangFt,
+          imperialStairCarpetLinearFt: CFG.imperialStairCarpetLinearFt,
+          imperialFeltOverlapAllowanceFt: CFG.imperialFeltOverlapAllowanceFt,
+          imperialStairFeltLinearFt: CFG.imperialStairFeltLinearFt,
+          consumables: "Metric carpet and fascia/felt remain custom rows. Imperial carpet, felt, and Facia use live stock rows when matching HireHop items are found, with custom fallback rows for missing soft goods."
         },
         liveStock: {
           endpoints: {
@@ -2221,8 +3005,8 @@
             hireStockList: CFG.hireStockList,
             itemsImport: CFG.itemsImport
           },
-          category: CFG.stagingCategoryName,
-          categoryId: CFG.stagingCategoryId,
+          categories: getStockCategoryNames(),
+          categoryIds: getStockCategoryIds(),
           searchTerms: CFG.stockSearchTerms.slice(),
           loadedItems: stockState.catalog ? stockState.catalog.items.length : 0,
           error: stockState.error || "",
