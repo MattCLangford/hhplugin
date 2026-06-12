@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.6",
+    version: "2026-06-12.9",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -21,6 +21,7 @@
     marker: "wise-stage-designer",
     itemsSave: getHireHopEndpoint("itemsSave", "/php_functions/items_save.php"),
     itemsDelete: getHireHopEndpoint("itemsDelete", "/php_functions/items_delete.php"),
+    itemsImport: getHireHopEndpoint("itemsImport", "/php_functions/items_import.php"),
     searchList: getHireHopEndpoint("searchList", "/php_functions/search_list.php"),
     availabilityList: getHireHopEndpoint("availabilityList", "/php_functions/availability_list.php"),
     hireStockList: getHireHopEndpoint("hireStockList", "/reports/hire_stock_list.php"),
@@ -241,10 +242,8 @@
       if (!stageFolderId) throw new Error("HireHop did not return the stage folder ID.");
       createdStageFolderId = stageFolderId;
 
-      for (var i = 0; i < kit.lines.length; i++) {
-        setStatus("Saving " + kit.lines[i].name + "...", "info");
-        await saveStageLine(jobId, stageFolderId, kit.lines[i], spec);
-      }
+      setStatus("Saving stage lines...", "info");
+      await saveStageLines(jobId, stageFolderId, kit.lines);
 
       setStatus("Stage kit saved. Refreshing the supplying list...", "success");
       refreshSupplyingList();
@@ -897,46 +896,50 @@
     }, id);
   }
 
-  async function saveStageLine(jobId, parentId, line, spec) {
-    var unitPrice = line.kind === "stock" ? Number(line.price || 0) : 0;
-    var totalPrice = line.kind === "stock" ? roundQuantity(unitPrice * Number(line.qty || 0)) : 0;
+  async function saveStageLines(jobId, parentId, lines) {
+    var rows = [];
+    for (var i = 0; i < (lines || []).length; i++) {
+      var row = lineToImportRow(lines[i]);
+      if (row) rows.push(row);
+    }
+    if (!rows.length) return { items: [] };
+
     var payload = {
-      parent: String(parentId || "0"),
-      flag: "0",
-      priority_confirm: "0",
-      custom_fields: "",
-      kind: line.kind === "stock" ? "2" : "3",
+      job_id: String(jobId || ""),
+      archive_id: "0",
+      sibling_id: "0",
+      sibling_kind: "0",
+      parent_id: String(parentId || "0"),
       local: formatLocalDateTime(new Date()),
-      id: "0",
-      qty: String(line.qty || 1),
-      name: String(line.name || ""),
-      list_id: String(line.listId || "0"),
-      cust_add: "",
-      memo: "",
-      price_type: String(line.priceType || 0),
-      weight: "0",
-      vat_rate: String(getDefaultVatRate()),
-      value: "0",
-      acc_nominal: String(getDefaultNominalId(1)),
-      acc_nominal_po: String(getDefaultNominalId(2)),
-      cost_price: "0",
-      no_scan: "0",
-      country_origin: "",
-      hs_code: "",
-      category_id: line.kind === "stock" ? String(line.categoryId || CFG.stagingCategoryId || "0") : "0",
-      no_shortfall: "0",
-      unit_price: String(unitPrice),
-      price: String(totalPrice),
-      job: String(jobId || ""),
-      no_availability: "0",
-      ignore: "0"
+      tz: getTimezone(),
+      rows: JSON.stringify(rows),
+      no_availability: "0"
     };
 
-    try {
-      return await postItemsSave(payload, "");
-    } catch (err) {
-      throw new Error("Could not save " + String(line.name || "stage line") + " (kind " + payload.kind + ", list_id " + payload.list_id + "): " + getErrorMessage(err, "HireHop rejected the line."));
+    return postItemsImport(payload, rows);
+  }
+
+  function lineToImportRow(line) {
+    if (!line) return null;
+    var qty = roundQuantity(line.qty || 1);
+    if (qty <= 0) return null;
+
+    if (line.kind === "stock") {
+      return {
+        STOCK_ID: String(line.listId || ""),
+        QTY: qty
+      };
     }
+
+    return {
+      TITLE: String(line.name || ""),
+      QTY: qty,
+      UNIT_PRICE: 0,
+      PRICE: 0,
+      NO_SHORTFALL: 1,
+      MEMO: "",
+      NOTE: ""
+    };
   }
 
   async function postItemsSave(payload, fallbackId) {
@@ -967,6 +970,43 @@
       var id = getSavedItemId(json) || String(fallbackId || "");
       if (!id) throw new Error("HireHop did not return a saved item ID.");
       return { id: String(id), json: json };
+    }
+
+    throw new Error("HireHop rate limit hit. Wait a minute and save again.");
+  }
+
+  async function postItemsImport(payload, rows) {
+    var attempts = 0;
+
+    while (attempts < CFG.saveMaxAttempts) {
+      attempts += 1;
+      await throttleWrite();
+
+      var response = await fetch(CFG.itemsImport, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+        body: $.param(payload || {})
+      });
+
+      var text = await response.text();
+      var json = tryParseJson(text);
+
+      if (!response.ok) throw new Error("items_import failed with status " + response.status);
+      if (isRateLimitResponse(json) && attempts < CFG.saveMaxAttempts) {
+        await waitForRateLimit();
+        continue;
+      }
+      if (isBareErrorCode(json, text)) throw new Error(readServerMessage(json != null ? json : text, "HireHop returned an error while importing stage lines."));
+      if (json && typeof json.error !== "undefined") {
+        throw new Error(readServerMessage(json.error, "HireHop returned an error while importing stage lines.") + " First row: " + summariseImportRow(rows && rows[0]));
+      }
+      if (json && typeof json.warning !== "undefined") {
+        throw new Error(readServerMessage(json.warning, "HireHop returned a warning while importing stage lines.") + " First row: " + summariseImportRow(rows && rows[0]));
+      }
+
+      if (!json) throw new Error("HireHop did not return JSON while importing stage lines. Response: " + String(text || "").substr(0, 160));
+      return json;
     }
 
     throw new Error("HireHop rate limit hit. Wait a minute and save again.");
@@ -1920,6 +1960,17 @@
     return String(value);
   }
 
+  function isBareErrorCode(json, text) {
+    var value = json != null ? json : $.trim(String(text || ""));
+    return $.trim(String(value)) === "3" || isRateLimitCode(value);
+  }
+
+  function summariseImportRow(row) {
+    if (!row) return "(none)";
+    if (row.STOCK_ID) return "STOCK_ID " + row.STOCK_ID + ", QTY " + row.QTY;
+    return "TITLE " + row.TITLE + ", QTY " + row.QTY;
+  }
+
   function getDefaultVatRate() {
     if (window.user && window.user.DEFAULT_TAX_GROUP != null) return window.user.DEFAULT_TAX_GROUP;
     return 0;
@@ -2027,7 +2078,8 @@
           endpoints: {
             availabilityList: CFG.availabilityList,
             searchList: CFG.searchList,
-            hireStockList: CFG.hireStockList
+            hireStockList: CFG.hireStockList,
+            itemsImport: CFG.itemsImport
           },
           category: CFG.stagingCategoryName,
           categoryId: CFG.stagingCategoryId,
