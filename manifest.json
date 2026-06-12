@@ -1,7 +1,7 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-05-21.1",
-  "purpose": "Wise internal HireHop enhancement package for proposal authoring, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
+  "version": "2026-06-12.1",
+  "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
     "baseUrl": "https://mattclangford.github.io/hhplugin/",
@@ -57,6 +57,13 @@
       "cacheVersion": "2.8",
       "role": "Full-page Wise capacity timeline using project-level custom fields, date-range filtering, Wise status controls, and sanitized absence overlay support.",
       "recommendedLoadOrder": 7
+    },
+    {
+      "file": "8-stagedesigner.js",
+      "status": "active",
+      "cacheVersion": "0.1",
+      "role": "Simple staging designer that generates HireHop supplying-list stock rows from stage width, depth, height, carpet, fascia, and stair unit choices.",
+      "recommendedLoadOrder": 8
     }
   ],
   "referenceFiles": [

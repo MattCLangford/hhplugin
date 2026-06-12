@@ -19,6 +19,7 @@ Load these in HireHop:
 5. `4-layout.js`
 6. `6-editor2.js`
 7. `7-captrack.js`
+8. `8-stagedesigner.js`
 
 `5-hirehop.js` names the HireHop UI selectors, endpoint paths, depot rules, timings, active depot detector, and tree item prefixes that the other runtime scripts depend on. It loads first so each module shares the same framework-aware HireHop context.
 
@@ -33,6 +34,8 @@ Load these in HireHop:
 `6-editor2.js` is the primary editor. It gives non-technical users a safer visual page editor for baseline QTC standards, while still handing native item editing back to HireHop where appropriate.
 
 `7-captrack.js` is the Wise capacity tracker. It opens as a full-page planning view and uses project-level Wise custom fields for event naming, status, revenue, tier, client, venue, and role allocation.
+
+`8-stagedesigner.js` adds a simple staging kit designer to the supplying list toolbar. It turns width, depth, stocked leg height, carpet colour, fascia colour, and stair unit count into generated HireHop stock rows, with custom placeholder rows for consumables until carpet and fascia stock IDs are available.
 
 ## Reference And Legacy Files
 
