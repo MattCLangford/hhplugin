@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.16",
+    version: "2026-06-12.18",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -1711,10 +1711,6 @@
   function colourFamilyName(colour) {
     var text = normaliseColourName(colour);
     if (text === "anthracite" || text === "dark grey" || text === "light grey") return "grey";
-    if (text === "off white") return "white";
-    if (text === "navy blue") return "blue";
-    if (text === "bright red") return "red";
-    if (text === "dark green") return "green";
     return text;
   }
 
@@ -1989,7 +1985,7 @@
 
   function parseSpecFromStageTitle(title) {
     var raw = String(title || "");
-    var match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)ft\s*x\s*(\d+(?:\.\d+)?)ft\s*@\s*(.+?)\s+(.+?)\s*\/\s*(.+?)\s*-\s*(\d+)\s*treads?/i);
+    var match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)ft\s*x\s*(\d+(?:\.\d+)?)ft\s*@\s*(.+?)\s+(.+?)\s*\/\s*(.+?)\s*-\s*(\d+)\s*treads?(?:\s*-\s*([34])\s*(?:sided|sides?)\s*fas?cia)?/i);
     if (match) {
       return {
         unitSystem: "imperial",
@@ -2000,12 +1996,12 @@
         carpetColourCustom: false,
         fasciaColour: $.trim(match[5]) || "Black",
         fasciaColourCustom: false,
-        fasciaSides: CFG.fasciaSidesDefault,
+        fasciaSides: Number(match[7] || CFG.fasciaSidesDefault),
         treads: Number(match[6])
       };
     }
 
-    match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d+(?:\.\d+)?)m?\s*@\s*(\d{3,4})mm\s+(.+?)\s*\/\s*(.+?)\s*-\s*(\d+)\s*treads?/i);
+    match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d+(?:\.\d+)?)m?\s*@\s*(\d{3,4})mm\s+(.+?)\s*\/\s*(.+?)\s*-\s*(\d+)\s*treads?(?:\s*-\s*([34])\s*(?:sided|sides?)\s*fas?cia)?/i);
     if (match) {
       return {
         unitSystem: "metric",
@@ -2016,7 +2012,7 @@
         carpetColourCustom: false,
         fasciaColour: $.trim(match[5]) || "Black",
         fasciaColourCustom: false,
-        fasciaSides: CFG.fasciaSidesDefault,
+        fasciaSides: Number(match[7] || CFG.fasciaSidesDefault),
         treads: Number(match[6])
       };
     }
@@ -2069,12 +2065,18 @@
     if (spec.unitSystem === "imperial") {
       return "Stage - " + formatDimension(spec.width) + "ft x " + formatDimension(spec.depth) + "ft @ " +
         formatImperialHeight(spec.height) + " " + spec.carpetColour + " / " + spec.fasciaColour + " - " +
-        String(spec.treads) + " " + (Number(spec.treads) === 1 ? "tread" : "treads");
+        String(spec.treads) + " " + (Number(spec.treads) === 1 ? "tread" : "treads") + " - " +
+        getFasciaSidesTitle(spec);
     }
 
     return "Stage - " + formatDimension(spec.width) + "m x " + formatDimension(spec.depth) + "m @ " +
       String(spec.height) + "mm " + spec.carpetColour + " / " + spec.fasciaColour + " - " +
-      String(spec.treads) + " " + (Number(spec.treads) === 1 ? "tread" : "treads");
+      String(spec.treads) + " " + (Number(spec.treads) === 1 ? "tread" : "treads") + " - " +
+      getFasciaSidesTitle(spec);
+  }
+
+  function getFasciaSidesTitle(spec) {
+    return String(Number(spec && spec.fasciaSides) >= 4 ? 4 : 3) + " sided fascia";
   }
 
   function getStageSpecLabel(spec) {
@@ -2243,7 +2245,27 @@
   function findMatchingColourOption(options, colour) {
     for (var i = 0; i < (options || []).length; i++) {
       if (options[i].value === CFG.customColourValue) continue;
-      if (colourMatches(options[i].value, colour)) return options[i].value;
+      if (colourExactMatches(options[i].value, colour)) return options[i].value;
+    }
+    for (var j = 0; j < (options || []).length; j++) {
+      if (options[j].value === CFG.customColourValue) continue;
+      if (colourMatches(options[j].value, colour)) return options[j].value;
+    }
+    return "";
+  }
+
+  function colourExactMatches(itemColour, requestedColour) {
+    var requested = normaliseColourName(requestedColour);
+    var item = normaliseColourName(itemColour);
+    return !!requested && !!item && item === requested;
+  }
+
+  function findMatchingColourName(colours, colour) {
+    for (var i = 0; i < (colours || []).length; i++) {
+      if (colourExactMatches(colours[i], colour)) return colours[i];
+    }
+    for (var j = 0; j < (colours || []).length; j++) {
+      if (colourMatches(colours[j], colour)) return colours[j];
     }
     return "";
   }
@@ -2316,13 +2338,6 @@
 
   function resolveStockColourName(field, colour, catalog) {
     return findMatchingColourName(getAvailableStockColourNames(catalog, field), colour) || cleanColourValue(colour, "Black");
-  }
-
-  function findMatchingColourName(colours, colour) {
-    for (var i = 0; i < (colours || []).length; i++) {
-      if (colourMatches(colours[i], colour)) return colours[i];
-    }
-    return "";
   }
 
   function getLegHeightOptions(catalog, unitSystem) {
