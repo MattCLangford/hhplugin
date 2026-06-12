@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.12",
+    version: "2026-06-12.13",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -900,17 +900,18 @@
     stockState.loading = (async function () {
       var candidates = [];
       appendStockCandidates(candidates, readWindowStockCandidates());
-
-      for (var i = 0; i < CFG.stockSearchTerms.length; i++) {
-        var term = CFG.stockSearchTerms[i];
-        var termCandidates = await fetchAvailabilityListCandidates(term);
-        if (!termCandidates.length) termCandidates = await fetchSearchListCandidates(term);
-        appendStockCandidates(candidates, termCandidates);
-      }
-
-      if (!candidates.length) appendStockCandidates(candidates, await fetchHireStockListCandidates());
+      appendStockCandidates(candidates, await fetchHireStockListCandidates());
+      appendStockCandidates(candidates, await fetchAvailabilityListCandidates(""));
 
       var catalog = buildLiveStockCatalog(candidates);
+      if (catalogNeedsFallbackSearch(catalog)) {
+        var fallbackTerms = getMissingStockSearchTerms(catalog);
+        for (var i = 0; i < fallbackTerms.length; i++) {
+          appendStockCandidates(candidates, await fetchSearchListCandidates(fallbackTerms[i]));
+        }
+        catalog = buildLiveStockCatalog(candidates);
+      }
+
       if (!catalog.items.length) {
         throw new Error("No live staging stock could be found.");
       }
@@ -1055,11 +1056,8 @@
     for (var i = 0; i < ids.length; i++) {
       var catId = Number(ids[i]) || ids[i];
       var cats = [catId];
-      out.push(endpointRequest(base, extendObject(common, { head: ids[i], cats: "" }), "availability head " + ids[i] + " " + term));
       out.push(endpointRequest(base, extendObject(common, { cats: JSON.stringify(cats) }), "availability cats-json " + ids[i] + " " + term));
-      out.push(endpointRequest(base, extendObject(common, { cats: ids[i] }), "availability cats-id " + ids[i] + " " + term));
       out.push(endpointRequest(base, extendObject(common, { cat: ids[i] }), "availability cat " + ids[i] + " " + term));
-      out.push(endpointRequest(base, extendObject(common, { headings_sel: ids[i] }), "availability heading " + ids[i] + " " + term));
     }
 
     return out;
@@ -1067,16 +1065,11 @@
 
   function buildSearchListUrls(term) {
     var base = CFG.searchList || "/php_functions/search_list.php";
-    var out = [endpointRequest(base, { term: term, stock: 1 }, "search unscoped " + term)];
-    var names = getStockCategoryNames();
+    var out = [];
     var ids = getStockCategoryIds();
 
-    for (var n = 0; n < names.length; n++) {
-      out.push(endpointRequest(base, { term: term, stock: 1, category: names[n] }, "search term " + names[n] + " " + term));
-    }
     for (var i = 0; i < ids.length; i++) {
       out.push(endpointRequest(base, { q: term, stock: 1, category_id: ids[i] }, "search q " + ids[i] + " " + term));
-      out.push(endpointRequest(base, { search: term, stock: 1, cat: ids[i] }, "search generic " + ids[i] + " " + term));
     }
 
     return out;
@@ -1151,6 +1144,8 @@
     var id = cleanStockId(getFirstField(raw, ["stock_id", "STOCK_ID", "ID", "id", "LIST_ID", "list_id", "item_id", "value"]));
     var name = cleanStockName(getFirstField(raw, ["TITLE", "title", "NAME", "name", "label", "text"]));
     var altName = cleanStockName(getFirstField(raw, ["ALT_NAME", "alt_name", "altName", "subtitle"]));
+    var description = cleanStockName(getFirstField(raw, ["DESCRIPTION", "description", "DESC", "desc"]));
+    var memo = cleanStockName(getFirstField(raw, ["MEMO", "memo", "NOTE", "note"]));
     if (!id && raw.__rowText) id = cleanStockId(extractStockIdFromText(raw.__rowText));
     if (!name && raw.__rowText) name = extractStockNameFromText(raw.__rowText);
     if (!id || !name) return null;
@@ -1159,6 +1154,8 @@
       id: String(id),
       name: name,
       altName: altName,
+      description: description,
+      memo: memo,
       category: readStockCategoryName(raw),
       categoryId: readStockCategoryId(raw),
       breadcrumbs: readStockBreadcrumbs(raw),
@@ -1217,7 +1214,7 @@
 
   function looksLikeUsableStageStockName(name) {
     var text = normaliseMatchText(name);
-    return /deck|litedeck|scaff leg|deck leg|stairs|tread|step unit|fas?cia|carpet|felt/.test(text);
+    return /deck|litedeck|scaff leg|deck leg|stairs|tread|step unit|fas?cia|carpet|felt|roll|cloth|fabric|velour|serge|baize|floor/.test(text);
   }
 
   function buildLiveStockCatalog(candidates) {
@@ -1243,6 +1240,35 @@
 
     addCatalogWarnings(catalog);
     return catalog;
+  }
+
+  function catalogNeedsFallbackSearch(catalog) {
+    catalog = normaliseCatalog(catalog);
+    return !catalog.items.length ||
+      !Object.keys(catalog.decksByKey || {}).length ||
+      !Object.keys(catalog.legs || {}).length ||
+      !catalog.stairs.length ||
+      !catalog.imperial.decks.length ||
+      !Object.keys(catalog.imperial.legs || {}).length ||
+      !catalog.imperial.stairs.length ||
+      !Object.keys(catalog.imperial.fasciaByHeight || {}).length ||
+      !catalog.imperial.carpets.length ||
+      !catalog.imperial.felts.length;
+  }
+
+  function getMissingStockSearchTerms(catalog) {
+    catalog = normaliseCatalog(catalog);
+    var terms = [];
+    if (!Object.keys(catalog.decksByKey || {}).length) terms.push("LiteDeck", "Deck Panel");
+    if (!Object.keys(catalog.legs || {}).length) terms.push("Scaff Leg");
+    if (!catalog.stairs.length) terms.push("Stairs/Tread", "Step Unit");
+    if (!catalog.imperial.decks.length) terms.push("Litedeck");
+    if (!Object.keys(catalog.imperial.legs || {}).length) terms.push("Deck Leg");
+    if (!catalog.imperial.stairs.length) terms.push("Tread Kit");
+    if (!Object.keys(catalog.imperial.fasciaByHeight || {}).length) terms.push("Facia", "Fascia");
+    if (!catalog.imperial.carpets.length) terms.push("Carpet", "Grey Carpet", "Gray Carpet", "Black Carpet");
+    if (!catalog.imperial.felts.length) terms.push("Felt", "Black Felt", "Grey Felt", "Gray Felt");
+    return uniqueStrings(terms).slice(0, 14);
   }
 
   function addCatalogDeck(catalog, item) {
@@ -1366,19 +1392,26 @@
   }
 
   function addCatalogImperialSoftGood(catalog, item) {
-    var text = normaliseMatchText(item.name + " " + (item.altName || ""));
-    var isCarpet = /carpet/.test(text);
+    var text = normaliseMatchText([item.name, item.altName, item.description, item.memo].join(" "));
+    if (looksLikeNonConsumableSoftGood(text)) return;
+
     var isFelt = /felt/.test(text);
+    var isCarpet = /carpet|floor covering|floorcovering|floor cover|roll|cloth|fabric|velour|serge|baize/.test(text) && !isFelt;
     if (!isCarpet && !isFelt) return;
 
     var softGood = cloneStockItem(item);
     softGood.key = (isCarpet ? "imperial-carpet-" : "imperial-felt-") + String(item.id || "");
-    softGood.colour = inferColourFromName(item.name);
-    softGood.widthFt = parseImperialRollWidth(item.name);
+    softGood.colour = inferColourFromName(text);
+    softGood.widthFt = parseImperialRollWidth([item.name, item.altName, item.description, item.memo].join(" "));
     softGood.unitSystem = "imperial";
 
     if (isCarpet) catalog.imperial.carpets.push(softGood);
     if (isFelt) catalog.imperial.felts.push(softGood);
+  }
+
+  function looksLikeNonConsumableSoftGood(text) {
+    text = normaliseMatchText(text);
+    return /set panel|panel|deck|litedeck|flat|handrail|triangle|brace|coupler|leg|tread|step|fas?cia|dj booth|hide|frame|plinth|weight|dolly|box/.test(text);
   }
 
   function parseImperialRectangle(name) {
@@ -1536,6 +1569,7 @@
     var bestScore = Infinity;
     for (var i = 0; i < (items || []).length; i++) {
       var item = items[i];
+      if (looksLikeNonConsumableSoftGood([item.name, item.altName, item.description, item.memo].join(" "))) continue;
       var score = scoreSoftGood(item, colour, widthFt);
       if (score >= bestScore) continue;
       best = item;
@@ -1547,8 +1581,8 @@
   function scoreSoftGood(item, colour, widthFt) {
     var score = 0;
     var requestedColour = normaliseColourName(colour);
-    if (requestedColour && item.colour && item.colour !== requestedColour) score += 20;
-    else if (requestedColour && item.colour === requestedColour) score -= 5;
+    if (requestedColour && item.colour && item.colour !== requestedColour) return Infinity;
+    if (requestedColour && item.colour === requestedColour) score -= 5;
     else if (requestedColour && !item.colour) score += 2;
 
     if (Number(widthFt || 0) > 0) {
@@ -1594,8 +1628,6 @@
     if (!Object.keys(catalog.imperial.legs).length) catalog.imperialWarnings.push("Missing live imperial deck leg stock.");
     if (!catalog.imperial.stairs.length) catalog.imperialWarnings.push("Missing live imperial tread kit stock.");
     if (!Object.keys(catalog.imperial.fasciaByHeight).length) catalog.imperialWarnings.push("Missing live imperial Facia stock.");
-    if (!catalog.imperial.carpets.length) catalog.imperialWarnings.push("Missing live imperial carpet stock.");
-    if (!catalog.imperial.felts.length) catalog.imperialWarnings.push("Missing live imperial felt stock.");
   }
 
   async function saveStageHeading(jobId, parentId, id, spec, kit) {
@@ -2475,6 +2507,8 @@
       id: String(item.id || ""),
       name: String(item.name || ""),
       altName: String(item.altName || ""),
+      description: String(item.description || ""),
+      memo: String(item.memo || ""),
       width: Number(item.width || 0),
       depth: Number(item.depth || 0),
       widthFt: Number(item.widthFt || 0),
