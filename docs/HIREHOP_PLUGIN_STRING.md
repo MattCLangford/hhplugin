@@ -7,7 +7,7 @@ Do not hand-edit the current string or source table. Update `manifest.json` firs
 ## Current String
 
 ```text
-https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.7; https://mattclangford.github.io/hhplugin/1-docprev.js?v=0.5; https://mattclangford.github.io/hhplugin/2-apselall.js?v=0.3; https://mattclangford.github.io/hhplugin/3-meta.js?v=0.1; https://mattclangford.github.io/hhplugin/4-layout.js?v=0.1; https://mattclangford.github.io/hhplugin/6-editor2.js?v=1.5; https://mattclangford.github.io/hhplugin/7-captrack.js?v=2.8; https://mattclangford.github.io/hhplugin/8-stagedesigner.js?v=0.5;
+https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.7; https://mattclangford.github.io/hhplugin/1-docprev.js?v=0.5; https://mattclangford.github.io/hhplugin/2-apselall.js?v=0.3; https://mattclangford.github.io/hhplugin/3-meta.js?v=0.1; https://mattclangford.github.io/hhplugin/4-layout.js?v=0.1; https://mattclangford.github.io/hhplugin/6-editor2.js?v=1.5; https://mattclangford.github.io/hhplugin/7-captrack.js?v=2.8; https://mattclangford.github.io/hhplugin/8-stagedesigner.js?v=0.6;
 ```
 
 ## Source Table
@@ -21,7 +21,7 @@ https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.7; https://mattclangfo
 | 5 | `4-layout.js` | `0.1` |
 | 6 | `6-editor2.js` | `1.5` |
 | 7 | `7-captrack.js` | `2.8` |
-| 8 | `8-stagedesigner.js` | `0.5` |
+| 8 | `8-stagedesigner.js` | `0.6` |
 
 ## Maintenance Rule
 

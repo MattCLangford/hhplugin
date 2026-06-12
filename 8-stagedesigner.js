@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.5",
+    version: "2026-06-12.6",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -20,6 +20,7 @@
     metaEnd: "[/WiseStageDesigner]",
     marker: "wise-stage-designer",
     itemsSave: getHireHopEndpoint("itemsSave", "/php_functions/items_save.php"),
+    itemsDelete: getHireHopEndpoint("itemsDelete", "/php_functions/items_delete.php"),
     searchList: getHireHopEndpoint("searchList", "/php_functions/search_list.php"),
     availabilityList: getHireHopEndpoint("availabilityList", "/php_functions/availability_list.php"),
     hireStockList: getHireHopEndpoint("hireStockList", "/reports/hire_stock_list.php"),
@@ -218,6 +219,7 @@
     }
 
     var target = state.target || resolveStageTarget();
+    var createdStageFolderId = "";
 
     state.saving = true;
     setBusy(true);
@@ -237,6 +239,7 @@
       var savedHeading = await saveStageHeading(jobId, parentId, "", spec, kit);
       var stageFolderId = String(savedHeading.id || "");
       if (!stageFolderId) throw new Error("HireHop did not return the stage folder ID.");
+      createdStageFolderId = stageFolderId;
 
       for (var i = 0; i < kit.lines.length; i++) {
         setStatus("Saving " + kit.lines[i].name + "...", "info");
@@ -249,6 +252,15 @@
       setTimeout(closeDesigner, 850);
     } catch (err) {
       warn("Stage kit save failed", err);
+      if (createdStageFolderId) {
+        setStatus("Removing partial stage kit...", "warning");
+        try {
+          await deleteItemsDirect([createdStageFolderId], jobId, 0);
+          refreshSupplyingList();
+        } catch (deleteErr) {
+          warn("Could not remove partial stage heading", deleteErr);
+        }
+      }
       setStatus(getErrorMessage(err, "Could not save the stage kit."), "error");
     } finally {
       state.saving = false;
@@ -893,7 +905,7 @@
       flag: "0",
       priority_confirm: "0",
       custom_fields: "",
-      kind: line.kind === "stock" ? "1" : "3",
+      kind: line.kind === "stock" ? "2" : "3",
       local: formatLocalDateTime(new Date()),
       id: "0",
       qty: String(line.qty || 1),
@@ -920,7 +932,11 @@
       ignore: "0"
     };
 
-    return postItemsSave(payload, "");
+    try {
+      return await postItemsSave(payload, "");
+    } catch (err) {
+      throw new Error("Could not save " + String(line.name || "stage line") + " (kind " + payload.kind + ", list_id " + payload.list_id + "): " + getErrorMessage(err, "HireHop rejected the line."));
+    }
   }
 
   async function postItemsSave(payload, fallbackId) {
@@ -954,6 +970,43 @@
     }
 
     throw new Error("HireHop rate limit hit. Wait a minute and save again.");
+  }
+
+  async function deleteItemsDirect(ids, jobId, kind) {
+    var idList = normaliseIdList(ids);
+    if (!idList.length) return;
+
+    var prefix = getTreeNodePrefixForKind(kind);
+    var prefixed = idList.map(function (id) { return prefix + id; });
+    var payload = {
+      ids: prefixed.join(","),
+      job: String(jobId || ""),
+      no_availability: "0"
+    };
+    var attempts = 0;
+
+    while (attempts < CFG.saveMaxAttempts) {
+      attempts += 1;
+      await throttleWrite();
+
+      var response = await fetch(CFG.itemsDelete, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+        body: $.param(payload)
+      });
+
+      var text = await response.text();
+      var json = tryParseJson(text);
+
+      if (!response.ok) throw new Error("items_delete failed with status " + response.status);
+      if (isRateLimitResponse(json) && attempts < CFG.saveMaxAttempts) {
+        await waitForRateLimit();
+        continue;
+      }
+      if (json && typeof json.error !== "undefined") throw new Error(readServerMessage(json.error, "HireHop returned an error while removing the partial stage."));
+      return;
+    }
   }
 
   function resolveStageTarget() {
@@ -1709,6 +1762,25 @@
     return out;
   }
 
+  function normaliseIdList(ids) {
+    if (ids == null) return [];
+    var raw = Array.isArray(ids) ? ids : String(ids).split(",");
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < raw.length; i++) {
+      var id = $.trim(String(raw[i] || "").replace(/^[a-z]+/i, ""));
+      if (!id || seen[id]) continue;
+      seen[id] = true;
+      out.push(id);
+    }
+    return out;
+  }
+
+  function getTreeNodePrefixForKind(kind) {
+    var prefixes = getHireHopModuleSection("kindPrefixes") || { 0: "a", 1: "b", 2: "c", 3: "d", 4: "e", 5: "f", 6: "g" };
+    return prefixes[String(Number(kind))] || "";
+  }
+
   function extendObject(base) {
     var out = {};
     for (var i = 0; i < arguments.length; i++) {
@@ -1844,6 +1916,7 @@
   function readServerMessage(value, fallback) {
     if (value == null || value === "") return fallback;
     if (isRateLimitCode(value)) return "HireHop rate limit reached. Wait a minute and save again.";
+    if ($.trim(String(value)) === "3") return "HireHop returned error 3: missing parameters.";
     return String(value);
   }
 
