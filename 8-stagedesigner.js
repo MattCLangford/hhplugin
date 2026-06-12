@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.2",
+    version: "2026-06-12.4",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -20,6 +20,7 @@
     metaEnd: "[/WiseStageDesigner]",
     marker: "wise-stage-designer",
     itemsSave: getHireHopEndpoint("itemsSave", "/php_functions/items_save.php"),
+    searchList: getHireHopEndpoint("searchList", "/php_functions/search_list.php"),
     itemsTab: getHireHopSelector("itemsTab", "#items_tab"),
     toolbarHost: getHireHopSelector("toolbarHost", "#items_tab > div:first-child"),
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -33,33 +34,17 @@
     stairCarpetLinearM: 1.2,
     feltOverlapAllowanceM: 0.5,
     stairFeltLinearM: 1.5,
+    stagingCategoryName: "Staging",
+    stagingCategoryId: "1043",
+    stockSearchTerms: ["Deck Panel", "LiteDeck", "Scaff Leg", "Stairs/Tread", "Step Unit", "Staging"],
     fasciaMode: "front+sides",
     legRule: "per-deck-corners"
   };
 
-  var STOCK = {
-    decks: [
-      stockItem("deck-2x1", "5723", "2 x 1m LiteDeck Panel", 2, 1, 15, 108),
-      stockItem("deck-2x0.5", "5722", "2 x 0.5m LiteDeck (Prolyte/GT Tour)", 2, 0.5, 9, 108),
-      stockItem("deck-1x1", "5717", "1 x 1m LiteDeck Panel", 1, 1, 9, 108),
-      stockItem("deck-1x0.5", "5716", "1 x 0.5m Deck Panel (Prolyte/GT Tour)", 1, 0.5, 6, 108),
-      stockItem("deck-0.5x0.5", "5714", "0.5 x 0.5m Deck Panel (GT Tour)", 0.5, 0.5, 3, 108)
-    ],
-    legs: {
-      200: stockItem("leg-200", "5728", "200mm Scaff Leg", 0, 0, 0.12, 108),
-      270: stockItem("leg-270", "5729", "270mm Scaff Leg", 0, 0, 0.16, 108),
-      300: stockItem("leg-300", "5730", "300mm Scaff Leg", 0, 0, 0.18, 108),
-      400: stockItem("leg-400", "5731", "400mm Scaff Leg", 0, 0, 0.24, 108),
-      600: stockItem("leg-600", "5732", "600mm Scaff Leg", 0, 0, 0.36, 108),
-      800: stockItem("leg-800", "5733", "800mm Scaff Leg", 0, 0, 0.48, 108),
-      1000: stockItem("leg-1000", "5725", "1000mm Scaff Leg", 0, 0, 0.6, 108),
-      1200: stockItem("leg-1200", "5726", "1200mm Scaff Leg", 0, 0, 0.72, 108),
-      1600: stockItem("leg-1600", "5727", "1600mm Scaff Leg", 0, 0, 0.96, 108)
-    },
-    adapter: stockItem("leg-adapter", "5751", "4 in 1 Leg Adapter (Leg Top)", 0, 0, 0.6, 108),
-    stairsLow: stockItem("stairs-low", "5734", "Black Wooden Step Unit 400mm", 0, 0, 6, 108),
-    stairsMid: stockItem("stairs-mid", "5736", "Litespace 600 - 1000mm Stairs/Tread", 0, 0, 27, 108),
-    stairsHigh: stockItem("stairs-high", "5735", "Litespace 1000 - 1500mm Stairs/Tread", 0, 0, 30, 108)
+  var stockState = {
+    catalog: null,
+    loading: null,
+    error: ""
   };
 
   var state = {
@@ -107,10 +92,21 @@
     state.target = resolveStageTarget();
     state.currentSpec = state.target && state.target.spec ? normaliseSpec(state.target.spec) : defaultSpec();
 
-    var kit = calculateStageKit(state.currentSpec);
+    var kit = calculateStageKit(state.currentSpec, stockState.catalog);
     $("body").append(buildModalHtml(state.currentSpec, kit, state.target));
     bindModalEvents();
     updateDesigner();
+    setStatus("Loading live staging stock...", "info");
+    loadLiveStagingStock().then(function () {
+      state.currentSpec = normaliseSpec(state.currentSpec || readSpecFromModal(), stockState.catalog);
+      syncHeightOptions(stockState.catalog);
+      updateDesigner();
+      setStatus("", "");
+    }).catch(function (err) {
+      warn("Could not load live staging stock", err);
+      updateDesigner();
+      setStatus(getErrorMessage(err, "Could not load live staging stock."), "warning");
+    });
   }
 
   function closeDesigner() {
@@ -186,9 +182,9 @@
   }
 
   function updateDesigner() {
-    var spec = normaliseSpec(state.currentSpec || readSpecFromModal());
+    var spec = normaliseSpec(state.currentSpec || readSpecFromModal(), stockState.catalog);
     state.currentSpec = spec;
-    var kit = calculateStageKit(spec);
+    var kit = calculateStageKit(spec, stockState.catalog);
 
     var $overlay = $("#" + CFG.overlayId);
     $overlay.find("[data-wsd-preview]").html(stagePreviewHtml(spec, kit));
@@ -219,14 +215,20 @@
     }
 
     var target = state.target || resolveStageTarget();
-    var spec = normaliseSpec(state.currentSpec || readSpecFromModal());
-    var kit = calculateStageKit(spec);
 
     state.saving = true;
     setBusy(true);
-    setStatus("Saving stage kit...", "info");
+    setStatus("Loading live staging stock...", "info");
 
     try {
+      var catalog = await loadLiveStagingStock({ force: true });
+      var spec = normaliseSpec(state.currentSpec || readSpecFromModal(), catalog);
+      var kit = calculateStageKit(spec, catalog);
+      if (kit.missingRequired && kit.missingRequired.length) {
+        throw new Error("Could not find live staging stock for: " + kit.missingRequired.join(", "));
+      }
+
+      setStatus("Saving stage kit...", "info");
       var parentId = target && target.parentId ? String(target.parentId) : "0";
 
       var savedHeading = await saveStageHeading(jobId, parentId, "", spec, kit);
@@ -251,29 +253,34 @@
     }
   }
 
-  function calculateStageKit(input) {
-    var spec = normaliseSpec(input);
+  function calculateStageKit(input, catalog) {
+    catalog = normaliseCatalog(catalog);
+    var spec = normaliseSpec(input, catalog);
     var deckCounts = calculateDeckCounts(spec.width, spec.depth);
     var deckCount = 0;
     var lines = [];
+    var missingRequired = [];
+    var warnings = catalog.warnings ? catalog.warnings.slice() : [];
 
-    addDeckLine(lines, deckCounts, "deck-2x1");
-    addDeckLine(lines, deckCounts, "deck-2x0.5");
-    addDeckLine(lines, deckCounts, "deck-1x1");
-    addDeckLine(lines, deckCounts, "deck-1x0.5");
-    addDeckLine(lines, deckCounts, "deck-0.5x0.5");
+    addDeckLine(lines, deckCounts, "deck-2x1", catalog, missingRequired);
+    addDeckLine(lines, deckCounts, "deck-2x0.5", catalog, missingRequired);
+    addDeckLine(lines, deckCounts, "deck-1x1", catalog, missingRequired);
+    addDeckLine(lines, deckCounts, "deck-1x0.5", catalog, missingRequired);
+    addDeckLine(lines, deckCounts, "deck-0.5x0.5", catalog, missingRequired);
 
     for (var i = 0; i < lines.length; i++) {
       if (lines[i].group === "Decks") deckCount += Number(lines[i].qty || 0);
     }
 
     var legCount = deckCount * 4;
-    var legItem = STOCK.legs[spec.height] || STOCK.legs[600];
-    addStockLine(lines, legItem, legCount, "Legs", "Stage height: " + spec.height + "mm. Rule: 4 legs per deck.");
-    addStockLine(lines, STOCK.adapter, legCount, "Legs", "One leg top adapter per leg.");
+    var legItem = catalog.legs[String(spec.height)];
+    if (legItem) addStockLine(lines, legItem, legCount, "Legs");
+    else if (legCount > 0) missingRequired.push(String(spec.height) + "mm Scaff Leg");
 
     if (spec.treads > 0) {
-      addStockLine(lines, getStairItemForHeight(spec.height), spec.treads, "Access", "User-specified stair units/treads.");
+      var stairItem = getStairItemForHeight(spec.height, catalog);
+      if (stairItem) addStockLine(lines, stairItem, spec.treads, "Access");
+      else missingRequired.push("stair/tread unit for " + String(spec.height) + "mm stage");
     }
 
     var consumables = calculateConsumables(spec);
@@ -289,7 +296,9 @@
       carpetLinearM: consumables.carpetLinearM,
       fasciaRun: consumables.baseFasciaRun,
       feltLinearM: consumables.feltLinearM,
-      consumables: consumables
+      consumables: consumables,
+      missingRequired: uniqueStrings(missingRequired),
+      warnings: uniqueStrings(warnings)
     };
   }
 
@@ -328,14 +337,18 @@
     if (remaining >= 0.5) addCount(counts, "deck-0.5x0.5", 1);
   }
 
-  function addDeckLine(lines, counts, key) {
+  function addDeckLine(lines, counts, key, catalog, missingRequired) {
     var qty = Number(counts[key] || 0);
     if (qty <= 0) return;
-    var item = findDeckItem(key);
-    addStockLine(lines, item, qty, "Decks", item.width + "m x " + item.depth + "m deck coverage.");
+    var item = findDeckItem(key, catalog);
+    if (!item) {
+      missingRequired.push(describeDeckKey(key));
+      return;
+    }
+    addStockLine(lines, item, qty, "Decks");
   }
 
-  function addStockLine(lines, item, qty, group, memo) {
+  function addStockLine(lines, item, qty, group) {
     qty = roundQuantity(qty);
     if (!item || qty <= 0) return;
     lines.push({
@@ -347,7 +360,7 @@
       qty: qty,
       price: item.price,
       priceType: item.priceType,
-      memo: composeLineMemo(memo || "", item)
+      categoryId: item.categoryId
     });
   }
 
@@ -361,16 +374,32 @@
       name: name,
       qty: qty,
       price: 0,
-      priceType: 0,
-      memo: composeLineMemo(memo || "", null)
+      priceType: 0
     });
   }
 
-  function getStairItemForHeight(height) {
+  function getStairItemForHeight(height, catalog) {
+    catalog = normaliseCatalog(catalog);
     height = Number(height || 0);
-    if (height >= 1000) return STOCK.stairsHigh;
-    if (height >= 600) return STOCK.stairsMid;
-    return STOCK.stairsLow;
+    var best = null;
+    var bestScore = Infinity;
+
+    for (var i = 0; i < catalog.stairs.length; i++) {
+      var stair = catalog.stairs[i];
+      var min = Number(stair.minHeight || 0);
+      var max = Number(stair.maxHeight || min || 0);
+      var score = 0;
+      if (min && max && height >= min && height <= max) score = 0;
+      else if (height < min) score = min - height;
+      else score = height - max;
+
+      if (score < bestScore) {
+        best = stair;
+        bestScore = score;
+      }
+    }
+
+    return best;
   }
 
   function calculateFasciaRun(spec) {
@@ -461,6 +490,237 @@
     }
   }
 
+  async function loadLiveStagingStock(options) {
+    options = options || {};
+    if (!options.force && stockState.catalog) return stockState.catalog;
+    if (!options.force && stockState.loading) return stockState.loading;
+
+    stockState.error = "";
+    stockState.loading = (async function () {
+      var candidates = [];
+      appendStockCandidates(candidates, readWindowStockCandidates());
+
+      for (var i = 0; i < CFG.stockSearchTerms.length; i++) {
+        var term = CFG.stockSearchTerms[i];
+        var termCandidates = await fetchSearchListCandidates(term);
+        appendStockCandidates(candidates, termCandidates);
+      }
+
+      var catalog = buildLiveStockCatalog(candidates);
+      if (!catalog.items.length) {
+        throw new Error("No live staging stock could be found.");
+      }
+
+      stockState.catalog = catalog;
+      return catalog;
+    })();
+
+    try {
+      return await stockState.loading;
+    } catch (err) {
+      stockState.error = getErrorMessage(err, "Could not load live staging stock.");
+      throw err;
+    } finally {
+      stockState.loading = null;
+    }
+  }
+
+  function readWindowStockCandidates() {
+    var out = [];
+    var keys = ["hirestock", "hire_stock", "stock_items", "stockItems", "stock", "resources", "items"];
+    for (var i = 0; i < keys.length; i++) {
+      appendStockCandidates(out, normaliseCandidateList(window[keys[i]], "window." + keys[i]));
+    }
+    return out;
+  }
+
+  async function fetchSearchListCandidates(term) {
+    var out = [];
+    var urls = buildSearchListUrls(term);
+
+    for (var i = 0; i < urls.length; i++) {
+      try {
+        var response = await fetch(urls[i], {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
+        });
+        if (!response.ok) continue;
+        var text = await response.text();
+        var json = tryParseJson(text);
+        if (!json) continue;
+        appendStockCandidates(out, normaliseCandidateList(json, "search:" + term));
+      } catch (err) {
+        warn("Live stock search failed for " + term, err);
+      }
+    }
+
+    return out;
+  }
+
+  function buildSearchListUrls(term) {
+    var base = CFG.searchList || "/php_functions/search_list.php";
+    var encTerm = encodeURIComponent(term);
+    var encCategory = encodeURIComponent(CFG.stagingCategoryName);
+    var encCategoryId = encodeURIComponent(CFG.stagingCategoryId);
+
+    return [
+      base + "?term=" + encTerm,
+      base + "?q=" + encTerm,
+      base + "?search=" + encTerm,
+      base + "?term=" + encTerm + "&category=" + encCategory,
+      base + "?term=" + encTerm + "&category_id=" + encCategoryId
+    ];
+  }
+
+  function normaliseCandidateList(value, source) {
+    var raw = [];
+    collectCandidateObjects(value, raw, 0);
+
+    var out = [];
+    for (var i = 0; i < raw.length; i++) {
+      var item = normaliseStockRecord(raw[i], source);
+      if (item && isUsableStagingRecord(item)) out.push(item);
+    }
+    return out;
+  }
+
+  function collectCandidateObjects(value, out, depth) {
+    if (depth > 5 || value == null) return;
+    if (Array.isArray(value)) {
+      for (var i = 0; i < value.length; i++) collectCandidateObjects(value[i], out, depth + 1);
+      return;
+    }
+    if (typeof value !== "object") return;
+
+    if (getFirstField(value, ["ID", "id", "LIST_ID", "list_id", "value"]) && getFirstField(value, ["NAME", "name", "label", "text", "title", "TITLE"])) {
+      out.push(value);
+    }
+
+    var keys = ["items", "rows", "data", "results", "list", "aaData"];
+    for (var k = 0; k < keys.length; k++) {
+      if (value[keys[k]] != null) collectCandidateObjects(value[keys[k]], out, depth + 1);
+    }
+  }
+
+  function normaliseStockRecord(raw, source) {
+    if (!raw || typeof raw !== "object") return null;
+
+    var id = cleanStockId(getFirstField(raw, ["ID", "id", "LIST_ID", "list_id", "stock_id", "item_id", "value"]));
+    var name = cleanStockName(getFirstField(raw, ["NAME", "name", "label", "text", "title", "TITLE"]));
+    if (!id || !name) return null;
+
+    return {
+      id: String(id),
+      name: name,
+      category: cleanStockName(getFirstField(raw, ["CATEGORY", "category", "category_name", "categoryName"])),
+      categoryId: String(getFirstField(raw, ["CATEGORY_ID", "category_id", "categoryId"]) || ""),
+      breadcrumbs: cleanStockName(getFirstField(raw, ["BREADCRUMBS", "breadcrumbs", "path", "category_path"])),
+      status: cleanStockName(getFirstField(raw, ["STATUS", "status"])),
+      price: parseStockPrice(raw),
+      priceType: parseStockPriceType(raw),
+      eventBuilderVisible: readEventBuilderVisible(raw),
+      source: source || ""
+    };
+  }
+
+  function isUsableStagingRecord(item) {
+    if (!item || !item.name) return false;
+    if (item.status && !/active/i.test(item.status)) return false;
+
+    var categoryText = normaliseMatchText([item.category, item.breadcrumbs].join(" "));
+    var hasCategory = !!(item.category || item.breadcrumbs || item.categoryId);
+    var categoryMatches = categoryText.indexOf(normaliseMatchText(CFG.stagingCategoryName)) !== -1 || String(item.categoryId || "") === String(CFG.stagingCategoryId);
+    if (hasCategory && !categoryMatches) return false;
+
+    return looksLikeUsableStageStockName(item.name);
+  }
+
+  function looksLikeUsableStageStockName(name) {
+    var text = normaliseMatchText(name);
+    return /deck|litedeck|scaff leg|stairs|tread|step unit/.test(text);
+  }
+
+  function buildLiveStockCatalog(candidates) {
+    var catalog = emptyCatalog();
+    var seen = {};
+
+    for (var i = 0; i < (candidates || []).length; i++) {
+      var item = candidates[i];
+      if (!item || !item.id || !item.name) continue;
+      var key = item.id + "|" + normaliseMatchText(item.name);
+      if (seen[key]) continue;
+      seen[key] = true;
+      catalog.items.push(item);
+      addCatalogDeck(catalog, item);
+      addCatalogLeg(catalog, item);
+      addCatalogStair(catalog, item);
+    }
+
+    addCatalogWarnings(catalog);
+    return catalog;
+  }
+
+  function addCatalogDeck(catalog, item) {
+    var text = normaliseMatchText(item.name);
+    if (!/(deck|litedeck)/.test(text)) return;
+    if (/handrail|triangle|quarter|circle/.test(text)) return;
+
+    var match = item.name.match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*m?/i);
+    if (!match) return;
+
+    var a = roundQuantity(match[1]);
+    var b = roundQuantity(match[2]);
+    if (!isHalfMetreIncrement(a) || !isHalfMetreIncrement(b)) return;
+
+    maybeSetDeckKey(catalog, item, "deck-2x1", a, b, 2, 1);
+    maybeSetDeckKey(catalog, item, "deck-2x0.5", a, b, 2, 0.5);
+    maybeSetDeckKey(catalog, item, "deck-1x1", a, b, 1, 1);
+    maybeSetDeckKey(catalog, item, "deck-1x0.5", a, b, 1, 0.5);
+    maybeSetDeckKey(catalog, item, "deck-0.5x0.5", a, b, 0.5, 0.5);
+  }
+
+  function maybeSetDeckKey(catalog, item, key, a, b, width, depth) {
+    if (!dimensionsMatch(a, b, width, depth)) return;
+    var deck = cloneStockItem(item);
+    deck.key = key;
+    deck.width = width;
+    deck.depth = depth;
+    catalog.decksByKey[key] = chooseBetterStockItem(catalog.decksByKey[key], deck);
+  }
+
+  function addCatalogLeg(catalog, item) {
+    var match = item.name.match(/(\d{3,4})\s*mm\s+scaff\s+leg/i);
+    if (!match) return;
+    var height = String(Number(match[1]));
+    var leg = cloneStockItem(item);
+    leg.key = "leg-" + height;
+    leg.height = Number(height);
+    catalog.legs[height] = chooseBetterStockItem(catalog.legs[height], leg);
+  }
+
+  function addCatalogStair(catalog, item) {
+    var text = normaliseMatchText(item.name);
+    if (!/stairs|tread|step unit/.test(text)) return;
+
+    var stair = cloneStockItem(item);
+    var range = item.name.match(/(\d{3,4})\s*-\s*(\d{3,4})\s*mm/i);
+    var single = item.name.match(/(\d{3,4})\s*mm/i);
+    stair.key = "stair-" + String(item.id || catalog.stairs.length);
+    stair.minHeight = range ? Number(range[1]) : (single ? Math.max(0, Number(single[1]) - 200) : 0);
+    stair.maxHeight = range ? Number(range[2]) : (single ? Number(single[1]) : 9999);
+    catalog.stairs.push(stair);
+  }
+
+  function addCatalogWarnings(catalog) {
+    var requiredDecks = ["deck-2x1", "deck-2x0.5", "deck-1x1", "deck-1x0.5", "deck-0.5x0.5"];
+    for (var i = 0; i < requiredDecks.length; i++) {
+      if (!catalog.decksByKey[requiredDecks[i]]) catalog.warnings.push("Missing " + describeDeckKey(requiredDecks[i]) + " in live staging stock.");
+    }
+    if (!Object.keys(catalog.legs).length) catalog.warnings.push("Missing live scaff leg stock.");
+    if (!catalog.stairs.length) catalog.warnings.push("Missing live stair/tread stock.");
+  }
+
   async function saveStageHeading(jobId, parentId, id, spec, kit) {
     return postItemsSave({
       parent: String(parentId || "0"),
@@ -471,8 +731,8 @@
       local: formatLocalDateTime(new Date()),
       id: String(id || "0"),
       name: getStageFolderTitle(spec),
-      desc: "Generated stage kit",
-      memo: composeStageMetaText("", spec, kit),
+      desc: "",
+      memo: "",
       set_child_dates: "0",
       job: String(jobId || ""),
       no_availability: "0",
@@ -488,14 +748,14 @@
       flag: "0",
       priority_confirm: "0",
       custom_fields: "",
-      kind: "3",
+      kind: line.kind === "stock" ? "1" : "3",
       local: formatLocalDateTime(new Date()),
       id: "0",
       qty: String(line.qty || 1),
       name: String(line.name || ""),
       list_id: String(line.listId || "0"),
-      cust_add: line.kind === "custom" ? "Generated from stage spec: " + getStageSpecLabel(spec) : "",
-      memo: String(line.memo || ""),
+      cust_add: "",
+      memo: "",
       price_type: String(line.priceType || 0),
       weight: "0",
       vat_rate: String(getDefaultVatRate()),
@@ -506,7 +766,7 @@
       no_scan: "0",
       country_origin: "",
       hs_code: "",
-      category_id: "0",
+      category_id: line.kind === "stock" ? String(line.categoryId || CFG.stagingCategoryId || "0") : "0",
       no_shortfall: "0",
       unit_price: String(unitPrice),
       price: String(totalPrice),
@@ -569,7 +829,7 @@
         stageFolderId: "",
         parentId: getParentHeadingDataId(tree, headingNode),
         parentTitle: getNodeTitle(parent) || "selected parent",
-        spec: parsed && parsed.spec ? parsed.spec : null
+        spec: parsed && parsed.spec ? parsed.spec : parseSpecFromStageTitle(getNodeTitle(headingNode))
       };
     }
 
@@ -588,7 +848,7 @@
     var technical = getNodeTechnical(node);
     if (technical.indexOf(CFG.metaStart) !== -1 && technical.indexOf(CFG.marker) !== -1) return true;
     var name = getNodeTitle(node);
-    return /^stage\s+-\s+/i.test(name) && technical.indexOf(CFG.marker) !== -1;
+    return /^stage\s+-\s+/i.test(name);
   }
 
   function getTargetSubtitle(target) {
@@ -608,9 +868,22 @@
     };
   }
 
-  function normaliseSpec(spec) {
+  function parseSpecFromStageTitle(title) {
+    var match = String(title || "").match(/stage\s+-\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d{3,4})mm/i);
+    if (!match) return null;
+    return {
+      width: Number(match[1]),
+      depth: Number(match[2]),
+      height: Number(match[3]),
+      carpetColour: "Black",
+      fasciaColour: "Black",
+      treads: 1
+    };
+  }
+
+  function normaliseSpec(spec, catalog) {
     spec = spec || {};
-    var heights = getLegHeights();
+    var heights = getLegHeights(catalog);
     var height = Number(spec.height || 600);
     if (heights.indexOf(height) === -1) height = closestNumber(height, heights, 600);
 
@@ -632,30 +905,6 @@
     return formatDimension(spec.width) + "m x " + formatDimension(spec.depth) + "m x " + String(spec.height) + "mm";
   }
 
-  function composeStageMetaText(baseText, spec, kit) {
-    var meta = {
-      editor: CFG.marker,
-      version: CFG.version,
-      spec: normaliseSpec(spec),
-      calculated: {
-        deckCount: kit.deckCount,
-        legCount: kit.legCount,
-        carpetArea: kit.carpetArea,
-        carpetLinearM: kit.carpetLinearM,
-        fasciaRun: kit.fasciaRun,
-        feltLinearM: kit.feltLinearM,
-        legRule: CFG.legRule,
-        fasciaMode: CFG.fasciaMode
-      }
-    };
-
-    var parts = [];
-    var base = $.trim(String(baseText || ""));
-    if (base) parts.push(base);
-    parts.push(CFG.metaStart + JSON.stringify(meta) + CFG.metaEnd);
-    return parts.join("\n\n");
-  }
-
   function extractStageMeta(text) {
     var raw = String(text || "");
     var start = raw.indexOf(CFG.metaStart);
@@ -666,19 +915,6 @@
     } catch (e) {
       return null;
     }
-  }
-
-  function composeLineMemo(memo, stock) {
-    var meta = {
-      editor: CFG.marker,
-      version: CFG.version,
-      stockKey: stock && stock.key ? stock.key : "",
-      stockId: stock && stock.id ? stock.id : ""
-    };
-    var parts = [];
-    if ($.trim(String(memo || ""))) parts.push($.trim(String(memo || "")));
-    parts.push(CFG.metaStart + JSON.stringify(meta) + CFG.metaEnd);
-    return parts.join("\n\n");
   }
 
   function stagePreviewHtml(spec, kit) {
@@ -725,6 +961,20 @@
     }
 
     var html = '<div class="wsd-kit-title">Generated kit</div>';
+    if (kit.missingRequired && kit.missingRequired.length) {
+      html += '<div class="wsd-kit-group"><div class="wsd-kit-group-title">Missing live stock</div>';
+      for (var m = 0; m < kit.missingRequired.length; m++) {
+        html += '<div class="wsd-kit-row"><strong>!</strong><span>' + esc(kit.missingRequired[m]) + '</span></div>';
+      }
+      html += '</div>';
+    }
+    if (kit.warnings && kit.warnings.length) {
+      html += '<div class="wsd-kit-group"><div class="wsd-kit-group-title">Live stock notes</div>';
+      for (var w = 0; w < kit.warnings.length; w++) {
+        html += '<div class="wsd-kit-row"><strong>-</strong><span>' + esc(kit.warnings[w]) + '</span></div>';
+      }
+      html += '</div>';
+    }
     for (var g = 0; g < order.length; g++) {
       var groupName = order[g];
       html += '<div class="wsd-kit-group"><div class="wsd-kit-group-title">' + esc(groupName) + '</div>';
@@ -768,8 +1018,8 @@
     return html;
   }
 
-  function getLegHeightOptions() {
-    var heights = getLegHeights();
+  function getLegHeightOptions(catalog) {
+    var heights = getLegHeights(catalog);
     var out = [];
     for (var i = 0; i < heights.length; i++) {
       out.push({ value: String(heights[i]), label: String(heights[i]) });
@@ -777,8 +1027,27 @@
     return out;
   }
 
-  function getLegHeights() {
-    return [200, 270, 300, 400, 600, 800, 1000, 1200, 1600];
+  function getLegHeights(catalog) {
+    catalog = normaliseCatalog(catalog);
+    var live = Object.keys(catalog.legs || {}).map(function (value) { return Number(value); }).filter(function (value) { return isFinite(value) && value > 0; }).sort(function (a, b) { return a - b; });
+    return live.length ? live : [200, 270, 300, 400, 600, 800, 1000, 1200, 1600];
+  }
+
+  function syncHeightOptions(catalog) {
+    var $select = $("#" + CFG.overlayId).find('[data-wsd-field="height"]').first();
+    if (!$select.length) return;
+
+    var current = state.currentSpec && state.currentSpec.height ? String(state.currentSpec.height) : String($select.val() || "");
+    var options = getLegHeightOptions(catalog);
+    var html = "";
+    var found = false;
+    for (var i = 0; i < options.length; i++) {
+      if (String(options[i].value) === current) found = true;
+      html += '<option value="' + escAttr(options[i].value) + '">' + esc(options[i].label) + '</option>';
+    }
+    $select.html(html);
+    if (found) $select.val(current);
+    else if (options.length) $select.val(String(options[0].value));
   }
 
   function setBusy(isBusy) {
@@ -1041,23 +1310,166 @@
     $("<style id='" + CFG.stylesId + "'></style>").text(css).appendTo("head");
   }
 
-  function stockItem(key, id, name, width, depth, price, priceType) {
+  function emptyCatalog() {
     return {
-      key: key,
-      id: String(id || ""),
-      name: String(name || ""),
-      width: Number(width || 0),
-      depth: Number(depth || 0),
-      price: Number(price || 0),
-      priceType: Number(priceType || 0)
+      items: [],
+      decksByKey: {},
+      legs: {},
+      stairs: [],
+      warnings: []
     };
   }
 
-  function findDeckItem(key) {
-    for (var i = 0; i < STOCK.decks.length; i++) {
-      if (STOCK.decks[i].key === key) return STOCK.decks[i];
+  function normaliseCatalog(catalog) {
+    if (!catalog || typeof catalog !== "object") return emptyCatalog();
+    catalog.items = Array.isArray(catalog.items) ? catalog.items : [];
+    catalog.decksByKey = catalog.decksByKey || {};
+    catalog.legs = catalog.legs || {};
+    catalog.stairs = Array.isArray(catalog.stairs) ? catalog.stairs : [];
+    catalog.warnings = Array.isArray(catalog.warnings) ? catalog.warnings : [];
+    return catalog;
+  }
+
+  function appendStockCandidates(out, items) {
+    for (var i = 0; i < (items || []).length; i++) {
+      if (items[i]) out.push(items[i]);
     }
-    return null;
+  }
+
+  function cloneStockItem(item) {
+    return {
+      key: item.key || "",
+      id: String(item.id || ""),
+      name: String(item.name || ""),
+      width: Number(item.width || 0),
+      depth: Number(item.depth || 0),
+      height: Number(item.height || 0),
+      minHeight: Number(item.minHeight || 0),
+      maxHeight: Number(item.maxHeight || 0),
+      price: Number(item.price || 0),
+      priceType: Number(item.priceType || 0),
+      categoryId: String(item.categoryId || ""),
+      eventBuilderVisible: item.eventBuilderVisible === true
+    };
+  }
+
+  function findDeckItem(key, catalog) {
+    catalog = normaliseCatalog(catalog);
+    return catalog.decksByKey[key] || null;
+  }
+
+  function chooseBetterStockItem(current, candidate) {
+    if (!current) return candidate;
+    if (candidate.eventBuilderVisible && !current.eventBuilderVisible) return candidate;
+    if (!candidate.eventBuilderVisible && current.eventBuilderVisible) return current;
+    if (candidate.price > 0 && (current.price <= 0 || candidate.price < current.price)) return candidate;
+    return current;
+  }
+
+  function getFirstField(object, keys) {
+    if (!object || typeof object !== "object") return "";
+    for (var i = 0; i < keys.length; i++) {
+      var value = object[keys[i]];
+      if (value != null && value !== "") return value;
+    }
+    return "";
+  }
+
+  function cleanStockName(value) {
+    return $.trim(String(value == null ? "" : value)
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/\s+/g, " "));
+  }
+
+  function cleanStockId(value) {
+    var text = $.trim(String(value == null ? "" : value));
+    if (!text) return "";
+    var exact = text.match(/^(?:list|stock|item|l|s|b)?[_:-]?(\d+)$/i);
+    if (exact) return exact[1];
+    var numeric = text.match(/(?:^|[^0-9])(\d{3,})(?:[^0-9]|$)/);
+    return numeric ? numeric[1] : text;
+  }
+
+  function parseStockPrice(raw) {
+    var direct = getFirstField(raw, ["PRICE_1", "price_1", "PRICE", "price", "UNIT_PRICE", "unit_price"]);
+    if (direct !== "") return Number(String(direct).replace(/[^0-9.-]/g, "")) || 0;
+
+    var prices = getFirstField(raw, ["PRICES", "prices"]);
+    if (prices && typeof prices === "string") {
+      try {
+        var json = JSON.parse(prices);
+        if (json && json._1 && json._1.PRICE != null) return Number(json._1.PRICE) || 0;
+      } catch (e) {}
+    } else if (prices && typeof prices === "object" && prices._1 && prices._1.PRICE != null) {
+      return Number(prices._1.PRICE) || 0;
+    }
+
+    return 0;
+  }
+
+  function parseStockPriceType(raw) {
+    var direct = getFirstField(raw, ["PRICE_TYPE_1_ID", "price_type_1_id", "PRICE_TYPE_ID", "price_type_id", "PRICE_TYPE", "price_type"]);
+    var directText = String(direct == null ? "" : direct).replace(/[^0-9.-]/g, "");
+    var directNumber = Number(directText);
+    if (directText && isFinite(directNumber)) return directNumber || 0;
+
+    var prices = getFirstField(raw, ["PRICES", "prices"]);
+    if (prices && typeof prices === "string") {
+      try {
+        var json = JSON.parse(prices);
+        if (json && json._1 && json._1.TYPE != null) return Number(json._1.TYPE) || 0;
+      } catch (e) {}
+    } else if (prices && typeof prices === "object" && prices._1 && prices._1.TYPE != null) {
+      return Number(prices._1.TYPE) || 0;
+    }
+
+    return 0;
+  }
+
+  function readEventBuilderVisible(raw) {
+    var customFields = getFirstField(raw, ["CUSTOM_FIELDS", "custom_fields", "customFields"]);
+    if (!customFields) return false;
+    try {
+      var json = typeof customFields === "string" ? JSON.parse(customFields) : customFields;
+      var field = json && (json.EventBuilderVisible || json.eventBuilderVisible);
+      return !!(field && String(field.value != null ? field.value : field).toLowerCase() === "1");
+    } catch (e) {
+      return /EventBuilderVisible/i.test(String(customFields)) && /"1"|:1/.test(String(customFields));
+    }
+  }
+
+  function normaliseMatchText(value) {
+    return $.trim(String(value || "").toLowerCase().replace(/[^a-z0-9.]+/g, " "));
+  }
+
+  function isHalfMetreIncrement(value) {
+    var doubled = Number(value || 0) * 2;
+    return Math.abs(doubled - Math.round(doubled)) < 0.001;
+  }
+
+  function dimensionsMatch(a, b, width, depth) {
+    return (Math.abs(a - width) < 0.001 && Math.abs(b - depth) < 0.001) ||
+      (Math.abs(a - depth) < 0.001 && Math.abs(b - width) < 0.001);
+  }
+
+  function describeDeckKey(key) {
+    var match = String(key || "").match(/deck-(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+    if (match) return match[1] + " x " + match[2] + "m deck";
+    return String(key || "deck");
+  }
+
+  function uniqueStrings(items) {
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < (items || []).length; i++) {
+      var value = $.trim(String(items[i] || ""));
+      if (!value || seen[value]) continue;
+      seen[value] = true;
+      out.push(value);
+    }
+    return out;
   }
 
   function addCount(counts, key, amount) {
@@ -1257,10 +1669,16 @@
   window.__wiseStageDesigner = {
     open: openDesigner,
     calculate: calculateStageKit,
+    reloadStock: function () {
+      return loadLiveStagingStock({ force: true });
+    },
+    getStockCatalog: function () {
+      return stockState.catalog;
+    },
     describe: function () {
       return {
         version: CFG.version,
-        role: "Simple staging spec designer that generates HireHop supplying-list stock rows from width, depth, height, carpet, fascia, and stair units.",
+        role: "Simple staging spec designer that loads live Staging-category HireHop stock and generates supplying-list rows from width, depth, height, carpet, fascia, and stair units.",
         assumptions: {
           deckIncrementM: CFG.deckIncrementM,
           legRule: CFG.legRule,
@@ -1271,7 +1689,15 @@
           stairFeltLinearM: CFG.stairFeltLinearM,
           consumables: "Carpet and fascia/felt are custom placeholder rows until stocked consumable IDs are available. Hire components are saved as listed stock rows using list_id."
         },
-        stock: STOCK
+        liveStock: {
+          endpoint: CFG.searchList,
+          category: CFG.stagingCategoryName,
+          categoryId: CFG.stagingCategoryId,
+          searchTerms: CFG.stockSearchTerms.slice(),
+          loadedItems: stockState.catalog ? stockState.catalog.items.length : 0,
+          error: stockState.error || ""
+        },
+        stockCatalog: stockState.catalog
       };
     }
   };

@@ -35,7 +35,7 @@ Load these in HireHop:
 
 `7-captrack.js` is the Wise capacity tracker. It opens as a full-page planning view and uses project-level Wise custom fields for event naming, status, revenue, tier, client, venue, and role allocation.
 
-`8-stagedesigner.js` adds a simple staging kit designer to the supplying list toolbar. It turns width, depth, stocked leg height, carpet colour, fascia colour, and stair unit count into generated HireHop stock rows, with custom placeholder rows for consumables until carpet and fascia stock IDs are available.
+`8-stagedesigner.js` adds a simple staging kit designer to the supplying list toolbar. It loads live HireHop items from the Staging category, then turns width, depth, stocked leg height, carpet colour, fascia colour, and stair unit count into generated HireHop listed-stock rows, with custom placeholder rows only for consumables until carpet and fascia stock IDs are available.
 
 ## Reference And Legacy Files
 
