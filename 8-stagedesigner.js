@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.14",
+    version: "2026-06-12.15",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -51,6 +51,7 @@
     stagingCategoryIds: ["1043", "505"],
     salesConsumablesCategoryName: "Unit 10 Consumables",
     salesConsumablesCategoryId: "1062",
+    customColourValue: "__custom__",
     stockSearchTerms: ["Deck Panel", "LiteDeck", "Litedeck", "Deck Leg", "Scaff Leg", "Stairs/Tread", "Step Unit", "Tread Kit", "Facia", "Fascia", "Staging"],
     fasciaSidesDefault: 3,
     legRule: "per-deck-corners"
@@ -158,8 +159,8 @@
               controlNumberHtml("width", "Width", spec.width, getLengthMin(spec), getLengthMax(spec), getLengthStep(spec), getLengthUnitLabel(spec)) +
               controlNumberHtml("depth", "Depth", spec.depth, getLengthMin(spec), getLengthMax(spec), getLengthStep(spec), getLengthUnitLabel(spec)) +
               controlSelectHtml("height", "Height", String(spec.height), getLegHeightOptions(stockState.catalog, spec.unitSystem), getHeightUnitSuffix(spec)) +
-              controlTextHtml("carpetColour", "Carpet colour", spec.carpetColour || "Black") +
-              controlTextHtml("fasciaColour", "Fascia colour", spec.fasciaColour || "Black") +
+              controlColourHtml("carpetColour", "Carpet colour", spec, stockState.catalog) +
+              controlColourHtml("fasciaColour", "Fascia colour", spec, stockState.catalog) +
               controlSelectHtml("fasciaSides", "Fascia sides", String(spec.fasciaSides || CFG.fasciaSidesDefault), getFasciaSideOptions(), "") +
               controlNumberHtml("treads", "Stair units", spec.treads, 0, 20, 1, "") +
             '</form>' +
@@ -227,13 +228,17 @@
   function readSpecFromModal() {
     var $overlay = $("#" + CFG.overlayId);
     var unitSystem = normaliseUnitSystem($overlay.find('[data-wsd-field="unitSystem"]').val() || "metric");
+    var carpetColour = readColourControl($overlay, "carpetColour", "Black");
+    var fasciaColour = readColourControl($overlay, "fasciaColour", "Black");
     return {
       unitSystem: unitSystem,
       width: readNumberField($overlay, "width", 4),
       depth: readNumberField($overlay, "depth", 3),
       height: readNumberField($overlay, "height", unitSystem === "imperial" ? 24 : 600),
-      carpetColour: $.trim(String($overlay.find('[data-wsd-field="carpetColour"]').val() || "Black")),
-      fasciaColour: $.trim(String($overlay.find('[data-wsd-field="fasciaColour"]').val() || "Black")),
+      carpetColour: carpetColour.colour,
+      carpetColourCustom: carpetColour.custom,
+      fasciaColour: fasciaColour.colour,
+      fasciaColourCustom: fasciaColour.custom,
       fasciaSides: readNumberField($overlay, "fasciaSides", CFG.fasciaSidesDefault),
       treads: readNumberField($overlay, "treads", 1)
     };
@@ -454,7 +459,7 @@
   }
 
   function calculateImperialCarpetRolls(spec, catalog) {
-    var widths = getImperialCarpetRollWidths(catalog, spec.carpetColour);
+    var widths = getImperialCarpetRollWidths(catalog, spec.carpetColourCustom ? "" : spec.carpetColour);
     if (!widths.length) widths = [CFG.imperialCarpetDefaultRollWidthFt];
 
     var alongWidth = buildCarpetPlanWithWidths(spec.width, spec.depth, CFG.imperialCarpetOverhangFt, widths, "width");
@@ -484,16 +489,16 @@
     var stockCounts = {};
     for (var i = 0; i < consumables.carpetRolls.length; i++) {
       var roll = consumables.carpetRolls[i];
-      var carpetItem = findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, roll.width);
+      var carpetItem = spec.carpetColourCustom ? null : findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, roll.width);
       if (carpetItem) addStockCount(stockCounts, carpetItem, getImperialSoftGoodLineQty(carpetItem, roll.linearM));
       else {
         addCustomLine(lines, "Carpet - " + spec.carpetColour + " " + formatDimension(roll.width) + "ft wide x " + formatDimension(roll.lengthM) + "ft long (stage top)", roll.count, "", "Consumables");
-        warnings.push("No live imperial carpet stock matched " + spec.carpetColour + " / " + formatDimension(roll.width) + "ft; added a custom carpet row.");
+        if (!spec.carpetColourCustom) warnings.push("No live imperial carpet stock matched " + spec.carpetColour + " / " + formatDimension(roll.width) + "ft; added a custom carpet row.");
       }
     }
 
     if (consumables.stairCarpetLinearFt > 0) {
-      var treadCarpet = findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, 0);
+      var treadCarpet = spec.carpetColourCustom ? null : findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, 0);
       if (treadCarpet) addStockCount(stockCounts, treadCarpet, getImperialSoftGoodLineQty(treadCarpet, consumables.stairCarpetLinearFt));
       else addCustomLine(lines, "Carpet - " + spec.carpetColour + " (tread allowance linear ft)", consumables.stairCarpetLinearFt, "", "Consumables");
     }
@@ -520,14 +525,14 @@
   }
 
   function addImperialFeltLine(lines, spec, consumables, catalog, warnings) {
-    var feltItem = findImperialSoftGood(catalog.imperial.felts, spec.fasciaColour, 0);
+    var feltItem = spec.fasciaColourCustom ? null : findImperialSoftGood(catalog.imperial.felts, spec.fasciaColour, 0);
     if (feltItem) {
       addStockLine(lines, feltItem, getImperialSoftGoodLineQty(feltItem, consumables.feltLinearFt), "Fascia");
       return;
     }
 
     addCustomLine(lines, getImperialFeltLineName(spec, consumables), consumables.feltLinearFt, "", "Fascia");
-    warnings.push("No live imperial felt stock matched " + spec.fasciaColour + "; added a custom felt row.");
+    if (!spec.fasciaColourCustom) warnings.push("No live imperial felt stock matched " + spec.fasciaColour + "; added a custom felt row.");
   }
 
   function getImperialSoftGoodLineQty(item, linearFt) {
@@ -1569,14 +1574,29 @@
 
   function inferColourFromName(name) {
     var text = normaliseMatchText(name);
-    if (text.indexOf("anthracite") !== -1) return "grey";
-    if (text.indexOf("dark grey") !== -1 || text.indexOf("light grey") !== -1) return "grey";
-    if (text.indexOf("off white") !== -1) return "white";
-    if (text.indexOf("navy blue") !== -1) return "blue";
-    if (text.indexOf("bright red") !== -1) return "red";
-    var colours = ["black", "burgundy", "grey", "gray", "white", "blue", "red", "green", "purple", "pink", "yellow", "orange"];
+    var colours = [
+      ["anthracite", "Anthracite"],
+      ["dark grey", "Dark Grey"],
+      ["light grey", "Light Grey"],
+      ["off white", "Off White"],
+      ["navy blue", "Navy Blue"],
+      ["bright red", "Bright Red"],
+      ["dark green", "Dark Green"],
+      ["burgundy", "Burgundy"],
+      ["black", "Black"],
+      ["grey", "Grey"],
+      ["gray", "Grey"],
+      ["white", "White"],
+      ["blue", "Blue"],
+      ["red", "Red"],
+      ["green", "Green"],
+      ["purple", "Purple"],
+      ["pink", "Pink"],
+      ["yellow", "Yellow"],
+      ["orange", "Orange"]
+    ];
     for (var i = 0; i < colours.length; i++) {
-      if (text.indexOf(colours[i]) !== -1) return colours[i] === "gray" ? "grey" : colours[i];
+      if (text.indexOf(colours[i][0]) !== -1) return colours[i][1];
     }
     return "";
   }
@@ -1667,9 +1687,14 @@
   function scoreSoftGood(item, colour, widthFt) {
     var score = 0;
     var requestedColour = normaliseColourName(colour);
-    if (requestedColour && item.colour && item.colour !== requestedColour) return Infinity;
-    if (requestedColour && item.colour === requestedColour) score -= 5;
-    else if (requestedColour && !item.colour) score += 2;
+    var itemColour = normaliseColourName(item.colour);
+    if (requestedColour && itemColour && itemColour !== requestedColour) {
+      if (colourFamilyName(itemColour) !== colourFamilyName(requestedColour)) return Infinity;
+      score += 2;
+    }
+    if (requestedColour && itemColour === requestedColour) score -= 8;
+    else if (requestedColour && itemColour && colourFamilyName(itemColour) === colourFamilyName(requestedColour)) score -= 3;
+    else if (requestedColour && !itemColour) score += 2;
 
     if (Number(widthFt || 0) > 0) {
       if (item.widthFt > 0) score += Math.abs(Number(item.widthFt || 0) - Number(widthFt || 0));
@@ -1683,18 +1708,23 @@
 
   function normaliseColourName(colour) {
     var text = normaliseMatchText(colour);
-    if (text === "gray") return "grey";
+    return text.replace(/\bgray\b/g, "grey");
+  }
+
+  function colourFamilyName(colour) {
+    var text = normaliseColourName(colour);
     if (text === "anthracite" || text === "dark grey" || text === "light grey") return "grey";
     if (text === "off white") return "white";
     if (text === "navy blue") return "blue";
     if (text === "bright red") return "red";
+    if (text === "dark green") return "green";
     return text;
   }
 
   function colourMatches(itemColour, requestedColour) {
     var requested = normaliseColourName(requestedColour);
     var item = normaliseColourName(itemColour);
-    return !requested || !item || item === requested;
+    return !requested || !item || item === requested || colourFamilyName(item) === colourFamilyName(requested);
   }
 
   function dimensionsClose(a, b) {
@@ -1952,7 +1982,9 @@
       depth: 3,
       height: 600,
       carpetColour: "Black",
+      carpetColourCustom: false,
       fasciaColour: "Black",
+      fasciaColourCustom: false,
       fasciaSides: CFG.fasciaSidesDefault,
       treads: 1
     };
@@ -1968,7 +2000,9 @@
         depth: Number(match[2]),
         height: parseImperialHeightToken(match[3]),
         carpetColour: $.trim(match[4]) || "Black",
+        carpetColourCustom: false,
         fasciaColour: $.trim(match[5]) || "Black",
+        fasciaColourCustom: false,
         fasciaSides: CFG.fasciaSidesDefault,
         treads: Number(match[6])
       };
@@ -1982,7 +2016,9 @@
         depth: Number(match[2]),
         height: Number(match[3]),
         carpetColour: $.trim(match[4]) || "Black",
+        carpetColourCustom: false,
         fasciaColour: $.trim(match[5]) || "Black",
+        fasciaColourCustom: false,
         fasciaSides: CFG.fasciaSidesDefault,
         treads: Number(match[6])
       };
@@ -1996,7 +2032,9 @@
       depth: Number(match[2]),
       height: Number(match[3]),
       carpetColour: "Black",
+      carpetColourCustom: false,
       fasciaColour: "Black",
+      fasciaColourCustom: false,
       fasciaSides: CFG.fasciaSidesDefault,
       treads: 1
     };
@@ -2009,14 +2047,22 @@
     var fallbackHeight = unitSystem === "imperial" ? 24 : 600;
     var height = Number(spec.height || fallbackHeight);
     if (heights.indexOf(height) === -1) height = closestNumber(height, heights, fallbackHeight);
+    var carpetColour = cleanColourValue(spec.carpetColour, "Black");
+    var fasciaColour = cleanColourValue(spec.fasciaColour, "Black");
+    var carpetColourCustom = resolveColourCustomFlag("carpetColour", carpetColour, spec.carpetColourCustom, catalog);
+    var fasciaColourCustom = resolveColourCustomFlag("fasciaColour", fasciaColour, spec.fasciaColourCustom, catalog);
+    if (!carpetColourCustom) carpetColour = resolveStockColourName("carpetColour", carpetColour, catalog);
+    if (!fasciaColourCustom) fasciaColour = resolveStockColourName("fasciaColour", fasciaColour, catalog);
 
     return {
       unitSystem: unitSystem,
       width: clamp(roundToIncrement(spec.width, getLengthStep({ unitSystem: unitSystem })), getLengthMin({ unitSystem: unitSystem }), getLengthMax({ unitSystem: unitSystem })),
       depth: clamp(roundToIncrement(spec.depth, getLengthStep({ unitSystem: unitSystem })), getLengthMin({ unitSystem: unitSystem }), getLengthMax({ unitSystem: unitSystem })),
       height: height,
-      carpetColour: $.trim(String(spec.carpetColour || "Black")) || "Black",
-      fasciaColour: $.trim(String(spec.fasciaColour || "Black")) || "Black",
+      carpetColour: carpetColour,
+      carpetColourCustom: carpetColourCustom,
+      fasciaColour: fasciaColour,
+      fasciaColourCustom: fasciaColourCustom,
       fasciaSides: Number(spec.fasciaSides) >= 4 ? 4 : 3,
       treads: clamp(Math.round(Number(spec.treads || 0)), 0, 20)
     };
@@ -2146,6 +2192,24 @@
       '</label>';
   }
 
+  function controlColourHtml(field, label, spec, catalog) {
+    spec = normaliseSpec(spec || defaultSpec(), catalog);
+    var colour = field === "fasciaColour" ? spec.fasciaColour : spec.carpetColour;
+    var isCustom = field === "fasciaColour" ? spec.fasciaColourCustom : spec.carpetColourCustom;
+    var options = getColourControlOptions(field, colour, catalog);
+    var selected = getColourControlSelection(options, colour, isCustom);
+    var html = '<label class="wsd-field wsd-colour-field' + (selected === CFG.customColourValue ? ' is-custom' : '') + '" data-wsd-colour-field="' + escAttr(field) + '">';
+    html += '<span>' + esc(label) + '</span>';
+    html += '<div class="wsd-input-wrap"><select data-wsd-field="' + escAttr(field + "Choice") + '">';
+    for (var i = 0; i < options.length; i++) {
+      html += '<option value="' + escAttr(options[i].value) + '"' + (String(options[i].value) === String(selected) ? ' selected' : '') + '>' + esc(options[i].label) + '</option>';
+    }
+    html += '</select><i data-wsd-swatch="' + escAttr(field) + '"></i></div>';
+    html += '<div class="wsd-input-wrap wsd-custom-colour"><input data-wsd-field="' + escAttr(field + "Custom") + '" type="text" value="' + escAttr(colour) + '" placeholder="Custom colour"></div>';
+    html += '</label>';
+    return html;
+  }
+
   function controlSelectHtml(field, label, value, options, suffix) {
     var html = '<label class="wsd-field"><span>' + esc(label) + '</span><div class="wsd-input-wrap"><select data-wsd-field="' + escAttr(field) + '">';
     for (var i = 0; i < options.length; i++) {
@@ -2160,6 +2224,108 @@
       { value: "metric", label: "Metric" },
       { value: "imperial", label: "Imperial" }
     ];
+  }
+
+  function getColourControlOptions(field, currentColour, catalog) {
+    var colours = getAvailableStockColourNames(catalog, field);
+    if (!colours.length && !stockState.catalog && currentColour) colours = [currentColour];
+    var options = [];
+    for (var i = 0; i < colours.length; i++) {
+      options.push({ value: colours[i], label: colours[i] });
+    }
+    options.push({ value: CFG.customColourValue, label: "Custom..." });
+    return options;
+  }
+
+  function getColourControlSelection(options, colour, isCustom) {
+    if (isCustom) return CFG.customColourValue;
+    var match = findMatchingColourOption(options, colour);
+    return match || CFG.customColourValue;
+  }
+
+  function findMatchingColourOption(options, colour) {
+    for (var i = 0; i < (options || []).length; i++) {
+      if (options[i].value === CFG.customColourValue) continue;
+      if (colourMatches(options[i].value, colour)) return options[i].value;
+    }
+    return "";
+  }
+
+  function readColourControl($overlay, field, fallback) {
+    var $choice = $overlay.find('[data-wsd-field="' + field + 'Choice"]').first();
+    if (!$choice.length) {
+      return {
+        colour: cleanColourValue($overlay.find('[data-wsd-field="' + field + '"]').val(), fallback),
+        custom: false
+      };
+    }
+
+    var choice = String($choice.val() || "");
+    if (choice === CFG.customColourValue) {
+      return {
+        colour: cleanColourValue($overlay.find('[data-wsd-field="' + field + 'Custom"]').val(), fallback),
+        custom: true
+      };
+    }
+
+    return {
+      colour: cleanColourValue(choice, fallback),
+      custom: false
+    };
+  }
+
+  function getAvailableStockColourNames(catalog, field) {
+    catalog = normaliseCatalog(catalog);
+    var items = field === "fasciaColour" ? catalog.imperial.felts : catalog.imperial.carpets;
+    var colours = [];
+    var seen = {};
+
+    for (var i = 0; i < (items || []).length; i++) {
+      var colour = cleanColourValue(items[i].colour || inferColourFromName([items[i].name, items[i].altName, items[i].description, items[i].memo].join(" ")), "");
+      var key = normaliseColourName(colour);
+      if (!colour || !key || seen[key]) continue;
+      seen[key] = true;
+      colours.push(colour);
+    }
+
+    colours.sort(compareColourNames);
+    return colours;
+  }
+
+  function compareColourNames(a, b) {
+    var rankA = colourSortRank(a);
+    var rankB = colourSortRank(b);
+    if (rankA !== rankB) return rankA - rankB;
+    return String(a || "").localeCompare(String(b || ""));
+  }
+
+  function colourSortRank(colour) {
+    var order = ["black", "anthracite", "grey", "dark grey", "light grey", "white", "off white", "blue", "navy blue", "red", "bright red", "burgundy", "green", "dark green", "purple", "pink", "yellow", "orange"];
+    var key = normaliseColourName(colour);
+    var index = order.indexOf(key);
+    return index === -1 ? 999 : index;
+  }
+
+  function cleanColourValue(value, fallback) {
+    return $.trim(String(value || fallback || "Custom").replace(/\s+/g, " ")) || String(fallback || "Custom");
+  }
+
+  function resolveColourCustomFlag(field, colour, requestedCustom, catalog) {
+    if (requestedCustom === true || requestedCustom === 1 || String(requestedCustom).toLowerCase() === "true") return true;
+    var colours = getAvailableStockColourNames(catalog, field);
+    if (!colours.length) return false;
+    return !findMatchingColourName(colours, colour);
+  }
+
+  function resolveStockColourName(field, colour, catalog) {
+    return findMatchingColourName(getAvailableStockColourNames(catalog, field), colour) || cleanColourValue(colour, "Black");
+  }
+
+  function findMatchingColourName(colours, colour) {
+    for (var i = 0; i < (colours || []).length; i++) {
+      if (colourMatches(colours[i], colour)) return colours[i];
+    }
+    return "";
   }
 
   function getLegHeightOptions(catalog, unitSystem) {
@@ -2222,6 +2388,33 @@
     $overlay.find('[data-wsd-suffix-for="width"],[data-wsd-suffix-for="depth"]').text(getLengthUnitLabel(spec));
     $overlay.find('[data-wsd-suffix-for="height"]').text(getHeightUnitSuffix(spec));
     syncHeightOptions(catalog);
+    syncColourControls(spec, catalog);
+  }
+
+  function syncColourControls(spec, catalog) {
+    var $overlay = $("#" + CFG.overlayId);
+    if (!$overlay.length) return;
+    syncColourControl($overlay, "carpetColour", spec.carpetColour, spec.carpetColourCustom, catalog);
+    syncColourControl($overlay, "fasciaColour", spec.fasciaColour, spec.fasciaColourCustom, catalog);
+  }
+
+  function syncColourControl($overlay, field, colour, isCustom, catalog) {
+    var $select = $overlay.find('[data-wsd-field="' + field + 'Choice"]').first();
+    if (!$select.length) return;
+
+    var options = getColourControlOptions(field, colour, catalog);
+    var selected = getColourControlSelection(options, colour, isCustom);
+    var html = "";
+    for (var i = 0; i < options.length; i++) {
+      html += '<option value="' + escAttr(options[i].value) + '">' + esc(options[i].label) + '</option>';
+    }
+    if ($select.html() !== html) $select.html(html);
+    $select.val(selected);
+
+    var $field = $overlay.find('[data-wsd-colour-field="' + field + '"]').first();
+    var $custom = $overlay.find('[data-wsd-field="' + field + 'Custom"]').first();
+    $field.toggleClass("is-custom", selected === CFG.customColourValue);
+    if ($custom.length && ($custom.val() === "" || isCustom)) $custom.val(colour);
   }
 
   function writeSpecToModal(spec) {
@@ -2233,8 +2426,6 @@
     $overlay.find('[data-wsd-field="width"]').val(formatDimension(spec.width));
     $overlay.find('[data-wsd-field="depth"]').val(formatDimension(spec.depth));
     $overlay.find('[data-wsd-field="height"]').val(String(spec.height));
-    $overlay.find('[data-wsd-field="carpetColour"]').val(spec.carpetColour);
-    $overlay.find('[data-wsd-field="fasciaColour"]').val(spec.fasciaColour);
     $overlay.find('[data-wsd-field="fasciaSides"]').val(String(spec.fasciaSides));
     $overlay.find('[data-wsd-field="treads"]').val(String(spec.treads));
     syncUnitControls(spec, stockState.catalog);
@@ -2530,6 +2721,8 @@
       "#" + CFG.modalId + " .wsd-input-wrap input,#" + CFG.modalId + " .wsd-input-wrap select{width:100%;border:0;background:transparent;outline:0;height:32px;font-size:14px;color:#111827;min-width:0;}",
       "#" + CFG.modalId + " .wsd-input-wrap em{font-style:normal;font-size:12px;color:#667085;}",
       "#" + CFG.modalId + " .wsd-input-wrap i{width:18px;height:18px;border-radius:4px;border:1px solid rgba(17,24,39,.2);background:#111827;}",
+      "#" + CFG.modalId + " .wsd-custom-colour{display:none;margin-top:6px;}",
+      "#" + CFG.modalId + " .wsd-colour-field.is-custom .wsd-custom-colour{display:grid;}",
       "#" + CFG.modalId + " .wsd-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:#fff;border-top:1px solid #d9e2ec;}",
       "#" + CFG.modalId + " .wsd-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;}",
       "#" + CFG.modalId + " .wsd-btn{height:32px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;color:#243244;padding:0 12px;font-weight:700;cursor:pointer;}",
@@ -2975,13 +3168,21 @@
     var text = $.trim(String(value || "")).toLowerCase();
     var named = {
       black: "#111827",
+      anthracite: "#374151",
       grey: "#6b7280",
       gray: "#6b7280",
+      "dark grey": "#4b5563",
+      "light grey": "#9ca3af",
       silver: "#9ca3af",
       white: "#f8fafc",
+      "off white": "#f7f2e8",
       blue: "#2563eb",
+      "navy blue": "#1e3a8a",
       red: "#b42318",
+      "bright red": "#dc2626",
+      burgundy: "#7f1d1d",
       green: "#15803d",
+      "dark green": "#166534",
       purple: "#7c3aed",
       pink: "#db2777",
       yellow: "#eab308",
@@ -3138,7 +3339,7 @@
     describe: function () {
       return {
         version: CFG.version,
-        role: "Simple metric/imperial staging spec designer that caches live HireHop stock and generates supplying-list rows from width, depth, height, carpet, fascia sides, fascia colour, and stair units.",
+        role: "Simple metric/imperial staging spec designer that caches live HireHop stock and generates supplying-list rows from width, depth, height, live/custom carpet colour, fascia sides, live/custom fascia colour, and stair units.",
         assumptions: {
           deckIncrementM: CFG.deckIncrementM,
           imperialDeckIncrementFt: CFG.imperialDeckIncrementFt,
@@ -3152,7 +3353,7 @@
           imperialStairCarpetLinearFt: CFG.imperialStairCarpetLinearFt,
           imperialFeltOverlapAllowanceFt: CFG.imperialFeltOverlapAllowanceFt,
           imperialStairFeltLinearFt: CFG.imperialStairFeltLinearFt,
-          consumables: "Metric carpet and fascia/felt remain custom rows. Imperial carpet and felt use live sales stock rows when matching HireHop consumables are found; imperial Facia and hardware use hire stock."
+          consumables: "Metric carpet and fascia/felt remain custom rows. Imperial carpet and felt use live sales stock rows when a stock colour is selected; custom colours create custom consumable rows."
         },
         liveStock: {
           endpoints: {
