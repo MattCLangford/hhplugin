@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.15",
+    version: "2026-06-12.16",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -486,24 +486,33 @@
   }
 
   function addImperialCarpetLines(lines, spec, consumables, catalog, warnings) {
-    var stockCounts = {};
-    for (var i = 0; i < consumables.carpetRolls.length; i++) {
-      var roll = consumables.carpetRolls[i];
-      var carpetItem = spec.carpetColourCustom ? null : findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, roll.width);
-      if (carpetItem) addStockCount(stockCounts, carpetItem, getImperialSoftGoodLineQty(carpetItem, roll.linearM));
-      else {
-        addCustomLine(lines, "Carpet - " + spec.carpetColour + " " + formatDimension(roll.width) + "ft wide x " + formatDimension(roll.lengthM) + "ft long (stage top)", roll.count, "", "Consumables");
-        if (!spec.carpetColourCustom) warnings.push("No live imperial carpet stock matched " + spec.carpetColour + " / " + formatDimension(roll.width) + "ft; added a custom carpet row.");
-      }
+    var carpetItem = spec.carpetColourCustom ? null : findImperialStageCarpetItem(catalog, spec, consumables);
+    if (carpetItem) {
+      addStockLine(lines, carpetItem, getImperialSoftGoodLineQty(carpetItem, consumables.carpetLinearFt), "Consumables");
+      return;
     }
 
-    if (consumables.stairCarpetLinearFt > 0) {
-      var treadCarpet = spec.carpetColourCustom ? null : findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, 0);
-      if (treadCarpet) addStockCount(stockCounts, treadCarpet, getImperialSoftGoodLineQty(treadCarpet, consumables.stairCarpetLinearFt));
-      else addCustomLine(lines, "Carpet - " + spec.carpetColour + " (tread allowance linear ft)", consumables.stairCarpetLinearFt, "", "Consumables");
-    }
+    addCustomLine(lines, getImperialCarpetLineName(spec, consumables), consumables.carpetLinearFt, "", "Consumables");
+    if (!spec.carpetColourCustom) warnings.push("No live imperial carpet stock matched " + spec.carpetColour + "; added a custom carpet row.");
+  }
 
-    addStockCountsToLines(lines, stockCounts, "Consumables");
+  function findImperialStageCarpetItem(catalog, spec, consumables) {
+    var preferredWidth = getPreferredCarpetRollWidth(consumables.carpetRolls);
+    return findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, preferredWidth) ||
+      findImperialSoftGood(catalog.imperial.carpets, spec.carpetColour, 0);
+  }
+
+  function getPreferredCarpetRollWidth(rolls) {
+    var width = 0;
+    for (var i = 0; i < (rolls || []).length; i++) width = Math.max(width, Number(rolls[i].width || 0));
+    return width;
+  }
+
+  function getImperialCarpetLineName(spec, consumables) {
+    return "Carpet - " + spec.carpetColour +
+      " (stage top " + formatDimension(sumCarpetRollLinearM(consumables.carpetRolls)) +
+      "ft + treads " + formatDimension(consumables.stairCarpetLinearFt) +
+      "ft = " + formatDimension(consumables.carpetLinearFt) + "ft linear ft)";
   }
 
   function addImperialFasciaLines(stockCounts, spec, consumables, catalog, missingRequired) {
@@ -868,26 +877,14 @@
   }
 
   function addCarpetConsumableLines(lines, spec, consumables) {
-    for (var i = 0; i < consumables.carpetRolls.length; i++) {
-      var roll = consumables.carpetRolls[i];
-      addCustomLine(
-        lines,
-        "Carpet - " + spec.carpetColour + " " + formatDimension(roll.width) + "m wide x " + formatDimension(roll.lengthM) + "m long (stage top)",
-        roll.count,
-        "",
-        "Consumables"
-      );
-    }
+    addCustomLine(lines, getCarpetLineName(spec, consumables), consumables.carpetLinearM, "", "Consumables");
+  }
 
-    if (consumables.stairCarpetLinearM > 0) {
-      addCustomLine(
-        lines,
-        "Carpet - " + spec.carpetColour + " (tread allowance linear m)",
-        consumables.stairCarpetLinearM,
-        "",
-        "Consumables"
-      );
-    }
+  function getCarpetLineName(spec, consumables) {
+    return "Carpet - " + spec.carpetColour +
+      " (stage top " + formatDimension(sumCarpetRollLinearM(consumables.carpetRolls)) +
+      "m + treads " + formatDimension(consumables.stairCarpetLinearM) +
+      "m = " + formatDimension(consumables.carpetLinearM) + "m linear m)";
   }
 
   function addFasciaBoardLines(lines, spec, consumables) {
