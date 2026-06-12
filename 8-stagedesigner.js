@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.4",
+    version: "2026-06-12.5",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -21,6 +21,8 @@
     marker: "wise-stage-designer",
     itemsSave: getHireHopEndpoint("itemsSave", "/php_functions/items_save.php"),
     searchList: getHireHopEndpoint("searchList", "/php_functions/search_list.php"),
+    availabilityList: getHireHopEndpoint("availabilityList", "/php_functions/availability_list.php"),
+    hireStockList: getHireHopEndpoint("hireStockList", "/reports/hire_stock_list.php"),
     itemsTab: getHireHopSelector("itemsTab", "#items_tab"),
     toolbarHost: getHireHopSelector("toolbarHost", "#items_tab > div:first-child"),
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -44,7 +46,8 @@
   var stockState = {
     catalog: null,
     loading: null,
-    error: ""
+    error: "",
+    diagnostics: []
   };
 
   var state = {
@@ -496,15 +499,19 @@
     if (!options.force && stockState.loading) return stockState.loading;
 
     stockState.error = "";
+    stockState.diagnostics = [];
     stockState.loading = (async function () {
       var candidates = [];
       appendStockCandidates(candidates, readWindowStockCandidates());
 
       for (var i = 0; i < CFG.stockSearchTerms.length; i++) {
         var term = CFG.stockSearchTerms[i];
-        var termCandidates = await fetchSearchListCandidates(term);
+        var termCandidates = await fetchAvailabilityListCandidates(term);
+        if (!termCandidates.length) termCandidates = await fetchSearchListCandidates(term);
         appendStockCandidates(candidates, termCandidates);
       }
+
+      if (!candidates.length) appendStockCandidates(candidates, await fetchHireStockListCandidates());
 
       var catalog = buildLiveStockCatalog(candidates);
       if (!catalog.items.length) {
@@ -540,17 +547,24 @@
 
     for (var i = 0; i < urls.length; i++) {
       try {
-        var response = await fetch(urls[i], {
+        var response = await fetch(urls[i].url, {
           method: "GET",
           credentials: "same-origin",
           headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
         });
-        if (!response.ok) continue;
+        if (!response.ok) {
+          rememberStockDiagnostic(urls[i].label, response.status, "");
+          continue;
+        }
         var text = await response.text();
         var json = tryParseJson(text);
-        if (!json) continue;
+        if (!json) {
+          rememberStockDiagnostic(urls[i].label, response.status, text);
+          continue;
+        }
         appendStockCandidates(out, normaliseCandidateList(json, "search:" + term));
       } catch (err) {
+        rememberStockDiagnostic(urls[i].label, "error", getErrorMessage(err, "Search failed."));
         warn("Live stock search failed for " + term, err);
       }
     }
@@ -558,19 +572,120 @@
     return out;
   }
 
-  function buildSearchListUrls(term) {
-    var base = CFG.searchList || "/php_functions/search_list.php";
-    var encTerm = encodeURIComponent(term);
-    var encCategory = encodeURIComponent(CFG.stagingCategoryName);
-    var encCategoryId = encodeURIComponent(CFG.stagingCategoryId);
+  async function fetchAvailabilityListCandidates(term) {
+    var out = [];
+    var urls = buildAvailabilityListUrls(term);
+
+    for (var i = 0; i < urls.length; i++) {
+      try {
+        var response = await fetch(urls[i].url, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
+        });
+        if (!response.ok) {
+          rememberStockDiagnostic(urls[i].label, response.status, "");
+          continue;
+        }
+        var text = await response.text();
+        var json = tryParseJson(text);
+        if (!json) {
+          rememberStockDiagnostic(urls[i].label, response.status, text);
+          continue;
+        }
+        appendStockCandidates(out, normaliseCandidateList(json, "availability:" + term));
+      } catch (err) {
+        rememberStockDiagnostic(urls[i].label, "error", getErrorMessage(err, "Availability search failed."));
+        warn("Availability stock search failed for " + term, err);
+      }
+    }
+
+    return out;
+  }
+
+  async function fetchHireStockListCandidates() {
+    var out = [];
+    var urls = buildHireStockListUrls();
+
+    for (var i = 0; i < urls.length; i++) {
+      try {
+        var response = await fetch(urls[i].url, {
+          method: "GET",
+          credentials: "same-origin",
+          headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
+        });
+        if (!response.ok) {
+          rememberStockDiagnostic(urls[i].label, response.status, "");
+          continue;
+        }
+        var text = await response.text();
+        var json = tryParseJson(text);
+        if (!json) {
+          rememberStockDiagnostic(urls[i].label, response.status, text);
+          continue;
+        }
+        appendStockCandidates(out, normaliseCandidateList(json, "hire-stock-list"));
+      } catch (err) {
+        rememberStockDiagnostic(urls[i].label, "error", getErrorMessage(err, "Hire stock list failed."));
+        warn("Hire stock list failed", err);
+      }
+    }
+
+    return out;
+  }
+
+  function buildAvailabilityListUrls(term) {
+    var base = CFG.availabilityList || "/php_functions/availability_list.php";
+    var catId = Number(CFG.stagingCategoryId) || CFG.stagingCategoryId;
+    var common = {
+      head: 0,
+      date: formatLocalDateTime(new Date()),
+      date_range: 14,
+      local: formatLocalDateTime(new Date()),
+      tz: getTimezone(),
+      page: 1,
+      rows: 100,
+      title: term || "",
+      depots: "",
+      show_hidden: 0,
+      shortages: 0,
+      late: 0,
+      virtual: 1,
+      version: 2
+    };
+    var cats = [catId];
 
     return [
-      base + "?term=" + encTerm,
-      base + "?q=" + encTerm,
-      base + "?search=" + encTerm,
-      base + "?term=" + encTerm + "&category=" + encCategory,
-      base + "?term=" + encTerm + "&category_id=" + encCategoryId
+      endpointRequest(base, extendObject(common, { head: CFG.stagingCategoryId, cats: "" }), "availability head " + term),
+      endpointRequest(base, extendObject(common, { cats: JSON.stringify(cats) }), "availability cats-json " + term),
+      endpointRequest(base, extendObject(common, { cats: CFG.stagingCategoryId }), "availability cats-id " + term),
+      endpointRequest(base, extendObject(common, { cat: CFG.stagingCategoryId }), "availability cat " + term),
+      endpointRequest(base, extendObject(common, { headings_sel: CFG.stagingCategoryId }), "availability heading " + term)
     ];
+  }
+
+  function buildSearchListUrls(term) {
+    var base = CFG.searchList || "/php_functions/search_list.php";
+    return [
+      endpointRequest(base, { term: term, stock: 1, category: CFG.stagingCategoryName }, "search term " + term),
+      endpointRequest(base, { q: term, stock: 1, category_id: CFG.stagingCategoryId }, "search q " + term),
+      endpointRequest(base, { search: term, stock: 1, cat: CFG.stagingCategoryId }, "search generic " + term)
+    ];
+  }
+
+  function buildHireStockListUrls() {
+    var base = CFG.hireStockList || "/reports/hire_stock_list.php";
+    return [
+      endpointRequest(base, { cat: CFG.stagingCategoryId, depot: 0, local: formatLocalDateTime(new Date()), tz: getTimezone() }, "hire-stock-list cat"),
+      endpointRequest(base, { cat: 0, depot: 0, local: formatLocalDateTime(new Date()), tz: getTimezone() }, "hire-stock-list all")
+    ];
+  }
+
+  function endpointRequest(base, params, label) {
+    return {
+      label: label || base,
+      url: base + (base.indexOf("?") === -1 ? "?" : "&") + $.param(params || {})
+    };
   }
 
   function normaliseCandidateList(value, source) {
@@ -588,16 +703,18 @@
   function collectCandidateObjects(value, out, depth) {
     if (depth > 5 || value == null) return;
     if (Array.isArray(value)) {
+      if (looksLikeStockArrayRow(value)) out.push({ cell: value });
       for (var i = 0; i < value.length; i++) collectCandidateObjects(value[i], out, depth + 1);
       return;
     }
     if (typeof value !== "object") return;
 
-    if (getFirstField(value, ["ID", "id", "LIST_ID", "list_id", "value"]) && getFirstField(value, ["NAME", "name", "label", "text", "title", "TITLE"])) {
+    if ((getFirstField(value, ["stock_id", "STOCK_ID", "ID", "id", "LIST_ID", "list_id", "value"]) && getFirstField(value, ["TITLE", "title", "NAME", "name", "label", "text"])) ||
+        value.cell || value.cells || value.rowData) {
       out.push(value);
     }
 
-    var keys = ["items", "rows", "data", "results", "list", "aaData"];
+    var keys = ["items", "rows", "data", "results", "list", "aaData", "children", "rowData", "cell", "cells"];
     for (var k = 0; k < keys.length; k++) {
       if (value[keys[k]] != null) collectCandidateObjects(value[keys[k]], out, depth + 1);
     }
@@ -605,23 +722,51 @@
 
   function normaliseStockRecord(raw, source) {
     if (!raw || typeof raw !== "object") return null;
+    raw = unwrapStockRecord(raw);
 
-    var id = cleanStockId(getFirstField(raw, ["ID", "id", "LIST_ID", "list_id", "stock_id", "item_id", "value"]));
-    var name = cleanStockName(getFirstField(raw, ["NAME", "name", "label", "text", "title", "TITLE"]));
+    var id = cleanStockId(getFirstField(raw, ["stock_id", "STOCK_ID", "ID", "id", "LIST_ID", "list_id", "item_id", "value"]));
+    var name = cleanStockName(getFirstField(raw, ["TITLE", "title", "NAME", "name", "label", "text"]));
+    if (!id && raw.__rowText) id = cleanStockId(extractStockIdFromText(raw.__rowText));
+    if (!name && raw.__rowText) name = extractStockNameFromText(raw.__rowText);
     if (!id || !name) return null;
 
     return {
       id: String(id),
       name: name,
-      category: cleanStockName(getFirstField(raw, ["CATEGORY", "category", "category_name", "categoryName"])),
-      categoryId: String(getFirstField(raw, ["CATEGORY_ID", "category_id", "categoryId"]) || ""),
-      breadcrumbs: cleanStockName(getFirstField(raw, ["BREADCRUMBS", "breadcrumbs", "path", "category_path"])),
+      category: readStockCategoryName(raw),
+      categoryId: readStockCategoryId(raw),
+      breadcrumbs: readStockBreadcrumbs(raw),
       status: cleanStockName(getFirstField(raw, ["STATUS", "status"])),
       price: parseStockPrice(raw),
       priceType: parseStockPriceType(raw),
       eventBuilderVisible: readEventBuilderVisible(raw),
       source: source || ""
     };
+  }
+
+  function unwrapStockRecord(raw) {
+    if (raw.rowData && typeof raw.rowData === "object") return unwrapStockRecord(raw.rowData);
+    if (raw.cells && typeof raw.cells === "object" && !Array.isArray(raw.cells)) {
+      return extendObject(raw.cells, raw);
+    }
+    if (raw.cell || raw.cells) {
+      var cells = raw.cell || raw.cells;
+      if (Array.isArray(cells)) {
+        var text = cells.map(function (cell) { return cleanStockName(cell); }).join(" ");
+        return extendObject({
+          __rowText: text,
+          ID: raw.id,
+          TITLE: findBestStockNameInArray(cells)
+        }, raw);
+      }
+    }
+    return raw;
+  }
+
+  function looksLikeStockArrayRow(row) {
+    if (!row || !row.length) return false;
+    var text = cleanStockName(row.join(" "));
+    return looksLikeUsableStageStockName(text) && !!extractStockIdFromText(text);
   }
 
   function isUsableStagingRecord(item) {
@@ -1336,6 +1481,15 @@
     }
   }
 
+  function rememberStockDiagnostic(endpoint, status, details) {
+    stockState.diagnostics.push({
+      endpoint: String(endpoint || ""),
+      status: String(status || ""),
+      details: String(details || "").substr(0, 220)
+    });
+    if (stockState.diagnostics.length > 30) stockState.diagnostics.shift();
+  }
+
   function cloneStockItem(item) {
     return {
       key: item.key || "",
@@ -1380,7 +1534,90 @@
       .replace(/<[^>]*>/g, " ")
       .replace(/&nbsp;/gi, " ")
       .replace(/&amp;/gi, "&")
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
       .replace(/\s+/g, " "));
+  }
+
+  function findBestStockNameInArray(cells) {
+    var best = "";
+    for (var i = 0; i < (cells || []).length; i++) {
+      var text = cleanStockName(cells[i]);
+      if (!looksLikeUsableStageStockName(text)) continue;
+      if (!best || text.length > best.length) best = text;
+    }
+    return best;
+  }
+
+  function extractStockIdFromText(value) {
+    var text = String(value == null ? "" : value);
+    var labelled = text.match(/(?:stock[_\s-]*id|list[_\s-]*id|id)[^0-9]{0,8}(\d{3,})/i);
+    if (labelled) return labelled[1];
+    var prefixed = text.match(/(?:^|[^a-z0-9])(?:b|stock|list|item)[_:-]?(\d{3,})(?:[^0-9]|$)/i);
+    if (prefixed) return prefixed[1];
+    return "";
+  }
+
+  function extractStockNameFromText(value) {
+    var text = cleanStockName(value);
+    var candidates = text.split(/\s{2,}|\|/);
+    for (var i = 0; i < candidates.length; i++) {
+      if (looksLikeUsableStageStockName(candidates[i])) return cleanStockName(candidates[i]);
+    }
+    return looksLikeUsableStageStockName(text) ? text : "";
+  }
+
+  function readStockCategoryName(raw) {
+    var direct = cleanStockName(getFirstField(raw, ["CATEGORY", "category", "category_name", "categoryName"]));
+    if (direct) return direct;
+    var crumbs = getFirstField(raw, ["crumbs", "CRUMBS", "breadcrumbs", "BREADCRUMBS"]);
+    var parsed = parseStockCrumbs(crumbs);
+    return parsed.names.join(" > ");
+  }
+
+  function readStockCategoryId(raw) {
+    var direct = String(getFirstField(raw, ["CATEGORY_ID", "category_id", "categoryId"]) || "");
+    if (direct) return direct;
+    var crumbs = getFirstField(raw, ["crumbs", "CRUMBS", "breadcrumbs", "BREADCRUMBS"]);
+    var parsed = parseStockCrumbs(crumbs);
+    return parsed.ids.length ? String(parsed.ids[parsed.ids.length - 1]) : "";
+  }
+
+  function readStockBreadcrumbs(raw) {
+    var direct = cleanStockName(getFirstField(raw, ["BREADCRUMBS", "breadcrumbs", "path", "category_path"]));
+    if (direct) return direct;
+    var crumbs = getFirstField(raw, ["crumbs", "CRUMBS"]);
+    return parseStockCrumbs(crumbs).names.join(" > ");
+  }
+
+  function parseStockCrumbs(value) {
+    var names = [];
+    var ids = [];
+    if (typeof value === "string") {
+      var json = tryParseJson(value);
+      if (json) return parseStockCrumbs(json);
+      var parts = value.split(/>|►|\//);
+      for (var p = 0; p < parts.length; p++) {
+        var name = cleanStockName(parts[p]);
+        if (name) names.push(name);
+      }
+      return { names: names, ids: ids };
+    }
+    if (Array.isArray(value)) {
+      for (var i = 0; i < value.length; i++) {
+        var crumb = value[i];
+        if (crumb && typeof crumb === "object") {
+          var id = getFirstField(crumb, ["ID", "id", "CATEGORY_ID", "category_id"]);
+          var label = cleanStockName(getFirstField(crumb, ["NAME", "name", "TITLE", "title"]));
+          if (id !== "") ids.push(String(id));
+          if (label) names.push(label);
+        } else {
+          var text = cleanStockName(crumb);
+          if (text) names.push(text);
+        }
+      }
+    }
+    return { names: names, ids: ids };
   }
 
   function cleanStockId(value) {
@@ -1470,6 +1707,30 @@
       out.push(value);
     }
     return out;
+  }
+
+  function extendObject(base) {
+    var out = {};
+    for (var i = 0; i < arguments.length; i++) {
+      var object = arguments[i];
+      if (!object || typeof object !== "object") continue;
+      for (var key in object) {
+        if (Object.prototype.hasOwnProperty.call(object, key) && object[key] != null && object[key] !== "") {
+          out[key] = object[key];
+        }
+      }
+    }
+    return out;
+  }
+
+  function getTimezone() {
+    try {
+      if (window.Intl && Intl.DateTimeFormat) {
+        var options = Intl.DateTimeFormat().resolvedOptions();
+        if (options && options.timeZone) return options.timeZone;
+      }
+    } catch (e) {}
+    return "";
   }
 
   function addCount(counts, key, amount) {
@@ -1690,12 +1951,17 @@
           consumables: "Carpet and fascia/felt are custom placeholder rows until stocked consumable IDs are available. Hire components are saved as listed stock rows using list_id."
         },
         liveStock: {
-          endpoint: CFG.searchList,
+          endpoints: {
+            availabilityList: CFG.availabilityList,
+            searchList: CFG.searchList,
+            hireStockList: CFG.hireStockList
+          },
           category: CFG.stagingCategoryName,
           categoryId: CFG.stagingCategoryId,
           searchTerms: CFG.stockSearchTerms.slice(),
           loadedItems: stockState.catalog ? stockState.catalog.items.length : 0,
-          error: stockState.error || ""
+          error: stockState.error || "",
+          diagnostics: stockState.diagnostics.slice()
         },
         stockCatalog: stockState.catalog
       };
