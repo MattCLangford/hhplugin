@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.9",
+    version: "2026-06-12.10",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -41,7 +41,7 @@
     stagingCategoryName: "Staging",
     stagingCategoryId: "1043",
     stockSearchTerms: ["Deck Panel", "LiteDeck", "Scaff Leg", "Stairs/Tread", "Step Unit", "Staging"],
-    fasciaMode: "front+sides",
+    fasciaSidesDefault: 3,
     legRule: "per-deck-corners"
   };
 
@@ -101,6 +101,11 @@
     $("body").append(buildModalHtml(state.currentSpec, kit, state.target));
     bindModalEvents();
     updateDesigner();
+    if (stockState.catalog) {
+      syncHeightOptions(stockState.catalog);
+      updateDesigner();
+      return;
+    }
     setStatus("Loading live staging stock...", "info");
     loadLiveStagingStock().then(function () {
       state.currentSpec = normaliseSpec(state.currentSpec || readSpecFromModal(), stockState.catalog);
@@ -143,6 +148,7 @@
               controlSelectHtml("height", "Height", String(spec.height), getLegHeightOptions(), "mm") +
               controlTextHtml("carpetColour", "Carpet colour", spec.carpetColour || "Black") +
               controlTextHtml("fasciaColour", "Fascia colour", spec.fasciaColour || "Black") +
+              controlSelectHtml("fasciaSides", "Fascia sides", String(spec.fasciaSides || CFG.fasciaSidesDefault), getFasciaSideOptions(), "") +
               controlNumberHtml("treads", "Stair units", spec.treads, 0, 20, 1, "") +
             '</form>' +
           '</div>' +
@@ -206,6 +212,7 @@
       height: readNumberField($overlay, "height", 600),
       carpetColour: $.trim(String($overlay.find('[data-wsd-field="carpetColour"]').val() || "Black")),
       fasciaColour: $.trim(String($overlay.find('[data-wsd-field="fasciaColour"]').val() || "Black")),
+      fasciaSides: readNumberField($overlay, "fasciaSides", CFG.fasciaSidesDefault),
       treads: readNumberField($overlay, "treads", 1)
     };
   }
@@ -224,10 +231,10 @@
 
     state.saving = true;
     setBusy(true);
-    setStatus("Loading live staging stock...", "info");
+    setStatus(stockState.catalog ? "Saving stage kit..." : "Loading live staging stock...", "info");
 
     try {
-      var catalog = await loadLiveStagingStock({ force: true });
+      var catalog = stockState.catalog || await loadLiveStagingStock();
       var spec = normaliseSpec(state.currentSpec || readSpecFromModal(), catalog);
       var kit = calculateStageKit(spec, catalog);
       if (kit.missingRequired && kit.missingRequired.length) {
@@ -299,7 +306,7 @@
 
     var consumables = calculateConsumables(spec);
     addCarpetConsumableLines(lines, spec, consumables);
-    addCustomLine(lines, "Fascia felt - " + spec.fasciaColour + " (1.8m roll linear m)", consumables.feltLinearM, "Consumable placeholder. Includes fascia run, overlap allowance, and tread felt allowance.", "Consumables");
+    addCustomLine(lines, getFasciaLineName(spec, consumables), consumables.feltLinearM, "", "Consumables");
 
     return {
       spec: spec,
@@ -417,8 +424,8 @@
   }
 
   function calculateFasciaRun(spec) {
-    if (CFG.fasciaMode === "front") return roundQuantity(spec.width);
-    if (CFG.fasciaMode === "all") return roundQuantity((spec.width * 2) + (spec.depth * 2));
+    var sides = Number(spec && spec.fasciaSides || CFG.fasciaSidesDefault);
+    if (sides >= 4) return roundQuantity((spec.width * 2) + (spec.depth * 2));
     return roundQuantity(spec.width + (spec.depth * 2));
   }
 
@@ -430,7 +437,8 @@
     var carpetRolls = calculateCarpetRolls(coveredDepth, coveredWidth);
     var stairCarpetLinearM = roundQuantity(spec.treads * CFG.stairCarpetLinearM);
     var baseFasciaRun = calculateFasciaRun(spec);
-    var feltLinearM = roundQuantity(baseFasciaRun + CFG.feltOverlapAllowanceM + (spec.treads * CFG.stairFeltLinearM));
+    var stairFeltLinearM = roundQuantity(spec.treads * CFG.stairFeltLinearM);
+    var feltLinearM = roundQuantity(baseFasciaRun + CFG.feltOverlapAllowanceM + stairFeltLinearM);
 
     return {
       overhang: overhang,
@@ -441,8 +449,19 @@
       stairCarpetLinearM: stairCarpetLinearM,
       carpetLinearM: roundQuantity(sumCarpetRollLinearM(carpetRolls) + stairCarpetLinearM),
       baseFasciaRun: baseFasciaRun,
+      feltOverlapAllowanceM: CFG.feltOverlapAllowanceM,
+      stairFeltLinearM: stairFeltLinearM,
       feltLinearM: feltLinearM
     };
+  }
+
+  function getFasciaLineName(spec, consumables) {
+    return "Fascia felt - " + spec.fasciaColour +
+      " (" + String(spec.fasciaSides) + " sides: " +
+      formatDimension(consumables.baseFasciaRun) + "m run + " +
+      formatDimension(consumables.feltOverlapAllowanceM) + "m overlap + " +
+      formatDimension(consumables.stairFeltLinearM) + "m treads = " +
+      formatDimension(consumables.feltLinearM) + "m linear m)";
   }
 
   function calculateCarpetRolls(coveredDepth, coveredWidth) {
@@ -1102,12 +1121,27 @@
       height: 600,
       carpetColour: "Black",
       fasciaColour: "Black",
+      fasciaSides: CFG.fasciaSidesDefault,
       treads: 1
     };
   }
 
   function parseSpecFromStageTitle(title) {
-    var match = String(title || "").match(/stage\s+-\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d{3,4})mm/i);
+    var raw = String(title || "");
+    var match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d+(?:\.\d+)?)m?\s*@\s*(\d{3,4})mm\s+(.+?)\s*\/\s*(.+?)\s*-\s*(\d+)\s*treads?/i);
+    if (match) {
+      return {
+        width: Number(match[1]),
+        depth: Number(match[2]),
+        height: Number(match[3]),
+        carpetColour: $.trim(match[4]) || "Black",
+        fasciaColour: $.trim(match[5]) || "Black",
+        fasciaSides: CFG.fasciaSidesDefault,
+        treads: Number(match[6])
+      };
+    }
+
+    match = raw.match(/stage\s+-\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d+(?:\.\d+)?)m?\s*x\s*(\d{3,4})mm/i);
     if (!match) return null;
     return {
       width: Number(match[1]),
@@ -1115,6 +1149,7 @@
       height: Number(match[3]),
       carpetColour: "Black",
       fasciaColour: "Black",
+      fasciaSides: CFG.fasciaSidesDefault,
       treads: 1
     };
   }
@@ -1131,12 +1166,15 @@
       height: height,
       carpetColour: $.trim(String(spec.carpetColour || "Black")) || "Black",
       fasciaColour: $.trim(String(spec.fasciaColour || "Black")) || "Black",
+      fasciaSides: Number(spec.fasciaSides) >= 4 ? 4 : 3,
       treads: clamp(Math.round(Number(spec.treads || 0)), 0, 20)
     };
   }
 
   function getStageFolderTitle(spec) {
-    return "Stage - " + formatDimension(spec.width) + "m x " + formatDimension(spec.depth) + "m x " + String(spec.height) + "mm";
+    return "Stage - " + formatDimension(spec.width) + "m x " + formatDimension(spec.depth) + "m @ " +
+      String(spec.height) + "mm " + spec.carpetColour + " / " + spec.fasciaColour + " - " +
+      String(spec.treads) + " " + (Number(spec.treads) === 1 ? "tread" : "treads");
   }
 
   function getStageSpecLabel(spec) {
@@ -1180,7 +1218,7 @@
         '<span>' + esc(String(kit.deckCount)) + ' decks</span>' +
         '<span>' + esc(String(kit.legCount)) + ' legs</span>' +
         '<span>' + esc(formatDimension(kit.carpetLinearM)) + ' m carpet</span>' +
-        '<span>' + esc(formatDimension(kit.feltLinearM)) + ' m felt</span>' +
+        '<span>' + esc(String(spec.fasciaSides)) + ' sides / ' + esc(formatDimension(kit.feltLinearM)) + ' m felt</span>' +
       '</div>';
   }
 
@@ -1263,6 +1301,13 @@
       out.push({ value: String(heights[i]), label: String(heights[i]) });
     }
     return out;
+  }
+
+  function getFasciaSideOptions() {
+    return [
+      { value: "3", label: "3 sides" },
+      { value: "4", label: "4 sides" }
+    ];
   }
 
   function getLegHeights(catalog) {
@@ -2063,11 +2108,11 @@
     describe: function () {
       return {
         version: CFG.version,
-        role: "Simple staging spec designer that loads live Staging-category HireHop stock and generates supplying-list rows from width, depth, height, carpet, fascia, and stair units.",
+        role: "Simple staging spec designer that caches live Staging-category HireHop stock and generates supplying-list rows from width, depth, height, carpet, fascia sides, fascia colour, and stair units.",
         assumptions: {
           deckIncrementM: CFG.deckIncrementM,
           legRule: CFG.legRule,
-          fasciaMode: CFG.fasciaMode,
+          fasciaSidesDefault: CFG.fasciaSidesDefault,
           carpetOverhangM: CFG.carpetOverhangM,
           stairCarpetLinearM: CFG.stairCarpetLinearM,
           feltOverlapAllowanceM: CFG.feltOverlapAllowanceM,
