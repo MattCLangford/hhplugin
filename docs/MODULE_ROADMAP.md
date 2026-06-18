@@ -48,6 +48,13 @@ It owns:
 - Native listed-item handoff.
 - Preview docking.
 
+`9-jobchecklist.js` owns:
+
+- Job main-page tab polish across all depots.
+- Hiding Billing and Purchase orders from non-admin users.
+- Keeping the full native button set visible for admin users.
+- The temporary technical checklist entry point and placeholder checklist state until final HireHop job custom fields are agreed.
+
 ## Next Extractions
 
 1. `wise-sectionbuilder-preview-ui.js`
@@ -72,6 +79,9 @@ Recommended HireHop script set:
 - Load `3-meta.js`.
 - Load `4-layout.js`.
 - Load `6-editor2.js`.
+- Load `7-captrack.js`.
+- Load `8-stagedesigner.js`.
+- Load `9-jobchecklist.js`.
 
 Do not load `wise-headingedit-ui.js` or `wise-sectionbuilder-ui.js` in normal production.
 
@@ -82,5 +92,7 @@ If the metadata module causes issues, disable `3-meta.js` first. The main editor
 If the layout module causes issues, disable `4-layout.js`. The main editor has built-in layout defaults and should continue running.
 
 If the HireHop integration module causes issues, disable `5-hirehop.js`. The main editor has built-in selector, endpoint, timing, depot, and prefix defaults and should continue running.
+
+If the job checklist module causes issues, disable `9-jobchecklist.js`. It is standalone and does not affect the proposal editor, capacity tracker, or staging designer.
 
 If `6-editor2.js` causes issues, disable it and temporarily load the older `wise-sectionbuilder-ui.js` snapshot.
