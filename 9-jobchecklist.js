@@ -22,7 +22,7 @@
   ];
 
   var CFG = {
-    version: "2026-06-18.2",
+    version: "2026-06-18.3",
     defaultButtonLabel: asText(EXTERNAL_CONFIG.buttonLabel) || "Checklist",
     defaultButtonTitle: asText(EXTERNAL_CONFIG.buttonTitle) || "Open technical checklist",
     buttonIdPrefix: "wise-checklist-tab-",
@@ -428,6 +428,7 @@
   }
 
   function activateChecklistPanelFallback($host, profile) {
+    restoreNativeTabPanels($host);
     hideKnownTabPanels($host);
     $('[data-wise-checklist-panel="1"]').hide().attr("aria-hidden", "true");
     $("#" + getPanelId(profile))
@@ -442,7 +443,47 @@
     $host.children("li,[role='tab']").each(function () {
       var id = getPanelIdFromTab($(this));
       if (!id || id.indexOf("wise-checklist-panel-") === 0) return;
-      $("#" + cssIdentifier(id)).hide().attr("aria-hidden", "true");
+      markAndHideNativePanel($("#" + cssIdentifier(id)));
+    });
+  }
+
+  function markAndHideNativePanel($panel) {
+    if (!$panel || !$panel.length) return;
+
+    $panel.each(function () {
+      var $el = $(this);
+      if ($el.attr("data-wise-checklist-panel") === "1") return;
+      if ($el.attr("data-wise-hidden-by-checklist") !== "1") {
+        $el
+          .attr("data-wise-hidden-by-checklist", "1")
+          .attr("data-wise-previous-display", this.style.display || "")
+          .attr("data-wise-previous-aria-hidden", asText($el.attr("aria-hidden")));
+      }
+      $el.hide().attr("aria-hidden", "true");
+    });
+  }
+
+  function restoreNativeTabPanels($host) {
+    var $panels = $('[data-wise-hidden-by-checklist="1"]');
+
+    if ($host && $host.length) {
+      $host.children("li,[role='tab']").each(function () {
+        var id = getPanelIdFromTab($(this));
+        if (!id || id.indexOf("wise-checklist-panel-") === 0) return;
+        $panels = $panels.add($("#" + cssIdentifier(id)));
+      });
+    }
+
+    $panels.each(function () {
+      var $el = $(this);
+      if ($el.attr("data-wise-checklist-panel") === "1") return;
+
+      var previousDisplay = $el.attr("data-wise-previous-display");
+      var previousAria = $el.attr("data-wise-previous-aria-hidden");
+      this.style.display = previousDisplay || "";
+      if (previousAria) $el.attr("aria-hidden", previousAria);
+      else $el.removeAttr("aria-hidden");
+      $el.removeAttr("data-wise-hidden-by-checklist data-wise-previous-display data-wise-previous-aria-hidden");
     });
   }
 
@@ -458,7 +499,8 @@
   }
 
   function bindNativeTabReset($host) {
-    $host.children("li,[role='tab']").not('[data-wise-job-checklist="1"]').children("a").off("click.wiseChecklistNativeReset").on("click.wiseChecklistNativeReset", function () {
+    $host.children("li,[role='tab']").not('[data-wise-job-checklist="1"]').children("a").off(".wiseChecklistNativeReset").on("mousedown.wiseChecklistNativeReset click.wiseChecklistNativeReset", function () {
+      restoreNativeTabPanels($host);
       $('[data-wise-checklist-panel="1"]').hide().attr("aria-hidden", "true");
       $('[data-wise-job-checklist="1"]')
         .removeClass("ui-tabs-active ui-state-active")
