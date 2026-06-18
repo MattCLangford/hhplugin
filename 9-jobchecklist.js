@@ -22,7 +22,7 @@
   ];
 
   var CFG = {
-    version: "2026-06-18.3",
+    version: "2026-06-18.4",
     defaultButtonLabel: asText(EXTERNAL_CONFIG.buttonLabel) || "Checklist",
     defaultButtonTitle: asText(EXTERNAL_CONFIG.buttonTitle) || "Open technical checklist",
     buttonIdPrefix: "wise-checklist-tab-",
@@ -314,11 +314,7 @@
     state.activeProfile = profile;
     ensureChecklistPanel($host, profile);
     renderChecklistPanel(profile);
-
-    var $container = getTabsContainer($host);
-    if (activateWithJQueryTabs($container, $host, profile)) return;
-
-    activateChecklistPanelFallback($host, profile);
+    showChecklistPanel($host, profile);
   }
 
   function ensureChecklistPanel($host, profile) {
@@ -412,98 +408,37 @@
     });
   }
 
-  function activateWithJQueryTabs($container, $host, profile) {
-    if (!$container.length || !$.fn || !$.fn.tabs) return false;
-    if (!$container.data("ui-tabs") && !$container.data("tabs")) return false;
-
-    try {
-      $container.tabs("refresh");
-      var index = $host.children().index($("#" + getButtonId(profile)));
-      if (index < 0) return false;
-      $container.tabs("option", "active", index);
-      return true;
-    } catch (err) {
-      return false;
-    }
-  }
-
-  function activateChecklistPanelFallback($host, profile) {
-    restoreNativeTabPanels($host);
-    hideKnownTabPanels($host);
-    $('[data-wise-checklist-panel="1"]').hide().attr("aria-hidden", "true");
+  function showChecklistPanel($host, profile) {
+    var $container = getTabsContainer($host);
+    $container.addClass("wise-checklist-active");
+    hideChecklistPanels();
     $("#" + getPanelId(profile))
       .removeClass("ui-tabs-hide ui-helper-hidden ui-helper-hidden-accessible")
       .show()
       .attr("aria-hidden", "false")
       .removeAttr("hidden");
-    setChecklistTabActive($host, profile);
+    setChecklistTabVisualState($host, profile);
   }
 
-  function hideKnownTabPanels($host) {
-    $host.children("li,[role='tab']").each(function () {
-      var id = getPanelIdFromTab($(this));
-      if (!id || id.indexOf("wise-checklist-panel-") === 0) return;
-      markAndHideNativePanel($("#" + cssIdentifier(id)));
-    });
+  function hideChecklistPanels() {
+    $('[data-wise-checklist-panel="1"]').hide().attr("aria-hidden", "true");
   }
 
-  function markAndHideNativePanel($panel) {
-    if (!$panel || !$panel.length) return;
-
-    $panel.each(function () {
-      var $el = $(this);
-      if ($el.attr("data-wise-checklist-panel") === "1") return;
-      if ($el.attr("data-wise-hidden-by-checklist") !== "1") {
-        $el
-          .attr("data-wise-hidden-by-checklist", "1")
-          .attr("data-wise-previous-display", this.style.display || "")
-          .attr("data-wise-previous-aria-hidden", asText($el.attr("aria-hidden")));
-      }
-      $el.hide().attr("aria-hidden", "true");
-    });
-  }
-
-  function restoreNativeTabPanels($host) {
-    var $panels = $('[data-wise-hidden-by-checklist="1"]');
-
-    if ($host && $host.length) {
-      $host.children("li,[role='tab']").each(function () {
-        var id = getPanelIdFromTab($(this));
-        if (!id || id.indexOf("wise-checklist-panel-") === 0) return;
-        $panels = $panels.add($("#" + cssIdentifier(id)));
-      });
-    }
-
-    $panels.each(function () {
-      var $el = $(this);
-      if ($el.attr("data-wise-checklist-panel") === "1") return;
-
-      var previousDisplay = $el.attr("data-wise-previous-display");
-      var previousAria = $el.attr("data-wise-previous-aria-hidden");
-      this.style.display = previousDisplay || "";
-      if (previousAria) $el.attr("aria-hidden", previousAria);
-      else $el.removeAttr("aria-hidden");
-      $el.removeAttr("data-wise-hidden-by-checklist data-wise-previous-display data-wise-previous-aria-hidden");
-    });
-  }
-
-  function setChecklistTabActive($host, profile) {
-    $host.children("li,[role='tab']").each(function () {
+  function setChecklistTabVisualState($host, profile) {
+    $host.children('[data-wise-job-checklist="1"]').each(function () {
       var $tab = $(this);
       var active = $tab.is("#" + getButtonId(profile));
-      $tab
-        .toggleClass("ui-tabs-active ui-state-active", active)
-        .attr("aria-selected", active ? "true" : "false")
-        .attr("aria-expanded", active ? "true" : "false");
+      $tab.toggleClass("is-wise-checklist-active", active);
+      $tab.attr("aria-selected", active ? "true" : "false");
     });
   }
 
   function bindNativeTabReset($host) {
     $host.children("li,[role='tab']").not('[data-wise-job-checklist="1"]').children("a").off(".wiseChecklistNativeReset").on("mousedown.wiseChecklistNativeReset click.wiseChecklistNativeReset", function () {
-      restoreNativeTabPanels($host);
-      $('[data-wise-checklist-panel="1"]').hide().attr("aria-hidden", "true");
+      getTabsContainer($host).removeClass("wise-checklist-active");
+      hideChecklistPanels();
       $('[data-wise-job-checklist="1"]')
-        .removeClass("ui-tabs-active ui-state-active")
+        .removeClass("is-wise-checklist-active")
         .attr("aria-selected", "false")
         .attr("aria-expanded", "false");
     });
@@ -1153,6 +1088,9 @@
 
     var css = [
       ".wise-checklist-panel{box-sizing:border-box;}",
+      '.wise-checklist-active > .ui-tabs-panel:not([data-wise-checklist-panel]),.wise-checklist-active > [role="tabpanel"]:not([data-wise-checklist-panel]){display:none!important;}',
+      '[data-wise-job-checklist="1"].is-wise-checklist-active{background:#1f75cf!important;border-color:#1f75cf!important;}',
+      '[data-wise-job-checklist="1"].is-wise-checklist-active>a{color:#fff!important;}',
       ".wise-checklist-panel .wjc-panel-inner{max-width:760px;padding:18px 20px 22px;font-family:Arial,Helvetica,sans-serif;color:#172033;box-sizing:border-box;}",
       ".wise-checklist-panel .wjc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:0 0 13px;border-bottom:1px solid #e2e8f0;}",
       ".wise-checklist-panel .wjc-title{font-size:18px;line-height:1.2;font-weight:700;color:#111827;}",
