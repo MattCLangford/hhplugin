@@ -22,7 +22,7 @@
   ];
 
   var CFG = {
-    version: "2026-06-18.5",
+    version: "2026-06-18.7",
     defaultButtonLabel: asText(EXTERNAL_CONFIG.buttonLabel) || "Checklist",
     defaultButtonTitle: asText(EXTERNAL_CONFIG.buttonTitle) || "Open technical checklist",
     buttonIdPrefix: "wise-checklist-tab-",
@@ -322,6 +322,7 @@
 
     var panelId = getPanelId(profile);
     var $panel = $("#" + panelId);
+    var $container = getTabsContainer($host);
     var created = false;
     if (!$panel.length) {
       created = true;
@@ -333,8 +334,12 @@
         .attr("data-wise-checklist-level", profile.key)
         .addClass(getPanelClass($host));
       $panel.hide().attr("aria-hidden", "true");
-      getTabsContainer($host).append($panel);
     }
+
+    if ($container.length && !$panel.parent().is($container)) {
+      $panel.detach().appendTo($container);
+    }
+    resetChecklistPanelLayout($panel);
 
     $panel
       .attr("aria-labelledby", getButtonId(profile))
@@ -409,10 +414,13 @@
   }
 
   function showChecklistPanel($host, profile) {
+    hideChecklistPanels();
     var $container = getTabsContainer($host);
     $container.addClass("wise-checklist-active");
-    hideChecklistPanels();
-    $("#" + getPanelId(profile))
+    var $panel = ensureChecklistPanel($host, profile);
+    resetChecklistPanelLayout($panel);
+    $container.children(".ui-tabs-panel,[role='tabpanel']").not($panel).attr("aria-hidden", "true");
+    $panel
       .removeClass("ui-tabs-hide ui-helper-hidden ui-helper-hidden-accessible")
       .show()
       .attr("aria-hidden", "false")
@@ -421,7 +429,25 @@
   }
 
   function hideChecklistPanels() {
-    $('[data-wise-checklist-panel="1"]').hide().attr("aria-hidden", "true");
+    $(".wise-checklist-active").removeClass("wise-checklist-active");
+    $('[data-wise-checklist-panel="1"]').each(function () {
+      resetChecklistPanelLayout($(this));
+      $(this).hide().attr("aria-hidden", "true");
+    });
+    $(window).off(".wiseChecklistPosition");
+  }
+
+  function resetChecklistPanelLayout($panel) {
+    if (!$panel || !$panel.length) return;
+    $panel.css({
+      position: "",
+      top: "",
+      left: "",
+      right: "",
+      bottom: "",
+      zIndex: "",
+      overflow: ""
+    });
   }
 
   function setChecklistTabVisualState($host, profile) {
@@ -551,13 +577,13 @@
     $host = $host && $host.length ? $host : $(state.lastHost);
     if (!$host.length) return $("body");
 
-    var $parent = $host.parent();
-    if ($parent.length && ($parent.hasClass("ui-tabs") || $parent.children("ul").filter($host).length || $parent.children(".ui-tabs-panel").length)) {
-      return $parent;
-    }
-
     var $closest = $host.closest(".ui-tabs");
     if ($closest.length) return $closest.first();
+
+    var $parent = $host.parent();
+    if ($parent.length && ($parent.hasClass("ui-tabs") || $parent.children(".ui-tabs-panel,[role='tabpanel']").length)) {
+      return $parent;
+    }
 
     return $parent.length ? $parent : $("body");
   }
@@ -1088,10 +1114,9 @@
     if ($("#" + CFG.stylesId).length) return;
 
     var css = [
-      ".wise-checklist-panel{box-sizing:border-box;}",
-      '.wise-checklist-active > .ui-tabs-panel:not([data-wise-checklist-panel]),.wise-checklist-active > [role="tabpanel"]:not([data-wise-checklist-panel]){display:none!important;}',
-      '.wise-checklist-active > :not(ul):not(.ui-tabs-nav):not([data-wise-checklist-panel]):not(script):not(style){display:none!important;}',
-      '.wise-checklist-active > [data-wise-checklist-panel]{display:block!important;}',
+      ".wise-checklist-panel{box-sizing:border-box;background:#f5f6f8;border-top:1px solid #d6dbe3;}",
+      ".wise-checklist-active>.ui-tabs-panel:not([data-wise-checklist-panel]),.wise-checklist-active>[role='tabpanel']:not([data-wise-checklist-panel]){display:none!important;}",
+      ".wise-checklist-active>[data-wise-checklist-panel='1']{display:block!important;}",
       '[data-wise-job-checklist="1"].is-wise-checklist-active{background:#1f75cf!important;border-color:#1f75cf!important;}',
       '[data-wise-job-checklist="1"].is-wise-checklist-active>a{color:#fff!important;}',
       ".wise-checklist-panel .wjc-panel-inner{max-width:760px;padding:18px 20px 22px;font-family:Arial,Helvetica,sans-serif;color:#172033;box-sizing:border-box;}",
