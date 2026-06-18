@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-06-18.1",
+  "version": "2026-06-18.2",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -68,8 +68,8 @@
     {
       "file": "9-jobchecklist.js",
       "status": "active",
-      "cacheVersion": "0.1",
-      "role": "Job main-page UI polish that hides Billing and Purchase orders tabs for non-admin users across all depots, keeps them visible for admin users, and adds a technical checklist tab with placeholder job checklist fields.",
+      "cacheVersion": "0.2",
+      "role": "Project and job page UI polish that hides Billing and Purchase orders tabs for non-admin users across all depots, keeps them visible for admin users, and adds a native Checklist tab panel with placeholder project/job checklist fields.",
       "recommendedLoadOrder": 9
     }
   ],

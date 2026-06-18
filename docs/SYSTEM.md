@@ -38,7 +38,7 @@ Load these in HireHop:
 
 `8-stagedesigner.js` adds a simple staging kit designer to the supplying list toolbar. It loads and caches live HireHop items from the metric Staging category, the imperial Unit 10 Stock staging family, and the Unit 10 Consumables sales-stock category for imperial carpet/felt. Carpet and fascia/felt colour controls are limited to exact live sales-stock colours with one Custom option for bought-in colours. It imports generated stage rows under a stage heading that includes the 3/4 sided fascia choice, using `items_import.php`, posting hire components as `STOCK_ID` rows and selected imperial carpet/felt consumables as `SALES_ID` rows. Every stage includes one live staging box: small for 1-2 deck pieces, medium for 3-6, and large for 7 or more. Carpet is emitted as one combined stage-top/tread line. Metric mode still creates custom rows for individual 1m fascia board sections by run and the calculated felt run, overlap, tread allowance, and total linear metres.
 
-`9-jobchecklist.js` adjusts the job main-page tabs across all depots. Non-admin users have the Billing and Purchase orders tabs hidden, admin users keep the full native tab set, and everyone gets a Checklist tab that opens a temporary technical checklist. The checklist uses placeholder technical-manager items until the final HireHop job custom fields are named.
+`9-jobchecklist.js` adjusts the project and job page tabs across all depots. Non-admin users have the Billing and Purchase orders tabs hidden, admin users keep the full native tab set, and everyone gets a Checklist tab that fills the native tab content area. The checklist uses placeholder technical-manager items until the final HireHop project and job custom fields are named.
 
 ## Reference And Legacy Files
 

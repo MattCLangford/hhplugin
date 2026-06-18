@@ -50,10 +50,10 @@ It owns:
 
 `9-jobchecklist.js` owns:
 
-- Job main-page tab polish across all depots.
-- Hiding Billing and Purchase orders from non-admin users.
+- Project and job page tab polish across all depots.
+- Hiding Billing and Purchase orders from non-admin users at both levels.
 - Keeping the full native button set visible for admin users.
-- The temporary technical checklist entry point and placeholder checklist state until final HireHop job custom fields are agreed.
+- Native Checklist tab panels and placeholder checklist state until final HireHop project/job custom fields are agreed.
 
 ## Next Extractions
 
