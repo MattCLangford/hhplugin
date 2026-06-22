@@ -27,7 +27,7 @@ Load these in HireHop:
 
 `1-docprev.js` is essential because it lets users see what their list edits do to the rendered proposal. Power users can work directly in HireHop's native list editing with that preview open.
 
-`2-apselall.js` is a small helper for a repetitive native popup action. It should remain independent and boring in the best possible way.
+`2-apselall.js` is a small helper for a repetitive native popup action across all depots. It should remain independent and boring in the best possible way.
 
 `3-meta.js` owns the shared `WisePageMeta` envelope and editor/template identifiers. Load it before the main editor so metadata names stay explicit and easy to audit.
 

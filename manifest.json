@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-06-22.2",
+  "version": "2026-06-22.3",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -26,8 +26,8 @@
     {
       "file": "2-apselall.js",
       "status": "active",
-      "cacheVersion": "0.3",
-      "role": "Small native-popup helper for repetitive line item selection actions.",
+      "cacheVersion": "0.4",
+      "role": "Small native-popup helper for repetitive line item selection actions across all depots.",
       "recommendedLoadOrder": 3
     },
     {
