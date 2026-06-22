@@ -35,9 +35,11 @@ $scripts = @($manifest.activeScripts | Sort-Object recommendedLoadOrder)
 if (-not $scripts.Count) {
   throw "manifest.json has no activeScripts entries"
 }
+$lazyScripts = @($manifest.lazyScripts | Sort-Object recommendedLoadOrder)
 
 $urls = New-Object System.Collections.Generic.List[string]
 $tableRows = New-Object System.Collections.Generic.List[string]
+$lazyTableRows = New-Object System.Collections.Generic.List[string]
 
 foreach ($script in $scripts) {
   $file = [string]$script.file
@@ -63,9 +65,47 @@ foreach ($script in $scripts) {
   $tableRows.Add(('| {0} | `{1}` | `{2}` |' -f $order, $file, $version)) | Out-Null
 }
 
+foreach ($script in $lazyScripts) {
+  $file = [string]$script.file
+  $version = [string]$script.cacheVersion
+  $order = [string]$script.recommendedLoadOrder
+  $status = [string]$script.status
+
+  if (-not $file) {
+    throw "A lazyScripts entry is missing file"
+  }
+  if (-not $version) {
+    throw "$file is missing cacheVersion"
+  }
+  if (-not $order) {
+    throw "$file is missing recommendedLoadOrder"
+  }
+
+  $localFile = Join-Path $repoRoot $file
+  if (-not (Test-Path -LiteralPath $localFile)) {
+    throw "Runtime file listed in manifest does not exist locally: $file"
+  }
+
+  $lazyTableRows.Add(('| {0} | `{1}` | `{2}` | `{3}` |' -f $order, $file, $version, $status)) | Out-Null
+}
+
 $pluginString = ($urls -join "; ") + ";"
 $table = $tableRows -join [Environment]::NewLine
+$lazyTable = $lazyTableRows -join [Environment]::NewLine
 $fence = '```'
+$lazySection = ""
+if ($lazyTableRows.Count) {
+  $lazySection = @"
+
+## Lazy Loaded Runtime Modules
+
+These files are not included directly in the HireHop company config string. ``0-loader.js`` injects them only when the matching HireHop page, tab set, supplying list, or dialog exists.
+
+| Order | File | Cache version | Trigger |
+| --- | --- | --- | --- |
+$lazyTable
+"@
+}
 
 $content = @"
 # HireHop Plugin String
@@ -85,10 +125,11 @@ ${fence}
 | Order | File | Cache version |
 | --- | --- | --- |
 $table
+$lazySection
 
 ## Maintenance Rule
 
-When Codex updates an active runtime ``.js`` file, increment that file's ``cacheVersion`` by ``0.1`` in ``manifest.json``, then run:
+When Codex updates an active or lazy runtime ``.js`` file, increment that file's ``cacheVersion`` by ``0.1`` in ``manifest.json`` and mirror that version in ``0-loader.js`` if the file is lazy-loaded, then run:
 
 ${fence}powershell
 .\tools\build-plugin-string.ps1
@@ -101,6 +142,7 @@ When Codex adds a new runtime ``.js`` file, add it to:
 - ``manifest.json``
 - ``docs/LOAD_ORDER.md``
 - ``docs/HIREHOP_PLUGIN_STRING.md`` by running this generator
+- ``0-loader.js`` if it should be lazy-loaded
 
 New runtime files start at ``?v=0.1`` unless they are replacing an existing file, in which case use the next version for that replaced file.
 
@@ -109,10 +151,14 @@ New runtime files start at ``?v=0.1`` unless they are replacing an existing file
 After updating HireHop company config, run this in the browser console:
 
 ${fence}js
-window.__wiseProposalPageEditor.describe()
+window.WiseHireHopEnhancementLoader
 ${fence}
 
-Check that the expected modules show ``loaded: true``.
+On a supplying-list page, the proposal bundle should lazy-load. Then this should be available:
+
+${fence}js
+window.__wiseProposalPageEditor.describe()
+${fence}
 "@
 
 $outputDir = Split-Path -Parent $OutputPath

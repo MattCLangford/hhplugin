@@ -10,18 +10,11 @@ HireHop remains the operational database for jobs, headings, items, listed inven
 
 ## Active Runtime Scripts
 
-Load these in HireHop:
+Load this in HireHop:
 
-1. `5-hirehop.js`
-2. `1-docprev.js`
-3. `2-apselall.js`
-4. `3-meta.js`
-5. `4-layout.js`
-6. `6-editor2.js`
-7. `7-captrack.js`
-8. `8-stagedesigner.js`
-9. `9-jobchecklist.js`
-10. `10-projectjobs-qol.js`
+1. `0-loader.js`
+
+`0-loader.js` is the only script in the HireHop company config string. It waits for HireHop page context, then lazy-loads the specific module bundle needed by the current surface: supplying list, Autopull popup, home page, project/job tabs, or project-details jobs grid.
 
 `5-hirehop.js` names the HireHop UI selectors, endpoint paths, depot rules, timings, active depot detector, and tree item prefixes that the other runtime scripts depend on. It loads first so each module shares the same framework-aware HireHop context.
 

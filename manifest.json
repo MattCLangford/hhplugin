@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-06-22.5",
+  "version": "2026-06-22.6",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -10,71 +10,80 @@
   },
   "activeScripts": [
     {
+      "file": "0-loader.js",
+      "status": "active-loader",
+      "cacheVersion": "0.1",
+      "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, or autopull dialog exists.",
+      "recommendedLoadOrder": 1
+    }
+  ],
+  "lazyScripts": [
+    {
       "file": "5-hirehop.js",
-      "status": "active-module",
+      "status": "lazy-shared-module",
       "cacheVersion": "0.7",
       "role": "Shared HireHop selectors, endpoint paths, depot rules, retry timings, search helpers, and tree item prefixes consumed by the section builder and capacity tracker.",
       "recommendedLoadOrder": 1
     },
     {
       "file": "1-docprev.js",
-      "status": "active",
+      "status": "lazy-supplying-list",
       "cacheVersion": "0.6",
       "role": "Document preview panel used by power users and by the page editor preview dock.",
       "recommendedLoadOrder": 2
     },
     {
       "file": "2-apselall.js",
-      "status": "active",
+      "status": "lazy-autopull-dialog",
       "cacheVersion": "0.5",
       "role": "Small native-popup helper for repetitive line item selection actions across all depots.",
       "recommendedLoadOrder": 3
     },
     {
       "file": "3-meta.js",
-      "status": "active-module",
+      "status": "lazy-supplying-list-module",
       "cacheVersion": "0.1",
       "role": "Shared WisePageMeta and editor/template identifier contract consumed by the section builder and aligned to the QTC renderer.",
       "recommendedLoadOrder": 4
     },
     {
       "file": "4-layout.js",
-      "status": "active-module",
+      "status": "lazy-supplying-list-module",
       "cacheVersion": "0.1",
       "role": "Shared proposal page/layout catalogue consumed by the section builder.",
       "recommendedLoadOrder": 5
     },
     {
       "file": "6-editor2.js",
-      "status": "active-primary",
+      "status": "lazy-supplying-list-primary",
       "cacheVersion": "1.6",
       "role": "Main proposal page editor and HireHop authoring layer.",
       "recommendedLoadOrder": 6
     },
     {
       "file": "7-captrack.js",
-      "status": "active",
+      "status": "lazy-home-page",
       "cacheVersion": "3.0",
       "role": "Full-page Wise capacity timeline, with a home-page entry button visible across all depots, using project-level custom fields, date-range filtering, Wise status controls, and sanitized absence overlay support.",
       "recommendedLoadOrder": 7
     },
     {
       "file": "8-stagedesigner.js",
-      "status": "active",
+      "status": "lazy-supplying-list",
       "cacheVersion": "2.0",
       "role": "Simple metric/imperial staging designer that caches live HireHop hire stock plus imperial sales consumables, adds the required small/medium/large staging box by deck count, limits carpet/fascia colour choices to exact live stock colours with a custom colour fallback, imports stage rows under a generated heading that includes 3/4 sided fascia, and keeps carpet to one combined stage-top/tread row.",
       "recommendedLoadOrder": 8
     },
     {
       "file": "9-jobchecklist.js",
-      "status": "active",
+      "status": "lazy-project-job-tabs",
       "cacheVersion": "0.9",
       "role": "Project and job page UI polish that hides Billing and Purchase orders tabs for non-admin users across all depots, keeps them visible for admin users, and adds a native Checklist tab panel with placeholder project/job checklist fields.",
       "recommendedLoadOrder": 9
     },
     {
       "file": "10-projectjobs-qol.js",
-      "status": "active",
+      "status": "lazy-project-details",
       "cacheVersion": "0.3",
       "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable by making the details tab scrollable and adding a compact project-info toggle above the jobs grid.",
       "recommendedLoadOrder": 10

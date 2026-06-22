@@ -79,16 +79,15 @@ It owns:
 
 Recommended HireHop script set:
 
-- Load `5-hirehop.js`.
-- Load `1-docprev.js`.
-- Load `2-apselall.js`.
-- Load `3-meta.js`.
-- Load `4-layout.js`.
-- Load `6-editor2.js`.
-- Load `7-captrack.js`.
-- Load `8-stagedesigner.js`.
-- Load `9-jobchecklist.js`.
-- Load `10-projectjobs-qol.js`.
+- Load only `0-loader.js` in the HireHop company config string.
+
+`0-loader.js` then lazy-loads the old module set only when the matching HireHop surface exists:
+
+- Supplying list: `5-hirehop.js`, `1-docprev.js`, `3-meta.js`, `4-layout.js`, `6-editor2.js`, and `8-stagedesigner.js`.
+- Autopull dialog: `2-apselall.js`.
+- Home page: `5-hirehop.js` and `7-captrack.js`.
+- Project or job tab set: `9-jobchecklist.js`.
+- Project details jobs grid: `10-projectjobs-qol.js`.
 
 Do not load `wise-headingedit-ui.js` or `wise-sectionbuilder-ui.js` in normal production.
 

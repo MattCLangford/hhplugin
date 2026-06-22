@@ -2,6 +2,14 @@
 
 Use this order for the live HireHop scripts.
 
+1. `0-loader.js`
+
+`0-loader.js` is the only script that should be pasted into the HireHop company config string. It waits until HireHop has rendered enough page context, then lazy-loads the page-specific modules below.
+
+## Lazy Module Order
+
+The loader preserves this order when a route needs the modules.
+
 1. `5-hirehop.js`
 2. `1-docprev.js`
 3. `2-apselall.js`
@@ -15,7 +23,7 @@ Use this order for the live HireHop scripts.
 
 For the full paste-ready company config string, use `docs/HIREHOP_PLUGIN_STRING.md`.
 
-After changing runtime files or cache versions in `manifest.json`, regenerate the string with:
+After changing runtime files or cache versions in `manifest.json`, update lazy versions in `0-loader.js` when needed, then regenerate the string with:
 
 ```powershell
 .\tools\build-plugin-string.ps1
