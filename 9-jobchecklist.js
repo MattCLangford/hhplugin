@@ -22,7 +22,7 @@
   ];
 
   var CFG = {
-    version: "2026-06-18.7",
+    version: "2026-06-19.1",
     defaultButtonLabel: asText(EXTERNAL_CONFIG.buttonLabel) || "Checklist",
     defaultButtonTitle: asText(EXTERNAL_CONFIG.buttonTitle) || "Open technical checklist",
     buttonIdPrefix: "wise-checklist-tab-",
@@ -363,39 +363,69 @@
 
   function buildChecklistPanelHtml(profile, checklistState) {
     var entityId = getCurrentEntityId(profile);
+    var progress = getChecklistProgress(profile, checklistState);
     var html = '' +
       '<div class="wjc-panel-inner">' +
-        '<div class="wjc-head">' +
-          '<div>' +
-            '<div class="wjc-title">' + esc(profile.title) + '</div>' +
-            '<div class="wjc-subtitle">' + esc(entityId ? profile.levelLabel + " " + entityId : "Current " + profile.levelLabel.toLowerCase()) + '</div>' +
-          '</div>' +
-          '<button type="button" class="wjc-btn wjc-btn-secondary" data-wjc-reset>Reset</button>' +
-        '</div>' +
-        '<div class="wjc-body">' +
-          '<div class="wjc-list">';
+        '<table class="wjc-actions" cellspacing="0" cellpadding="0">' +
+          '<tbody><tr>' +
+            '<td><button type="button" class="wjc-reset ui-button ui-corner-all ui-widget" data-wjc-reset>' +
+              '<span class="ui-button-icon ui-icon ui-icon-refresh"></span><span class="ui-button-icon-space"> </span>Reset' +
+            '</button></td>' +
+            '<td class="wjc-progress-cell"><span class="wjc-progress" data-wjc-progress>' + esc(progress.label) + '</span></td>' +
+          '</tr></tbody>' +
+        '</table>' +
+        '<table class="wjc-native-panel ui-corner-all font_scale hirehop_panel" cellspacing="0" cellpadding="2">' +
+          '<tbody>' +
+            '<tr class="wjc-title-row"><td colspan="2">' +
+              '<table class="wjc-header-table" cellspacing="0" cellpadding="0"><tbody><tr>' +
+                '<td class="wjc-title">' + esc(profile.title) + '</td>' +
+                '<td class="wjc-entity">' + esc(entityId ? profile.levelLabel + " " + entityId : "Current " + profile.levelLabel.toLowerCase()) + '</td>' +
+              '</tr></tbody></table>' +
+            '</td></tr>' +
+            '<tr><td class="wjc-label-cell">Progress</td><td><span class="wjc-progress" data-wjc-progress>' + esc(progress.label) + '</span></td></tr>' +
+            '<tr><td class="wjc-label-cell">Checklist</td><td class="wjc-checklist-cell">' +
+              '<table class="wjc-checklist-table" cellspacing="0" cellpadding="2">' +
+                '<thead><tr class="ui-state-default"><th class="wjc-check-col">Done</th><th>Requirement</th></tr></thead>' +
+                '<tbody>';
 
     for (var i = 0; i < profile.items.length; i++) {
       var item = profile.items[i];
       var checked = !!(checklistState.checked && checklistState.checked[item.key]);
+      var fieldId = "wjc-" + (profile.key || "current") + "-" + i + "-" + item.key.replace(/[^a-z0-9_-]/gi, "-");
       html += '' +
-        '<label class="wjc-item">' +
-          '<input type="checkbox" data-wjc-item="' + escAttr(item.key) + '"' + (checked ? " checked" : "") + '>' +
-          '<span>' + esc(item.label) + '</span>' +
-        '</label>';
+        '<tr' + (checked ? ' class="is-complete"' : '') + '>' +
+          '<td class="wjc-check-col"><input id="' + escAttr(fieldId) + '" type="checkbox" data-wjc-item="' + escAttr(item.key) + '"' + (checked ? " checked" : "") + '></td>' +
+          '<td><label class="wjc-item-label" for="' + escAttr(fieldId) + '">' + esc(item.label) + '</label></td>' +
+        '</tr>';
     }
 
     html += '' +
-          '</div>' +
-          '<label class="wjc-notes">' +
-            '<span>Technical notes</span>' +
-            '<textarea data-wjc-notes rows="4">' + esc(checklistState.notes || "") + '</textarea>' +
-          '</label>' +
-          '<div class="wjc-save-note">Changes save automatically in this checklist tab.</div>' +
-        '</div>' +
+                '</tbody>' +
+              '</table>' +
+            '</td></tr>' +
+            '<tr><td class="wjc-label-cell">Technical notes</td><td><textarea class="wjc-notes-field data_cell" data-wjc-notes rows="4">' + esc(checklistState.notes || "") + '</textarea></td></tr>' +
+          '</tbody>' +
+        '</table>' +
       '</div>';
 
     return html;
+  }
+
+  function getChecklistProgress(profile, checklistState) {
+    var total = profile && profile.items ? profile.items.length : 0;
+    var completed = 0;
+    checklistState = checklistState || {};
+    checklistState.checked = checklistState.checked || {};
+
+    for (var i = 0; i < total; i++) {
+      if (checklistState.checked[profile.items[i].key]) completed++;
+    }
+
+    return {
+      completed: completed,
+      total: total,
+      label: total ? completed + " of " + total + " complete" : "No checklist items"
+    };
   }
 
   function bindChecklistPanelEvents(profile) {
@@ -478,10 +508,18 @@
     var checklistState = { checked: {}, notes: "" };
     $panel.find("input[data-wjc-item]").each(function () {
       var key = $(this).attr("data-wjc-item");
-      checklistState.checked[key] = !!$(this).prop("checked");
+      var checked = !!$(this).prop("checked");
+      checklistState.checked[key] = checked;
+      $(this).closest("tr").toggleClass("is-complete", checked);
     });
     checklistState.notes = asText($panel.find("textarea[data-wjc-notes]").val());
     writeChecklistState(profile, checklistState);
+    updateChecklistProgress(profile, checklistState);
+  }
+
+  function updateChecklistProgress(profile, checklistState) {
+    var progress = getChecklistProgress(profile, checklistState);
+    $("#" + getPanelId(profile)).find("[data-wjc-progress]").text(progress.label);
   }
 
   function readChecklistState(profile) {
@@ -1114,27 +1152,36 @@
     if ($("#" + CFG.stylesId).length) return;
 
     var css = [
-      ".wise-checklist-panel{box-sizing:border-box;background:#f5f6f8;border-top:1px solid #d6dbe3;}",
+      ".wise-checklist-panel{box-sizing:border-box;background:#fff;}",
       ".wise-checklist-active>.ui-tabs-panel:not([data-wise-checklist-panel]),.wise-checklist-active>[role='tabpanel']:not([data-wise-checklist-panel]){display:none!important;}",
       ".wise-checklist-active>[data-wise-checklist-panel='1']{display:block!important;}",
       '[data-wise-job-checklist="1"].is-wise-checklist-active{background:#1f75cf!important;border-color:#1f75cf!important;}',
       '[data-wise-job-checklist="1"].is-wise-checklist-active>a{color:#fff!important;}',
-      ".wise-checklist-panel .wjc-panel-inner{max-width:760px;padding:18px 20px 22px;font-family:Arial,Helvetica,sans-serif;color:#172033;box-sizing:border-box;}",
-      ".wise-checklist-panel .wjc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:0 0 13px;border-bottom:1px solid #e2e8f0;}",
-      ".wise-checklist-panel .wjc-title{font-size:18px;line-height:1.2;font-weight:700;color:#111827;}",
-      ".wise-checklist-panel .wjc-subtitle{margin-top:3px;font-size:12px;color:#64748b;}",
-      ".wise-checklist-panel .wjc-body{padding-top:16px;}",
-      ".wise-checklist-panel .wjc-list{display:grid;grid-template-columns:1fr;gap:8px;}",
-      ".wise-checklist-panel .wjc-item{display:flex;align-items:center;gap:10px;min-height:36px;padding:8px 10px;border:1px solid #d9e2ec;border-radius:6px;background:#fff;box-sizing:border-box;font-size:13px;line-height:1.3;color:#172033;cursor:pointer;}",
-      ".wise-checklist-panel .wjc-item:hover{background:#f8fafc;border-color:#b6c5d6;}",
-      ".wise-checklist-panel .wjc-item input{width:16px;height:16px;flex:0 0 auto;margin:0;}",
-      ".wise-checklist-panel .wjc-notes{display:block;margin-top:14px;font-size:12px;font-weight:700;color:#334155;}",
-      ".wise-checklist-panel .wjc-notes textarea{display:block;width:100%;margin-top:6px;resize:vertical;min-height:86px;border:1px solid #cbd5e1;border-radius:6px;padding:9px 10px;font:13px/1.4 Arial,Helvetica,sans-serif;color:#172033;box-sizing:border-box;}",
-      ".wise-checklist-panel .wjc-save-note{margin-top:8px;font-size:12px;color:#64748b;}",
-      ".wise-checklist-panel .wjc-btn{min-height:32px;border:1px solid #b6c5d6;border-radius:6px;padding:6px 13px;font:700 13px/1.2 Arial,Helvetica,sans-serif;cursor:pointer;}",
-      ".wise-checklist-panel .wjc-btn-secondary{background:#fff;color:#334155;}",
-      ".wise-checklist-panel .wjc-btn-secondary:hover{background:#eef2f7;}",
-      "@media(max-width:620px){.wise-checklist-panel .wjc-panel-inner{padding:14px 12px 18px;}.wise-checklist-panel .wjc-head{flex-direction:column;}.wise-checklist-panel .wjc-btn{width:100%;}}"
+      ".wise-checklist-panel .wjc-panel-inner{padding:14px 16px 18px;font-family:inherit;color:inherit;box-sizing:border-box;}",
+      ".wise-checklist-panel .wjc-actions{width:100%;margin:0 0 6px;border-collapse:collapse;}",
+      ".wise-checklist-panel .wjc-actions td{padding:0 4px 6px 0;white-space:nowrap;}",
+      ".wise-checklist-panel .wjc-actions .wjc-progress-cell{text-align:right;font-weight:bold;}",
+      ".wise-checklist-panel .wjc-reset{width:136px;}",
+      ".wise-checklist-panel .wjc-native-panel{width:100%;border:1px solid #a1a1a1;border-collapse:separate;border-spacing:0;background:#fff;table-layout:fixed;}",
+      ".wise-checklist-panel .wjc-native-panel td{padding:5px 6px;border-top:1px solid #d0d0d0;vertical-align:top;}",
+      ".wise-checklist-panel .wjc-native-panel>tbody>tr:first-child>td{border-top:0;}",
+      ".wise-checklist-panel .wjc-title-row>td{padding:0;}",
+      ".wise-checklist-panel .wjc-header-table{width:100%;border-collapse:collapse;background:#f0f0f0;}",
+      ".wise-checklist-panel .wjc-header-table td{border:0;padding:6px 6px;}",
+      ".wise-checklist-panel .wjc-title{font-size:1.2em;font-weight:bold;}",
+      ".wise-checklist-panel .wjc-entity{text-align:right;white-space:nowrap;}",
+      ".wise-checklist-panel .wjc-label-cell{width:145px;color:#333;white-space:nowrap;}",
+      ".wise-checklist-panel .wjc-progress{font-weight:bold;}",
+      ".wise-checklist-panel .wjc-checklist-cell{padding:0!important;}",
+      ".wise-checklist-panel .wjc-checklist-table{width:100%;border-collapse:collapse;table-layout:fixed;}",
+      ".wise-checklist-panel .wjc-checklist-table th{padding:5px 6px;text-align:left;font-weight:bold;border-bottom:1px solid #a1a1a1;}",
+      ".wise-checklist-panel .wjc-check-col{width:58px;text-align:center!important;}",
+      ".wise-checklist-panel .wjc-checklist-table td{border-top:1px solid #dedede;padding:5px 6px;vertical-align:middle;}",
+      ".wise-checklist-panel .wjc-checklist-table tbody tr:first-child td{border-top:0;}",
+      ".wise-checklist-panel .wjc-checklist-table tr.is-complete td{background:#f7f7f7;color:#555;}",
+      ".wise-checklist-panel .wjc-item-label{display:block;line-height:1.4;cursor:pointer;}",
+      ".wise-checklist-panel .wjc-notes-field{display:block;width:100%;height:72px;min-height:72px;resize:vertical;border:1px solid #a1a1a1;padding:4px;box-sizing:border-box;font:inherit;background:#fff;}",
+      "@media(max-width:620px){.wise-checklist-panel .wjc-panel-inner{padding:10px 8px 14px;}.wise-checklist-panel .wjc-actions td{display:block;text-align:left!important;}.wise-checklist-panel .wjc-reset{width:136px;}.wise-checklist-panel .wjc-entity{text-align:left;white-space:normal;}.wise-checklist-panel .wjc-native-panel,.wise-checklist-panel .wjc-native-panel tbody,.wise-checklist-panel .wjc-native-panel tr,.wise-checklist-panel .wjc-native-panel td{display:block;width:auto;}.wise-checklist-panel .wjc-label-cell{width:auto;background:#f7f7f7;border-bottom:1px solid #d0d0d0;}.wise-checklist-panel .wjc-check-col{width:46px;}}"
     ].join("\n");
 
     $("<style></style>", { id: CFG.stylesId, text: css }).appendTo("head");
