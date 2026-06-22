@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-06-19.1",
+  "version": "2026-06-22.2",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -54,8 +54,8 @@
     {
       "file": "7-captrack.js",
       "status": "active",
-      "cacheVersion": "2.8",
-      "role": "Full-page Wise capacity timeline using project-level custom fields, date-range filtering, Wise status controls, and sanitized absence overlay support.",
+      "cacheVersion": "2.9",
+      "role": "Full-page Wise capacity timeline, with a home-page entry button visible across all depots, using project-level custom fields, date-range filtering, Wise status controls, and sanitized absence overlay support.",
       "recommendedLoadOrder": 7
     },
     {
@@ -71,6 +71,13 @@
       "cacheVersion": "0.8",
       "role": "Project and job page UI polish that hides Billing and Purchase orders tabs for non-admin users across all depots, keeps them visible for admin users, and adds a native Checklist tab panel with placeholder project/job checklist fields.",
       "recommendedLoadOrder": 9
+    },
+    {
+      "file": "10-projectjobs-qol.js",
+      "status": "active",
+      "cacheVersion": "0.1",
+      "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable by making the details tab scrollable and adding a compact project-info toggle above the jobs grid.",
+      "recommendedLoadOrder": 10
     }
   ],
   "referenceFiles": [

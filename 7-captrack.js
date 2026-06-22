@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-05-21.1-absence-proxy",
+    version: "2026-06-22.2",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -354,11 +354,6 @@
   }
 
   function installEntryPoint() {
-    if (!isAllowedActiveDepot()) {
-      removeEntryPoint();
-      return;
-    }
-
     if (!isHomePage()) {
       removeEntryPoint();
       return;
@@ -3912,27 +3907,6 @@
       CFG.customFieldKeys.revenue,
       CFG.customFieldKeys.tier
     ]));
-  }
-
-  function isAllowedActiveDepot() {
-    var depot = getSharedDepotModule();
-    if (!depot || typeof depot.isAllowed !== "function") return false;
-
-    var context = typeof depot.getActiveContext === "function"
-      ? depot.getActiveContext()
-      : (window.__wiseHireHopDepotContext || {});
-
-    return depot.isAllowed(context, {
-      allowedIds: [],
-      allowedNames: ["Proposal Creation"],
-      blockWhenUndetected: true
-    });
-  }
-
-  function getSharedDepotModule() {
-    var module = window[HIREHOP_MODULE_GLOBAL];
-    var depot = module && module.depot;
-    return depot && typeof depot === "object" ? depot : null;
   }
 
   function getHireHopModuleSection(name) {

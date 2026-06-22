@@ -11,6 +11,7 @@ Use this order for the live HireHop scripts.
 7. `7-captrack.js`
 8. `8-stagedesigner.js`
 9. `9-jobchecklist.js`
+10. `10-projectjobs-qol.js`
 
 For the full paste-ready company config string, use `docs/HIREHOP_PLUGIN_STRING.md`.
 

@@ -55,6 +55,12 @@ It owns:
 - Keeping the full native button set visible for admin users.
 - Native Checklist tab panels and placeholder checklist state until final HireHop project/job custom fields are agreed.
 
+`10-projectjobs-qol.js` owns:
+
+- Project details page job-list reachability across all depots.
+- Making the project details tab scrollable when project custom fields push the jobs grid below the visible viewport.
+- The compact project-information toggle that temporarily hides the upper project details block so the native jobs grid has more room.
+
 ## Next Extractions
 
 1. `wise-sectionbuilder-preview-ui.js`
@@ -82,6 +88,7 @@ Recommended HireHop script set:
 - Load `7-captrack.js`.
 - Load `8-stagedesigner.js`.
 - Load `9-jobchecklist.js`.
+- Load `10-projectjobs-qol.js`.
 
 Do not load `wise-headingedit-ui.js` or `wise-sectionbuilder-ui.js` in normal production.
 
@@ -94,5 +101,7 @@ If the layout module causes issues, disable `4-layout.js`. The main editor has b
 If the HireHop integration module causes issues, disable `5-hirehop.js`. The main editor has built-in selector, endpoint, timing, depot, and prefix defaults and should continue running.
 
 If the job checklist module causes issues, disable `9-jobchecklist.js`. It is standalone and does not affect the proposal editor, capacity tracker, or staging designer.
+
+If the project jobs quality-of-life module causes issues, disable `10-projectjobs-qol.js`. It is standalone and only affects project details page scrolling and the compact project-information toggle.
 
 If `6-editor2.js` causes issues, disable it and temporarily load the older `wise-sectionbuilder-ui.js` snapshot.

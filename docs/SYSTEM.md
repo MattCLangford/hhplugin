@@ -21,6 +21,7 @@ Load these in HireHop:
 7. `7-captrack.js`
 8. `8-stagedesigner.js`
 9. `9-jobchecklist.js`
+10. `10-projectjobs-qol.js`
 
 `5-hirehop.js` names the HireHop UI selectors, endpoint paths, depot rules, timings, active depot detector, and tree item prefixes that the other runtime scripts depend on. It loads first so each module shares the same framework-aware HireHop context.
 
@@ -34,11 +35,13 @@ Load these in HireHop:
 
 `6-editor2.js` is the primary editor. It gives non-technical users a safer visual page editor for baseline QTC standards, while still handing native item editing back to HireHop where appropriate.
 
-`7-captrack.js` is the Wise capacity tracker. It opens as a full-page planning view and uses project-level Wise custom fields for event naming, status, revenue, tier, client, venue, and role allocation.
+`7-captrack.js` is the Wise capacity tracker. Its home-page entry button is visible across all depots. It opens as a full-page planning view and uses project-level Wise custom fields for event naming, status, revenue, tier, client, venue, and role allocation.
 
 `8-stagedesigner.js` adds a simple staging kit designer to the supplying list toolbar. It loads and caches live HireHop items from the metric Staging category, the imperial Unit 10 Stock staging family, and the Unit 10 Consumables sales-stock category for imperial carpet/felt. Carpet and fascia/felt colour controls are limited to exact live sales-stock colours with one Custom option for bought-in colours. It imports generated stage rows under a stage heading that includes the 3/4 sided fascia choice, using `items_import.php`, posting hire components as `STOCK_ID` rows and selected imperial carpet/felt consumables as `SALES_ID` rows. Every stage includes one live staging box: small for 1-2 deck pieces, medium for 3-6, and large for 7 or more. Carpet is emitted as one combined stage-top/tread line. Metric mode still creates custom rows for individual 1m fascia board sections by run and the calculated felt run, overlap, tread allowance, and total linear metres.
 
 `9-jobchecklist.js` adjusts the project and job page tabs across all depots. Non-admin users have the Billing and Purchase orders tabs hidden, admin users keep the full native tab set, and everyone gets a Checklist tab that fills the native tab content area. The checklist uses placeholder technical-manager items until the final HireHop project and job custom fields are named.
+
+`10-projectjobs-qol.js` keeps the project page jobs list reachable across all depots when project-level custom fields make the upper information section tall. It makes the project details tab scrollable and adds a native-looking compact toggle that hides only the upper project information block so the existing HireHop jobs grid gets more visible space.
 
 ## Reference And Legacy Files
 
