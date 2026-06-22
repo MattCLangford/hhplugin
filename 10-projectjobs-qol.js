@@ -10,44 +10,92 @@
     : {};
 
   var CFG = {
-    version: "2026-06-22.2",
+    version: "2026-06-22.3",
     stylesId: "wise-project-jobs-qol-styles",
     buttonId: "wise-project-jobs-compact-btn",
     summaryId: "wise-project-jobs-compact-summary",
     storageKey: "wise-project-jobs-qol:project-details-compact",
+    maintainRecoveryMs: asNumber(EXTERNAL_CONFIG.maintainRecoveryMs, 5000),
     minPanelHeight: asNumber(EXTERNAL_CONFIG.minPanelHeight, 320),
     bottomPadding: asNumber(EXTERNAL_CONFIG.bottomPadding, 12)
   };
 
   var state = {
-    maintainTimer: null
+    maintainTimer: null,
+    maintainScheduled: null,
+    pendingMaintainOptions: null,
+    lastDetailsEl: null,
+    lastProjectInfoEl: null,
+    projectInfoRowsMarked: false,
+    lastScrollMaxHeight: ""
   };
 
   bootstrap();
 
   function bootstrap() {
     installStyles();
-    maintainProjectJobsLayout();
-    state.maintainTimer = setInterval(maintainProjectJobsLayout, 900);
+    scheduleMaintainProjectJobsLayout(0, { forceScan: true });
+    state.maintainTimer = setInterval(function () {
+      scheduleMaintainProjectJobsLayout(0, {});
+    }, CFG.maintainRecoveryMs);
 
     $(window).on("load.wiseProjectJobsQol focus.wiseProjectJobsQol resize.wiseProjectJobsQol hashchange.wiseProjectJobsQol", function () {
-      setTimeout(maintainProjectJobsLayout, 60);
+      scheduleMaintainProjectJobsLayout(60, { forceScan: true });
     });
     $(document).on("ajaxComplete.wiseProjectJobsQol", function () {
-      setTimeout(maintainProjectJobsLayout, 80);
+      scheduleMaintainProjectJobsLayout(80, { forceScan: true });
     });
   }
 
-  function maintainProjectJobsLayout() {
+  function scheduleMaintainProjectJobsLayout(delay, options) {
+    state.pendingMaintainOptions = mergeMaintainOptions(state.pendingMaintainOptions, options);
+    if (state.maintainScheduled) clearTimeout(state.maintainScheduled);
+
+    state.maintainScheduled = setTimeout(function () {
+      var pending = state.pendingMaintainOptions || {};
+      state.pendingMaintainOptions = null;
+      state.maintainScheduled = null;
+      maintainProjectJobsLayout(pending);
+    }, Math.max(0, Number(delay) || 0));
+  }
+
+  function mergeMaintainOptions(current, next) {
+    current = current || {};
+    next = next || {};
+    return {
+      forceScan: !!(current.forceScan || next.forceScan)
+    };
+  }
+
+  function maintainProjectJobsLayout(options) {
+    options = options || {};
     var page = findProjectDetailsPage();
     if (!page.ready) {
+      state.lastDetailsEl = null;
+      state.lastProjectInfoEl = null;
+      state.projectInfoRowsMarked = false;
+      state.lastScrollMaxHeight = "";
       removeOrphanedEnhancements();
       return;
     }
 
+    var projectInfoEl = page.projectInfo.get(0);
+    if (state.lastDetailsEl !== page.details.get(0)) {
+      state.lastDetailsEl = page.details.get(0);
+      state.lastScrollMaxHeight = "";
+    }
+
+    var shouldScanProjectInfo = options.forceScan ||
+      state.lastProjectInfoEl !== projectInfoEl ||
+      !state.projectInfoRowsMarked;
+
     page.details.addClass("wise-project-jobs-scroll");
     ensureSummaryStrip(page);
-    markCompactProjectInfoRows(page);
+    if (shouldScanProjectInfo) {
+      markCompactProjectInfoRows(page);
+      state.lastProjectInfoEl = projectInfoEl;
+      state.projectInfoRowsMarked = true;
+    }
     installCompactButton(page);
     applyCompactState(page, readCompactState());
     applyScrollSizing(page);
@@ -83,13 +131,19 @@
         .css("width", getButtonWidth(page.projectButtons));
     }
 
-    $button.off(".wiseProjectJobsQol").on("click.wiseProjectJobsQol", function (event) {
-      event.preventDefault();
-      var collapsed = !readCompactState();
-      writeCompactState(collapsed);
-      applyCompactState(page, collapsed);
-      applyScrollSizing(page);
-    });
+    if ($button.attr("data-wise-project-jobs-bound") !== "1") {
+      $button.off(".wiseProjectJobsQol");
+      $button.attr("data-wise-project-jobs-bound", "1");
+      $button.on("click.wiseProjectJobsQol", function (event) {
+        event.preventDefault();
+        var currentPage = findProjectDetailsPage();
+        if (!currentPage.ready) return;
+        var collapsed = !readCompactState();
+        writeCompactState(collapsed);
+        applyCompactState(currentPage, collapsed);
+        applyScrollSizing(currentPage);
+      });
+    }
 
     var $menu = page.projectButtons.children("#menuBtn,#menu_btn").first();
     if ($menu.length && !$button.next().is($menu)) {
@@ -116,7 +170,11 @@
   }
 
   function applyCompactState(page, collapsed) {
-    if (collapsed) markCompactProjectInfoRows(page);
+    if (collapsed && (!state.projectInfoRowsMarked || state.lastProjectInfoEl !== page.projectInfo.get(0))) {
+      markCompactProjectInfoRows(page);
+      state.lastProjectInfoEl = page.projectInfo.get(0);
+      state.projectInfoRowsMarked = true;
+    }
     page.details.toggleClass("wise-project-jobs-compact", collapsed);
     $("#" + CFG.summaryId).attr("aria-hidden", collapsed && !page.projectInfo.hasClass("wise-project-jobs-compact-has-row") ? "false" : "true");
     updateCompactButton($("#" + CFG.buttonId), collapsed);
@@ -281,10 +339,19 @@
     if (!page.details.length) return;
 
     var el = page.details.get(0);
+    if (state.lastDetailsEl !== el) {
+      state.lastDetailsEl = el;
+      state.lastScrollMaxHeight = "";
+    }
+
     var rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
     var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 700;
     var top = rect && isFinite(rect.top) ? Math.max(0, rect.top) : 0;
     var maxHeight = Math.max(CFG.minPanelHeight, Math.floor(viewportHeight - top - CFG.bottomPadding));
+    var heightKey = String(maxHeight);
+
+    if (state.lastScrollMaxHeight === heightKey) return;
+    state.lastScrollMaxHeight = heightKey;
 
     page.details.css({
       maxHeight: maxHeight + "px",
@@ -301,8 +368,11 @@
     var title = collapsed
       ? "Show project details above the jobs list"
       : "Collapse project details to give the jobs list more room";
+    var stateKey = collapsed ? "collapsed" : "expanded";
+    if ($button.attr("data-wise-project-jobs-state") === stateKey) return;
 
     $button
+      .attr("data-wise-project-jobs-state", stateKey)
       .attr("aria-pressed", collapsed ? "true" : "false")
       .attr("title", title)
       .html('<span class="ui-button-icon ui-icon ' + icon + '"></span><span class="ui-button-icon-space"> </span>' + esc(label));
@@ -385,7 +455,9 @@
 
   window.__wiseProjectJobsQol = {
     version: CFG.version,
-    refresh: maintainProjectJobsLayout,
+    refresh: function () {
+      maintainProjectJobsLayout({ forceScan: true });
+    },
     collapse: function () {
       var page = findProjectDetailsPage();
       if (!page.ready) return;

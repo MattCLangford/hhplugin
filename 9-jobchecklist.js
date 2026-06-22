@@ -22,7 +22,7 @@
   ];
 
   var CFG = {
-    version: "2026-06-19.1",
+    version: "2026-06-19.2",
     defaultButtonLabel: asText(EXTERNAL_CONFIG.buttonLabel) || "Checklist",
     defaultButtonTitle: asText(EXTERNAL_CONFIG.buttonTitle) || "Open technical checklist",
     buttonIdPrefix: "wise-checklist-tab-",
@@ -42,37 +42,65 @@
       "super admin",
       "superuser",
       "owner"
-    ])
+    ]),
+    maintainRecoveryMs: normalisePositiveNumber(EXTERNAL_CONFIG.maintainRecoveryMs, 5000)
   };
 
   var state = {
     lastAdmin: null,
     lastHost: null,
     activeProfile: null,
-    maintainTimer: null
+    maintainTimer: null,
+    maintainScheduled: null,
+    pendingMaintainOptions: null,
+    lastMaintainSignature: ""
   };
 
   bootstrap();
 
   function bootstrap() {
     installStyles();
-    maintainJobTabs();
-    state.maintainTimer = setInterval(maintainJobTabs, 900);
+    scheduleMaintainJobTabs(0, { forceScan: true });
+    state.maintainTimer = setInterval(function () {
+      scheduleMaintainJobTabs(0, {});
+    }, CFG.maintainRecoveryMs);
 
     $(window).on("load.wiseJobChecklist focus.wiseJobChecklist hashchange.wiseJobChecklist", function () {
-      setTimeout(maintainJobTabs, 60);
+      scheduleMaintainJobTabs(60, { forceScan: true });
     });
     $(document).on("ajaxComplete.wiseJobChecklist", function () {
-      setTimeout(maintainJobTabs, 80);
+      scheduleMaintainJobTabs(80, { forceScan: true });
     });
   }
 
-  function maintainJobTabs() {
+  function scheduleMaintainJobTabs(delay, options) {
+    state.pendingMaintainOptions = mergeMaintainOptions(state.pendingMaintainOptions, options);
+    if (state.maintainScheduled) clearTimeout(state.maintainScheduled);
+
+    state.maintainScheduled = setTimeout(function () {
+      var pending = state.pendingMaintainOptions || {};
+      state.pendingMaintainOptions = null;
+      state.maintainScheduled = null;
+      maintainJobTabs(pending);
+    }, Math.max(0, Number(delay) || 0));
+  }
+
+  function mergeMaintainOptions(current, next) {
+    current = current || {};
+    next = next || {};
+    return {
+      forceScan: !!(current.forceScan || next.forceScan)
+    };
+  }
+
+  function maintainJobTabs(options) {
+    options = options || {};
     var match = findChecklistTabsHost();
     var $host = match.host;
     var profile = match.profile;
     if (!$host.length) {
-      removeChecklistTab();
+      state.lastMaintainSignature = "";
+      if ($('[data-wise-job-checklist="1"]').length) removeChecklistTab();
       return;
     }
 
@@ -80,6 +108,15 @@
     state.activeProfile = profile;
     var admin = isAdminUser();
     state.lastAdmin = admin;
+    var signature = getMaintainSignature($host, profile, admin);
+    var $button = $("#" + getButtonId(profile));
+
+    if (!options.forceScan && state.lastMaintainSignature === signature && $button.length && $button.parent().is($host)) {
+      redirectHiddenActiveTab($host, profile);
+      return;
+    }
+
+    state.lastMaintainSignature = signature;
 
     updateCommercialTabs($host, admin);
     installChecklistTab($host, profile);
@@ -149,7 +186,10 @@
   function applyTabTemplate($button, $sampleTab, profile) {
     if (!$button || !$button.length) return;
 
-    if ($sampleTab && $sampleTab.length) {
+    var templateSignature = getTemplateSignature($sampleTab, profile);
+    var templateChanged = $button.attr("data-wise-job-checklist-template") !== templateSignature;
+
+    if ($sampleTab && $sampleTab.length && templateChanged) {
       $button.attr("class", normaliseTabClass($sampleTab.attr("class") || $button.attr("class") || ""));
       $button.attr("role", $sampleTab.attr("role") || "tab");
       copyComputedStyle($sampleTab.get(0), $button.get(0), [
@@ -181,9 +221,10 @@
         "borderLeftColor",
         "backgroundColor"
       ]);
-    } else {
+    } else if (!$sampleTab || !$sampleTab.length) {
       $button.attr("class", normaliseTabClass($button.attr("class") || ""));
     }
+    $button.attr("data-wise-job-checklist-template", templateSignature);
 
     $button
       .removeClass("ui-tabs-active ui-state-active ui-state-focus ui-state-hover ui-tabs-loading")
@@ -194,7 +235,7 @@
 
     var $anchor = $button.children("a").first();
     var $sampleAnchor = $sampleTab && $sampleTab.length ? $sampleTab.children("a").first() : $();
-    if ($anchor.length && $sampleAnchor.length) {
+    if ($anchor.length && $sampleAnchor.length && templateChanged) {
       $anchor.attr("class", $sampleAnchor.attr("class") || "");
       copyComputedStyle($sampleAnchor.get(0), $anchor.get(0), [
         "display",
@@ -228,9 +269,11 @@
 
   function bindChecklistButton($button) {
     if (!$button || !$button.length) return;
+    if ($button.attr("data-wise-job-checklist-bound") === "1") return;
 
     $button.off(".wiseJobChecklist");
     $button.children("a").off(".wiseJobChecklist");
+    $button.attr("data-wise-job-checklist-bound", "1");
 
     $button.add($button.children("a")).on("click.wiseJobChecklist", function (event) {
       event.preventDefault();
@@ -806,6 +849,19 @@
     return empty;
   }
 
+  function getMaintainSignature($host, profile, admin) {
+    var labels = [];
+    getCandidateTabs($host).each(function () {
+      labels.push(normaliseSearch(getTabText($(this))));
+    });
+
+    return [
+      profile && profile.key ? profile.key : "",
+      admin ? "admin" : "user",
+      labels.join("|")
+    ].join("::");
+  }
+
   function getTabsHostProfile($host) {
     if (!$host || !$host.length) return false;
     if ($host.closest("#" + CFG.modalId + ",#" + CFG.overlayId).length) return false;
@@ -867,6 +923,19 @@
       if ($match.length) return $match;
     }
     return getCandidateTabs($host).filter(":visible").last();
+  }
+
+  function getTemplateSignature($sampleTab, profile) {
+    if (!$sampleTab || !$sampleTab.length) return "none::" + (profile && profile.key ? profile.key : "");
+    var $anchor = $sampleTab.children("a").first();
+    return [
+      profile && profile.key ? profile.key : "",
+      normaliseTabClass($sampleTab.attr("class") || ""),
+      $sampleTab.attr("role") || "",
+      $sampleTab.attr("style") || "",
+      $anchor.attr("class") || "",
+      $anchor.attr("style") || ""
+    ].join("::");
   }
 
   function getTabText($tab) {
@@ -1213,6 +1282,11 @@
     return $.isArray(value) ? value : [value];
   }
 
+  function normalisePositiveNumber(value, fallback) {
+    var number = Number(value);
+    return isFinite(number) && number > 0 ? number : fallback;
+  }
+
   function normaliseTextList(value) {
     var list = normaliseArray(value);
     var out = [];
@@ -1279,7 +1353,9 @@
 
   window.__wiseJobChecklist = {
     version: CFG.version,
-    refresh: maintainJobTabs,
+    refresh: function () {
+      maintainJobTabs({ forceScan: true });
+    },
     open: openChecklist,
     isAdmin: isAdminUser,
     describe: function () {

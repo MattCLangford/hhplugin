@@ -7,7 +7,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.19",
+    version: "2026-06-12.20",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -31,6 +31,7 @@
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     treeClicked: getHireHopSelector("treeClicked", "#items_tab .jstree-clicked"),
     treeSelectedFallback: getHireHopSelector("treeSelectedFallback", "#items_tab li.jstree-node.jstree-clicked, #items_tab li.jstree-selected, #items_tab li[aria-selected='true'], #items_tab a.jstree-anchor[aria-selected='true']"),
+    toolbarRecoveryMs: getHireHopNumberValue("timings", "toolbarRecoveryMs", 3000),
     writeThrottleMs: getHireHopNumberValue("timings", "writeThrottleMs", 1150),
     rateLimitRetryMs: getHireHopNumberValue("timings", "rateLimitRetryMs", 65000),
     saveMaxAttempts: getHireHopNumberValue("timings", "saveMaxAttempts", 2),
@@ -69,15 +70,34 @@
     saving: false,
     lastWriteAt: 0,
     target: null,
-    currentSpec: null
+    currentSpec: null,
+    toolbarTimer: null,
+    toolbarScheduled: null
   };
 
   bootstrap();
 
   function bootstrap() {
     installStyles();
-    maintainToolbarButton();
-    setInterval(maintainToolbarButton, 1000);
+    scheduleMaintainToolbarButton(0);
+    state.toolbarTimer = setInterval(function () {
+      scheduleMaintainToolbarButton(0);
+    }, CFG.toolbarRecoveryMs);
+
+    $(window).on("load.wiseStageDesigner focus.wiseStageDesigner", function () {
+      scheduleMaintainToolbarButton(80);
+    });
+    $(document).on("ajaxComplete.wiseStageDesigner", function () {
+      scheduleMaintainToolbarButton(120);
+    });
+  }
+
+  function scheduleMaintainToolbarButton(delay) {
+    if (state.toolbarScheduled) clearTimeout(state.toolbarScheduled);
+    state.toolbarScheduled = setTimeout(function () {
+      state.toolbarScheduled = null;
+      maintainToolbarButton();
+    }, Math.max(0, Number(delay) || 0));
   }
 
   function maintainToolbarButton() {
@@ -2710,6 +2730,10 @@
   function applyNativeToolbarButtonTemplate($button, $host) {
     if (!$button || !$button.length) return;
     var template = getNativeToolbarButtonTemplate($host);
+    var signature = String(template.className || "") + "::" + String(template.style || "");
+    if ($button.attr("data-wise-stage-template") === signature) return;
+
+    $button.attr("data-wise-stage-template", signature);
     if (template.className) $button.attr("class", template.className);
     if (template.style) $button.attr("style", template.style);
     else $button.removeAttr("style");

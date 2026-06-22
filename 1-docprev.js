@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-21.1"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-21.2"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -17,12 +17,16 @@
 
   var DEPOT_BOOTSTRAP_MAX_TRIES = 120;
   var DEPOT_BOOTSTRAP_RETRY_MS = 500;
+  var DEPOT_BOOTSTRAP_INITIAL_DELAY_MS = 180;
+  var DEPOT_BOOTSTRAP_EVENT_DELAY_MS = 250;
   var activeDepotContext = {
     id: "",
     name: ""
   };
   var lastDepotDecisionSignature = "";
   var docPreviewBootstrapStarted = false;
+  var depotBootstrapTimer = null;
+  var depotBootstrapPendingOptions = null;
 
   var TOGGLE_ID = "wise-doc-preview-toggle";
   var OUTER_WRAP_ID = "wise-doc-preview-workspace";
@@ -111,11 +115,23 @@
       $(document).off(".wiseDocPreviewDepot");
     }
 
-    function attempt() {
+    function scheduleAttempt(delay, options) {
+      depotBootstrapPendingOptions = mergeBootstrapOptions(depotBootstrapPendingOptions, options);
+      if (depotBootstrapTimer) clearTimeout(depotBootstrapTimer);
+
+      depotBootstrapTimer = setTimeout(function () {
+        var pending = depotBootstrapPendingOptions || {};
+        depotBootstrapPendingOptions = null;
+        depotBootstrapTimer = null;
+        attempt(pending);
+      }, Math.max(0, Number(delay) || 0));
+    }
+
+    function attempt(options) {
       if (docPreviewBootstrapStarted) return;
 
       tries++;
-      activeDepotContext = getActiveDepotContext();
+      activeDepotContext = getActiveDepotContext(options);
 
       if (isAllowedDepot(activeDepotContext)) {
         docPreviewBootstrapStarted = true;
@@ -125,19 +141,33 @@
       }
 
       if (tries < DEPOT_BOOTSTRAP_MAX_TRIES) {
-        setTimeout(attempt, DEPOT_BOOTSTRAP_RETRY_MS);
+        scheduleAttempt(DEPOT_BOOTSTRAP_RETRY_MS, {});
       }
     }
 
     if (document.readyState === "loading") {
-      $(attempt);
+      $(function () { scheduleAttempt(DEPOT_BOOTSTRAP_INITIAL_DELAY_MS, { forceDepotScan: true }); });
     } else {
-      attempt();
+      scheduleAttempt(DEPOT_BOOTSTRAP_INITIAL_DELAY_MS, { forceDepotScan: true });
     }
 
-    $(window).on("load.wiseDocPreviewDepot focus.wiseDocPreviewDepot", attempt);
-    $(document).on("ajaxComplete.wiseDocPreviewDepot", attempt);
-    $(document).on("change.wiseDocPreviewDepot input.wiseDocPreviewDepot", "select,input", attempt);
+    $(window).on("load.wiseDocPreviewDepot focus.wiseDocPreviewDepot", function () {
+      scheduleAttempt(DEPOT_BOOTSTRAP_EVENT_DELAY_MS, {});
+    });
+    $(document).on("ajaxComplete.wiseDocPreviewDepot", function () {
+      scheduleAttempt(DEPOT_BOOTSTRAP_EVENT_DELAY_MS, {});
+    });
+    $(document).on("change.wiseDocPreviewDepot input.wiseDocPreviewDepot", "select,input", function () {
+      if (isLikelyDepotControl(this)) scheduleAttempt(DEPOT_BOOTSTRAP_EVENT_DELAY_MS, { forceDepotScan: true });
+    });
+  }
+
+  function mergeBootstrapOptions(current, next) {
+    current = current || {};
+    next = next || {};
+    return {
+      forceDepotScan: !!(current.forceDepotScan || next.forceDepotScan)
+    };
   }
 
   function isAllowedDepot(context, options) {
@@ -217,10 +247,13 @@
     } catch (e) {}
   }
 
-  function getActiveDepotContext() {
+  function getActiveDepotContext(options) {
+    options = options || {};
     var sharedDepot = getSharedDepotModule();
     if (sharedDepot && typeof sharedDepot.getActiveContext === "function") {
-      var sharedContext = sharedDepot.getActiveContext();
+      var sharedContext = sharedDepot.getActiveContext({
+        useCache: !options.forceDepotScan && !!window.__wiseHireHopDepotContext
+      });
       window.__wiseHireHopDepotContext = sharedContext;
       return sharedContext;
     }
@@ -361,6 +394,26 @@
     window.__wiseHireHopDepotContext = context;
 
     return context;
+  }
+
+  function isLikelyDepotControl(element) {
+    if (!element) return false;
+    var $el = $(element);
+    if ($el.closest(".hh-header-depot,[data-label=\"depotTxt\"]").length) return true;
+
+    var keys = [
+      element.name,
+      element.id,
+      element.getAttribute && element.getAttribute("data-name"),
+      element.getAttribute && element.getAttribute("data-field"),
+      element.getAttribute && element.getAttribute("data-label")
+    ];
+
+    for (var i = 0; i < keys.length; i++) {
+      if (/(^|[_\-\s])(depot|branch|warehouse|location|site)([_\-\s]|$)/i.test(String(keys[i] || ""))) return true;
+    }
+
+    return false;
   }
 
   function getSharedHireHopModule() {
@@ -850,7 +903,7 @@
     $(document)
       .off("change.wiseDocPreviewRuntimeDepot input.wiseDocPreviewRuntimeDepot")
       .on("change.wiseDocPreviewRuntimeDepot input.wiseDocPreviewRuntimeDepot", "select,input", function () {
-        setTimeout(maintainPreviewEntryPointForDepot, 80);
+        if (isLikelyDepotControl(this)) setTimeout(maintainPreviewEntryPointForDepot, 120);
       });
   }
 

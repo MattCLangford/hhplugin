@@ -7,7 +7,7 @@ Do not hand-edit the current string or source table. Update `manifest.json` firs
 ## Current String
 
 ```text
-https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.7; https://mattclangford.github.io/hhplugin/1-docprev.js?v=0.5; https://mattclangford.github.io/hhplugin/2-apselall.js?v=0.4; https://mattclangford.github.io/hhplugin/3-meta.js?v=0.1; https://mattclangford.github.io/hhplugin/4-layout.js?v=0.1; https://mattclangford.github.io/hhplugin/6-editor2.js?v=1.5; https://mattclangford.github.io/hhplugin/7-captrack.js?v=2.9; https://mattclangford.github.io/hhplugin/8-stagedesigner.js?v=1.9; https://mattclangford.github.io/hhplugin/9-jobchecklist.js?v=0.8; https://mattclangford.github.io/hhplugin/10-projectjobs-qol.js?v=0.2;
+https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.7; https://mattclangford.github.io/hhplugin/1-docprev.js?v=0.6; https://mattclangford.github.io/hhplugin/2-apselall.js?v=0.5; https://mattclangford.github.io/hhplugin/3-meta.js?v=0.1; https://mattclangford.github.io/hhplugin/4-layout.js?v=0.1; https://mattclangford.github.io/hhplugin/6-editor2.js?v=1.6; https://mattclangford.github.io/hhplugin/7-captrack.js?v=3.0; https://mattclangford.github.io/hhplugin/8-stagedesigner.js?v=2.0; https://mattclangford.github.io/hhplugin/9-jobchecklist.js?v=0.9; https://mattclangford.github.io/hhplugin/10-projectjobs-qol.js?v=0.3;
 ```
 
 ## Source Table
@@ -15,15 +15,15 @@ https://mattclangford.github.io/hhplugin/5-hirehop.js?v=0.7; https://mattclangfo
 | Order | File | Cache version |
 | --- | --- | --- |
 | 1 | `5-hirehop.js` | `0.7` |
-| 2 | `1-docprev.js` | `0.5` |
-| 3 | `2-apselall.js` | `0.4` |
+| 2 | `1-docprev.js` | `0.6` |
+| 3 | `2-apselall.js` | `0.5` |
 | 4 | `3-meta.js` | `0.1` |
 | 5 | `4-layout.js` | `0.1` |
-| 6 | `6-editor2.js` | `1.5` |
-| 7 | `7-captrack.js` | `2.9` |
-| 8 | `8-stagedesigner.js` | `1.9` |
-| 9 | `9-jobchecklist.js` | `0.8` |
-| 10 | `10-projectjobs-qol.js` | `0.2` |
+| 6 | `6-editor2.js` | `1.6` |
+| 7 | `7-captrack.js` | `3.0` |
+| 8 | `8-stagedesigner.js` | `2.0` |
+| 9 | `9-jobchecklist.js` | `0.9` |
+| 10 | `10-projectjobs-qol.js` | `0.3` |
 
 ## Maintenance Rule
 

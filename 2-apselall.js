@@ -4,7 +4,7 @@
   if (window.__wiseHireHopAutopullSelectAllLoaded) return;
   window.__wiseHireHopAutopullSelectAllLoaded = true;
 
-  try { console.warn("[WiseHireHop] autopull select-all loaded - v2026-06-22.3"); } catch (e) {}
+  try { console.warn("[WiseHireHop] autopull select-all loaded - v2026-06-22.4"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -12,7 +12,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-22.3",
+    version: "2026-06-22.4",
     stylesId: "wise-autopull-select-all-styles",
     buttonClass: "wise-autopull-select-all",
     buttonDoneClass: "wise-autopull-select-all-complete",
@@ -117,9 +117,7 @@
 
       observer.observe(document.body || document.documentElement, {
         subtree: true,
-        childList: true,
-        attributes: true,
-        attributeFilter: ["class", "style"]
+        childList: true
       });
     }
 
@@ -293,14 +291,8 @@
     for (var i = 0; i < mutations.length; i += 1) {
       var mutation = mutations[i];
 
-      if (mutation.type === "attributes") {
-        if (isWithinAutopullDialogContext(mutation.target)) return true;
-        continue;
-      }
-
       if (mutation.type === "childList") {
         if (nodeListTouchesAutopullDialog(mutation.addedNodes)) return true;
-        if (nodeListTouchesAutopullDialog(mutation.removedNodes)) return true;
       }
     }
 

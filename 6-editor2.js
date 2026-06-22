@@ -15,7 +15,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-18.4-native-toolbar",
+    version: "2026-05-18.5-native-toolbar",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -34,6 +34,8 @@
     defaultEditEnabled: true,
     defaultOpenOnTreeDoubleClick: true,
     defaultOpenOnEnter: false,
+    bootstrapInitialDelayMs: 180,
+    bootstrapEventDelayMs: 250,
     nativeFallbackLabel: "Edit",
     visualEditLabel: "Visual Page Editor",
     sectionName: "Event Overview",
@@ -109,7 +111,9 @@
     previewDocked: false,
     previewSuppressed: false,
     viewMode: "native",
-    userSelectedNativeView: false
+    userSelectedNativeView: false,
+    bootstrapTimer: null,
+    bootstrapPendingOptions: null
   };
 
   function getExternalMetaModule() {
@@ -206,17 +210,30 @@
   function boot() {
     var tries = 0;
 
-    function attempt() {
+    function scheduleAttempt(delay, options) {
+      editor.bootstrapPendingOptions = mergeBootstrapOptions(editor.bootstrapPendingOptions, options);
+      if (editor.bootstrapTimer) clearTimeout(editor.bootstrapTimer);
+
+      editor.bootstrapTimer = setTimeout(function () {
+        var pending = editor.bootstrapPendingOptions || {};
+        editor.bootstrapPendingOptions = null;
+        editor.bootstrapTimer = null;
+        attempt(pending);
+      }, Math.max(0, Number(delay) || 0));
+    }
+
+    function attempt(options) {
+      options = options || {};
       tries += 1;
 
-      if (!isAllowedDepot(getActiveDepotContext())) {
+      if (!isAllowedDepot(getActiveDepotContext(options))) {
         removeProposalEditorEntryPoints();
-        if (tries < CFG.bootstrapMaxTries) setTimeout(attempt, CFG.bootstrapRetryMs);
+        if (tries < CFG.bootstrapMaxTries) scheduleAttempt(CFG.bootstrapRetryMs, {});
         return;
       }
 
       if (!$(ITEMS_TAB_SELECTOR).length) {
-        if (tries < CFG.bootstrapMaxTries) setTimeout(attempt, CFG.bootstrapRetryMs);
+        if (tries < CFG.bootstrapMaxTries) scheduleAttempt(CFG.bootstrapRetryMs, {});
         return;
       }
 
@@ -230,12 +247,21 @@
       maintainDefaultSupplyingListEditor();
     }
 
-    if (document.readyState === "loading") $(attempt);
-    else attempt();
+    if (document.readyState === "loading") {
+      $(function () { scheduleAttempt(CFG.bootstrapInitialDelayMs, { force: true }); });
+    } else {
+      scheduleAttempt(CFG.bootstrapInitialDelayMs, { force: true });
+    }
 
-    $(window).on("load.wiseEventOverview focus.wiseEventOverview", attempt);
-    $(document).on("ajaxComplete.wiseEventOverview", attempt);
-    $(document).on("change.wiseEventOverview input.wiseEventOverview", "select,input", attempt);
+    $(window).on("load.wiseEventOverview focus.wiseEventOverview", function () {
+      scheduleAttempt(CFG.bootstrapEventDelayMs, {});
+    });
+    $(document).on("ajaxComplete.wiseEventOverview", function () {
+      scheduleAttempt(CFG.bootstrapEventDelayMs, {});
+    });
+    $(document).on("change.wiseEventOverview input.wiseEventOverview", "select,input", function () {
+      if (isLikelyDepotControl(this)) scheduleAttempt(CFG.bootstrapEventDelayMs, { forceDepotScan: true });
+    });
     $(window).on("resize.wiseToolbarCompression", function () {
       if (editor.ready) {
         updateToolbarCompression();
@@ -253,6 +279,35 @@
     setInterval(function () {
       if (editor.ready) maintainDefaultSupplyingListEditor();
     }, 2500);
+  }
+
+  function mergeBootstrapOptions(current, next) {
+    current = current || {};
+    next = next || {};
+    return {
+      force: !!(current.force || next.force),
+      forceDepotScan: !!(current.forceDepotScan || next.forceDepotScan)
+    };
+  }
+
+  function isLikelyDepotControl(element) {
+    if (!element) return false;
+    var $el = $(element);
+    if ($el.closest(".hh-header-depot," + DEPOT_LABEL_SELECTOR).length) return true;
+
+    var keys = [
+      element.name,
+      element.id,
+      element.getAttribute && element.getAttribute("data-name"),
+      element.getAttribute && element.getAttribute("data-field"),
+      element.getAttribute && element.getAttribute("data-label")
+    ];
+
+    for (var i = 0; i < keys.length; i++) {
+      if (/(^|[_\-\s])(depot|branch|warehouse|location|site)([_\-\s]|$)/i.test(String(keys[i] || ""))) return true;
+    }
+
+    return false;
   }
 
   function injectEventOverviewStyles() {
@@ -2780,10 +2835,13 @@
     return value;
   }
 
-  function getActiveDepotContext() {
+  function getActiveDepotContext(options) {
+    options = options || {};
     var sharedDepot = getSharedDepotModule();
     if (sharedDepot && typeof sharedDepot.getActiveContext === "function") {
-      var sharedContext = sharedDepot.getActiveContext();
+      var sharedContext = sharedDepot.getActiveContext({
+        useCache: !options.forceDepotScan && !!window.__wiseHireHopDepotContext
+      });
       window.__wiseHireHopDepotContext = sharedContext;
       return sharedContext;
     }

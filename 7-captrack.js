@@ -8,7 +8,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-06-22.2",
+    version: "2026-06-22.3",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -148,6 +148,8 @@
   var latestLoadId = 0;
   var searchTimer = null;
   var buttonRetryTimer = null;
+  var entryPointTimer = null;
+  var stylesInjected = false;
   var draggedRowKey = "";
 
   window.WiseCapacityTracker = {
@@ -183,13 +185,22 @@
   boot();
 
   function boot() {
-    injectStyles();
-    ensureModal();
-    installEntryPoint();
+    scheduleInstallEntryPoint(180);
 
-    $(window).on("load.wiseCapacityTracker focus.wiseCapacityTracker", installEntryPoint);
-    $(document).on("ajaxComplete.wiseCapacityTracker", installEntryPoint);
-    $(document).on("change.wiseCapacityTracker input.wiseCapacityTracker", "select,input", installEntryPoint);
+    $(window).on("load.wiseCapacityTracker focus.wiseCapacityTracker", function () {
+      scheduleInstallEntryPoint(180);
+    });
+    $(document).on("ajaxComplete.wiseCapacityTracker", function () {
+      scheduleInstallEntryPoint(250);
+    });
+  }
+
+  function scheduleInstallEntryPoint(delay) {
+    if (entryPointTimer) clearTimeout(entryPointTimer);
+    entryPointTimer = setTimeout(function () {
+      entryPointTimer = null;
+      installEntryPoint();
+    }, Math.max(0, Number(delay) || 0));
   }
 
   function describe() {
@@ -359,6 +370,7 @@
       return;
     }
 
+    injectStyles();
     var $host = findHomeTabsHost();
 
     if (!$host.length) {
@@ -592,6 +604,7 @@
   }
 
   function openTracker() {
+    injectStyles();
     ensureModal();
     updateControlsFromState();
     $("#" + CFG.overlayId)
@@ -3228,6 +3241,12 @@
   }
 
   function injectStyles() {
+    if (stylesInjected || $("#" + CFG.stylesId).length) {
+      stylesInjected = true;
+      return;
+    }
+
+    stylesInjected = true;
     if ($("#" + CFG.stylesId).length) return;
 
     $("head").append(
