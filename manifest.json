@@ -75,7 +75,7 @@
     {
       "file": "10-projectjobs-qol.js",
       "status": "active",
-      "cacheVersion": "0.1",
+      "cacheVersion": "0.2",
       "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable by making the details tab scrollable and adding a compact project-info toggle above the jobs grid.",
       "recommendedLoadOrder": 10
     }
