@@ -20,6 +20,9 @@ The loader preserves this order when a route needs the modules.
 8. `8-stagedesigner.js`
 9. `9-jobchecklist.js`
 10. `10-projectjobs-qol.js`
+11. `11-projectjourney.js`
+
+`11-projectjourney.js` loads on the project/job tab route, but it only installs the Journey tab when it detects the project tab set.
 
 For the full paste-ready company config string, use `docs/HIREHOP_PLUGIN_STRING.md`.
 

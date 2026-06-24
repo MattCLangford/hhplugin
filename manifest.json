@@ -1,7 +1,7 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-06-22.6",
-  "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, and QTC renderer alignment.",
+  "version": "2026-06-24.2",
+  "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
     "baseUrl": "https://mattclangford.github.io/hhplugin/",
@@ -12,8 +12,8 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "0.1",
-      "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, or autopull dialog exists.",
+      "cacheVersion": "0.3",
+      "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
       "recommendedLoadOrder": 1
     }
   ],
@@ -84,9 +84,16 @@
     {
       "file": "10-projectjobs-qol.js",
       "status": "lazy-project-details",
-      "cacheVersion": "0.3",
-      "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable by making the details tab scrollable and adding a compact project-info toggle above the jobs grid.",
+      "cacheVersion": "0.4",
+      "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable, adds a compact project-info toggle above the jobs grid, and hides secondary project-level timing fields so project dates read as the Wise event wrapper.",
       "recommendedLoadOrder": 10
+    },
+    {
+      "file": "11-projectjourney.js",
+      "status": "lazy-project-tabs",
+      "cacheVersion": "0.2",
+      "role": "Project page Journey tab that visualises the Wise Event Wrapper, operational milestones, critical path, readiness score, department readiness, and issues/exceptions with mock data plus live-data mapping hooks.",
+      "recommendedLoadOrder": 11
     }
   ],
   "referenceFiles": [

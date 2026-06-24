@@ -10,7 +10,7 @@
     : {};
 
   var CFG = {
-    version: "2026-06-22.3",
+    version: "2026-06-24.1",
     stylesId: "wise-project-jobs-qol-styles",
     buttonId: "wise-project-jobs-compact-btn",
     summaryId: "wise-project-jobs-compact-summary",
@@ -27,6 +27,8 @@
     lastDetailsEl: null,
     lastProjectInfoEl: null,
     projectInfoRowsMarked: false,
+    projectKitBookingFieldsMarked: false,
+    lastHiddenProjectKitBookingCount: 0,
     lastScrollMaxHeight: ""
   };
 
@@ -74,6 +76,8 @@
       state.lastDetailsEl = null;
       state.lastProjectInfoEl = null;
       state.projectInfoRowsMarked = false;
+      state.projectKitBookingFieldsMarked = false;
+      state.lastHiddenProjectKitBookingCount = 0;
       state.lastScrollMaxHeight = "";
       removeOrphanedEnhancements();
       return;
@@ -87,14 +91,17 @@
 
     var shouldScanProjectInfo = options.forceScan ||
       state.lastProjectInfoEl !== projectInfoEl ||
-      !state.projectInfoRowsMarked;
+      !state.projectInfoRowsMarked ||
+      !state.projectKitBookingFieldsMarked;
 
     page.details.addClass("wise-project-jobs-scroll");
     ensureSummaryStrip(page);
     if (shouldScanProjectInfo) {
       markCompactProjectInfoRows(page);
+      markProjectLevelKitBookingFields(page);
       state.lastProjectInfoEl = projectInfoEl;
       state.projectInfoRowsMarked = true;
+      state.projectKitBookingFieldsMarked = true;
     }
     installCompactButton(page);
     applyCompactState(page, readCompactState());
@@ -204,6 +211,136 @@
       .find(".wise-project-jobs-compact-path,.wise-project-jobs-compact-keep")
       .removeClass("wise-project-jobs-compact-path wise-project-jobs-compact-keep")
       .removeAttr("data-wise-project-jobs-compact-keep");
+  }
+
+  function markProjectLevelKitBookingFields(page) {
+    if (!page || !page.projectInfo || !page.projectInfo.length) return;
+
+    var $projectInfo = page.projectInfo;
+    var hiddenCount = 0;
+    clearProjectLevelKitBookingFields($projectInfo);
+
+    $projectInfo.find("label,td,th,span,b,strong").each(function () {
+      var $label = $(this);
+      if (!isProjectLevelKitBookingField($label)) return;
+      hiddenCount += hideProjectLevelKitBookingField($label, $projectInfo);
+    });
+
+    getProjectInfoRows($projectInfo).each(function () {
+      var $row = $(this);
+      if ($row.hasClass("wise-project-kitbooking-hidden")) return;
+      if (!isProjectLevelKitBookingText(getElementSearchText($row))) return;
+      if (containsProjectWrapperDateText($row)) return;
+
+      hiddenCount += markProjectKitBookingHidden($row);
+    });
+
+    state.lastHiddenProjectKitBookingCount = hiddenCount;
+  }
+
+  function clearProjectLevelKitBookingFields($projectInfo) {
+    $projectInfo
+      .find(".wise-project-kitbooking-hidden")
+      .removeClass("wise-project-kitbooking-hidden")
+      .removeAttr("data-wise-project-kitbooking-hidden");
+  }
+
+  function hideProjectLevelKitBookingField($label, $projectInfo) {
+    var hidden = 0;
+    var $row = $label.closest("tr");
+
+    if ($row.length && $projectInfo.has($row).length && !containsProjectWrapperDateText($row)) {
+      return markProjectKitBookingHidden($row);
+    }
+
+    var $cell = $label.closest("td,th");
+    if ($cell.length && $projectInfo.has($cell).length) {
+      hidden += markProjectKitBookingHidden($cell);
+
+      var $next = $cell.next("td,th");
+      if ($next.length && isLikelyKitBookingValueCell($next)) {
+        hidden += markProjectKitBookingHidden($next);
+      }
+    }
+
+    var control = getLabelledControl($label);
+    if (control && $projectInfo.has(control).length) {
+      hidden += hideProjectLevelKitBookingControl($(control), $projectInfo);
+    }
+
+    if (!hidden) {
+      hidden += markProjectKitBookingHidden($label);
+    }
+
+    return hidden;
+  }
+
+  function hideProjectLevelKitBookingControl($control, $projectInfo) {
+    var $target = $control.closest("td,th,.field-row,.form-row,.row,.ui-helper-clearfix,li");
+    if (!$target.length || !$projectInfo.has($target).length || containsProjectWrapperDateText($target)) {
+      $target = $control;
+    }
+
+    return markProjectKitBookingHidden($target);
+  }
+
+  function getLabelledControl($label) {
+    var id = $label.attr("for");
+    if (!id) return null;
+
+    try {
+      return document.getElementById(id);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function markProjectKitBookingHidden($target) {
+    if (!$target || !$target.length) return 0;
+    if ($target.hasClass("wise-project-kitbooking-hidden")) return 0;
+    $target
+      .addClass("wise-project-kitbooking-hidden")
+      .attr("data-wise-project-kitbooking-hidden", "1");
+    return 1;
+  }
+
+  function isLikelyKitBookingValueCell($cell) {
+    if (!$cell || !$cell.length) return false;
+    if (containsProjectWrapperDateText($cell)) return false;
+    if ($cell.find("input,textarea,select,.hasDatepicker").length) return true;
+    if ($cell.find("label,b,strong").length) return false;
+    return !!compactText($cell.text());
+  }
+
+  function isProjectLevelKitBookingField($element) {
+    if (!$element || !$element.length) return false;
+    if (isProjectLevelKitBookingText(ownText($element))) return true;
+
+    var bits = [
+      $element.attr("id"),
+      $element.attr("name"),
+      $element.attr("for"),
+      $element.attr("title"),
+      $element.attr("aria-label"),
+      $element.attr("data-label"),
+      $element.attr("data-name"),
+      $element.attr("data-field")
+    ];
+    return isProjectLevelKitBookingText(bits.join(" "));
+  }
+
+  function isProjectLevelKitBookingText(value) {
+    var text = compactText(value).toLowerCase().replace(/[_-]+/g, " ");
+    if (!text) return false;
+    return /\bkit\s+booking\s+(start|end|from|to|starts|ends)\b/.test(text) ||
+      /\b(start|end|from|to)\s+(?:of\s+)?kit\s+booking\b/.test(text) ||
+      /\bkit\s+book(?:ing)?\s+(start|end)\b/.test(text);
+  }
+
+  function containsProjectWrapperDateText($element) {
+    var text = getElementSearchText($element);
+    return /\b(project|onsite|on site|wise event|event wrapper|salesforce)\b.*\b(start|end|from|to)\b/.test(text) ||
+      /\b(start|end|from|to)\b.*\b(project|onsite|on site|wise event|event wrapper|salesforce)\b/.test(text);
   }
 
   function findCompactProjectInfoRows($projectInfo) {
@@ -335,6 +472,16 @@
     return String(value == null ? "" : value).replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
   }
 
+  function ownText($element) {
+    if (!$element || !$element.length) return "";
+
+    var text = "";
+    $element.contents().each(function () {
+      if (this.nodeType === 3) text += this.nodeValue;
+    });
+    return compactText(text || $element.text());
+  }
+
   function applyScrollSizing(page) {
     if (!page.details.length) return;
 
@@ -424,6 +571,7 @@
       "#details_tab.wise-project-jobs-compact #proj_info.wise-project-jobs-compact-has-row tr.wise-project-jobs-compact-keep>td{padding-top:2px!important;padding-bottom:2px!important;}",
       "#details_tab.wise-project-jobs-compact #proj_info.wise-project-jobs-compact-has-row+#wise-project-jobs-compact-summary{display:none!important;}",
       "#details_tab:not(.wise-project-jobs-compact) #wise-project-jobs-compact-summary{display:none!important;}",
+      "#details_tab #proj_info .wise-project-kitbooking-hidden{display:none!important;}",
       "#wise-project-jobs-compact-summary{margin:0 0 6px;padding:6px 8px;border:1px solid #a1a1a1;background:#f0f0f0;color:#333;font-weight:bold;box-sizing:border-box;}",
       "#wise-project-jobs-compact-btn{margin-right:0.4em;}",
       "#wise-project-jobs-compact-btn .ui-button-icon{margin-left:0;}"
@@ -479,7 +627,8 @@
         version: CFG.version,
         projectPageFound: page.ready,
         compact: readCompactState(),
-        detailsScrollable: page.details.hasClass("wise-project-jobs-scroll")
+        detailsScrollable: page.details.hasClass("wise-project-jobs-scroll"),
+        hiddenProjectKitBookingFields: state.lastHiddenProjectKitBookingCount
       };
     }
   };

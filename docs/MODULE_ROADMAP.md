@@ -60,6 +60,14 @@ It owns:
 - Project details page job-list reachability across all depots.
 - Making the project details tab scrollable when project custom fields push the jobs grid below the visible viewport.
 - The compact project-information toggle that temporarily hides the upper project details block so the native jobs grid has more room.
+- Hiding secondary project-level timing fields that would confuse the Wise event wrapper story, without touching job-level timing fields.
+
+`11-projectjourney.js` owns:
+
+- The custom project page Journey tab.
+- The Wise Event Wrapper visual layer over Salesforce-derived project start/end dates.
+- Operational Journey milestone rendering, critical path filtering, readiness scoring, department readiness, and issues/exceptions.
+- Mock journey data and the `WiseProjectJourneyConfig.getData` hook for later HireHop project/job data mapping.
 
 ## Next Extractions
 
@@ -86,7 +94,7 @@ Recommended HireHop script set:
 - Supplying list: `5-hirehop.js`, `1-docprev.js`, `3-meta.js`, `4-layout.js`, `6-editor2.js`, and `8-stagedesigner.js`.
 - Autopull dialog: `2-apselall.js`.
 - Home page: `5-hirehop.js` and `7-captrack.js`.
-- Project or job tab set: `9-jobchecklist.js`.
+- Project or job tab set: `9-jobchecklist.js` and `11-projectjourney.js` (`11-projectjourney.js` only installs its tab on project pages).
 - Project details jobs grid: `10-projectjobs-qol.js`.
 
 Do not load `wise-headingedit-ui.js` or `wise-sectionbuilder-ui.js` in normal production.
@@ -102,5 +110,7 @@ If the HireHop integration module causes issues, disable `5-hirehop.js`. The mai
 If the job checklist module causes issues, disable `9-jobchecklist.js`. It is standalone and does not affect the proposal editor, capacity tracker, or staging designer.
 
 If the project jobs quality-of-life module causes issues, disable `10-projectjobs-qol.js`. It is standalone and only affects project details page scrolling and the compact project-information toggle.
+
+If the project Journey module causes issues, disable `11-projectjourney.js`. It is standalone and only affects the custom Journey tab on project pages.
 
 If `6-editor2.js` causes issues, disable it and temporarily load the older `wise-sectionbuilder-ui.js` snapshot.
