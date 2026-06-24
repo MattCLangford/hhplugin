@@ -206,7 +206,8 @@
     overrideData: null,
     lastAnalysis: null,
     lastPanelMaxHeight: "",
-    cachedJobRows: null
+    cachedJobRows: null,
+    cachedProjectData: null
   };
 
   bootstrap();
@@ -224,6 +225,7 @@
       applyJourneyPanelSizing($("#" + CFG.panelId));
     });
     $(document).on("ajaxComplete.wiseProjectJourney", function (event, xhr) {
+      tryCacheProjectFromResponse(xhr);
       tryCacheJobsFromResponse(xhr);
       scheduleMaintainProjectJourney(80, { forceScan: true });
     });
@@ -714,7 +716,9 @@
      * This fallback only reads obvious current-page/window values so the tab can
      * render safely before the live data contract is connected.
      */
-    var projectWindow = window.project && typeof window.project === "object" ? window.project : {};
+    var projectWindow = (window.project && typeof window.project === "object" && !isFileRecord(window.project))
+      ? window.project
+      : (state.cachedProjectData || {});
     var project = {
       id: getCurrentProjectId(),
       name: firstNonEmpty([
@@ -723,11 +727,11 @@
         cleanDocumentTitle()
       ]),
       clientName: firstNonEmpty([
-        firstObjectValue(projectWindow, ["CLIENT_NAME", "client_name", "CLIENT", "client", "CUSTOMER", "customer"]),
-        readProjectInfoField(["client", "customer", "account"])
+        firstObjectValue(projectWindow, ["CLIENT_NAME", "client_name", "CLIENT", "client", "CUSTOMER", "customer", "CONTACT", "contact"]),
+        readProjectInfoField(["client", "customer", "account", "contact"])
       ]),
       venue: firstNonEmpty([
-        firstObjectValue(projectWindow, ["VENUE", "venue", "LOCATION", "location", "SITE", "site"]),
+        firstObjectValue(projectWindow, ["VENUE", "venue", "LOCATION", "location", "SITE", "site", "VENUE_NAME", "venue_name"]),
         readProjectInfoField(["venue", "location", "site"])
       ])
     };
@@ -973,6 +977,27 @@
     if (value && out.indexOf(value) === -1) out.push(value);
   }
 
+  function isFileRecord(r) {
+    if (!r || typeof r !== "object") return false;
+    return !!(r.EXTENSION || r.extension || r.LOCATION_DATA || r.location_data ||
+              (r.SIZE !== undefined && r.NAME && !r.JOB_DATE && !r.OUT_DATE));
+  }
+
+  function isJobRow(r) {
+    if (!r || typeof r !== "object") return false;
+    if (isFileRecord(r)) return false;
+    // Require at least one HireHop job date field
+    if (r.JOB_DATE || r.OUT_DATE || r.RETURN_DATE || r.JOB_END || r.JOB_TIME) return true;
+    // OR a non-empty CUSTOM_FIELDS object (not empty array)
+    if (r.CUSTOM_FIELDS && typeof r.CUSTOM_FIELDS === "object" &&
+        !$.isArray(r.CUSTOM_FIELDS) && Object.keys(r.CUSTOM_FIELDS).length > 0) return true;
+    // OR any tilde-prefixed custom job field
+    for (var k in r) {
+      if (Object.prototype.hasOwnProperty.call(r, k) && k.charAt(0) === "~") return true;
+    }
+    return false;
+  }
+
   function tryCacheJobsFromResponse(xhr) {
     if (!xhr || !xhr.responseText || xhr.responseText.length > 2000000) return;
     var data;
@@ -983,20 +1008,32 @@
     appendObjectRows(rows, data);
     if (!rows.length) return;
 
-    // Accept this response as job data if at least one row has HireHop job system fields
-    var looksLikeJobs = false;
-    for (var i = 0; i < Math.min(rows.length, 5); i++) {
-      var r = rows[i];
-      if (r && (r.JOB_DATE || r.OUT_DATE || r.CUSTOM_FIELDS || r["~Load"] || r["~WisePrep"] || r["~Tip"])) {
-        looksLikeJobs = true;
-        break;
-      }
+    var jobRows = [];
+    for (var i = 0; i < rows.length; i++) {
+      if (isJobRow(rows[i])) jobRows.push(rows[i]);
     }
-    if (!looksLikeJobs) return;
+    if (!jobRows.length) return;
 
-    // Keep the richest set so multiple loads don't overwrite a bigger cache with a smaller one
-    if (!state.cachedJobRows || rows.length >= state.cachedJobRows.length) {
-      state.cachedJobRows = rows;
+    if (!state.cachedJobRows || jobRows.length >= state.cachedJobRows.length) {
+      state.cachedJobRows = jobRows;
+    }
+  }
+
+  function tryCacheProjectFromResponse(xhr) {
+    if (!xhr || !xhr.responseText || xhr.responseText.length > 500000) return;
+    var data;
+    try { data = JSON.parse(xhr.responseText); } catch (e) { return; }
+    if (!data || typeof data !== "object" || $.isArray(data)) return;
+    if (isFileRecord(data)) return;
+
+    // Looks like a project if it has a name-like field AND a date field (HireHop uses DATE/DATE_END)
+    var hasName = !!(data.NAME || data.name || data.TITLE || data.title);
+    var hasDate = !!(data.DATE || data.date || data.DATE_END || data.date_end ||
+                     data.START_DATETIME || data.start_datetime || data.DATETIME || data.datetime);
+    var hasId = !!(data.ID || data.id || data.MAIN_ID || data.main_id);
+
+    if (hasName && hasDate && hasId) {
+      state.cachedProjectData = data;
     }
   }
 
@@ -1012,7 +1049,12 @@
     appendObjectRows(rows, window.project && window.project.JOBS);
     appendJqGridRows(rows);
     appendDomGridRows(rows);
-    return dedupeObjectRows(rows);
+    var deduplicated = dedupeObjectRows(rows);
+    var out = [];
+    for (var i = 0; i < deduplicated.length; i++) {
+      if (!isFileRecord(deduplicated[i])) out.push(deduplicated[i]);
+    }
+    return out;
   }
 
   function appendObjectRows(target, value) {
@@ -1934,7 +1976,9 @@
           '<button type="button" class="' + (criticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="critical">Critical path only</button>' +
         '</div>' +
         '<button type="button" class="wpj-refresh-btn" data-wise-project-journey-refresh>⟳ Refresh</button>' +
-      '</div>';
+      '</div>' +
+      '<div class="wpj-tl-scroll">' +
+        '<div class="wpj-tl-track">';
 
     if (!milestones.length) {
       html += '<div class="wpj-empty-state">No ' + (criticalOnly ? "critical " : "") + "milestones to show.</div>";
@@ -1954,31 +1998,34 @@
       }
 
       var dotColor = phaseColors[group.group] || "#64748b";
-      html += '<div class="wpj-phase' + (isOnsite ? " wpj-phase--onsite" : "") + '">' +
-        '<div class="wpj-phase-hdr">' +
-          '<span class="wpj-phase-dot" style="background:' + dotColor + '"></span>' +
-          '<span class="wpj-phase-name">' + esc(group.group) + '</span>' +
-          '<span class="wpj-phase-count">' + group.items.length + '</span>' +
-        '</div>';
+      html += '<div class="wpj-tphase' + (isOnsite ? " wpj-tphase--onsite" : "") + '">' +
+        '<div class="wpj-tphase-hdr" style="border-top-color:' + dotColor + '">' +
+          '<span class="wpj-tphase-dot" style="background:' + dotColor + '"></span>' +
+          '<span class="wpj-tphase-name">' + esc(group.group) + '</span>' +
+        '</div>' +
+        '<div class="wpj-tphase-body">';
 
       for (var m = 0; m < group.items.length; m++) {
-        html += buildMilestoneCard(group.items[m], issuesByMilestone[group.items[m].id] || []);
+        html += buildMilestonePin(group.items[m], issuesByMilestone[group.items[m].id] || []);
       }
-      html += '</div>';
+
+      html += '</div></div>';
     }
 
-    html += '</div>';
+    html += '</div></div></div>';
     return html;
   }
 
   function buildSiteDivider(label, dateTime, isEnd) {
-    return '<div class="wpj-site-divider' + (isEnd ? " wpj-site-divider--end" : "") + '">' +
-      '<div class="wpj-site-divider-label">' + esc(label) + '</div>' +
-      '<div class="wpj-site-divider-date">' + esc(formatDateTime(dateTime) || "Date not set") + '</div>' +
+    return '<div class="wpj-tdivider' + (isEnd ? " wpj-tdivider--end" : "") + '">' +
+      '<div class="wpj-tdivider-inner">' +
+        '<span class="wpj-tdivider-label">' + esc(label) + '</span>' +
+        '<span class="wpj-tdivider-date">' + esc(formatDateTime(dateTime) || "TBC") + '</span>' +
+      '</div>' +
     '</div>';
   }
 
-  function buildMilestoneCard(milestone, rowIssues) {
+  function buildMilestonePin(milestone, rowIssues) {
     rowIssues = rowIssues || [];
     var status = normaliseStatus(milestone.status);
     var statusCls = cssClass(status);
@@ -1989,26 +2036,23 @@
 
     var hintsHtml = "";
     if (rowIssues.length) {
-      hintsHtml = '<div class="wpj-mrow-hints">';
+      hintsHtml = '<div class="wpj-pin-hints">';
       for (var h = 0; h < Math.min(rowIssues.length, 2); h++) {
-        hintsHtml += '<span class="wpj-hint wpj-hint--' + cssClass(rowIssues[h].severity) + '">' + esc(rowIssues[h].title) + '</span>';
+        hintsHtml += '<span class="wpj-phint wpj-phint--' + cssClass(rowIssues[h].severity) + '">' + esc(rowIssues[h].title) + '</span>';
       }
       hintsHtml += '</div>';
     }
 
-    return '<div class="wpj-mrow wpj-mrow--' + statusCls + '">' +
-      '<div class="wpj-mrow-accent"></div>' +
-      '<div class="wpj-mrow-body">' +
-        '<div class="wpj-mrow-name">' + esc(milestone.name) + (milestone.criticalPath ? '<span class="wpj-crit"> ★</span>' : '') + '</div>' +
-        '<div class="wpj-mrow-dept">' + esc(milestone.owner || "No department") + '</div>' +
-        hintsHtml +
-      '</div>' +
-      '<div class="wpj-mrow-right">' +
-        '<div class="wpj-mrow-date' + (dateDisplay ? '' : ' wpj-mrow-date--unset') + '">' + esc(dateDisplay || "Not yet scheduled") + '</div>' +
-        (hasActual ? '<div class="wpj-mrow-datelabel wpj-mrow-datelabel--actual">Confirmed</div>' : '') +
-      '</div>' +
-      '<div class="wpj-mrow-chip">' + buildStatusChip(status) + '</div>' +
+    return '<div class="wpj-pin wpj-pin--' + statusCls + '">' +
+      '<div class="wpj-pin-name">' + esc(milestone.name) + (milestone.criticalPath ? '<span class="wpj-crit-pin"> ★</span>' : '') + '</div>' +
+      '<div class="wpj-pin-date' + (dateDisplay ? '' : ' wpj-pin-date--unset') + '">' + esc(dateDisplay || "Not scheduled") + '</div>' +
+      buildStatusChip(status) +
+      hintsHtml +
     '</div>';
+  }
+
+  function buildMilestoneCard(milestone, rowIssues) {
+    return buildMilestonePin(milestone, rowIssues);
   }
 
   function buildDepartmentReadiness(rows) {
@@ -2058,46 +2102,55 @@
   }
 
   function buildDiagnosticPanel() {
-    var projectWindow = window.project && typeof window.project === "object" ? window.project : null;
+    var projectWindow = window.project && typeof window.project === "object" && !isFileRecord(window.project)
+      ? window.project : null;
+    var cached = state.cachedProjectData || null;
     var jobRows = getProjectJobRows();
     var firstJob = jobRows && jobRows.length ? jobRows[0] : null;
-    var cachedCount = state.cachedJobRows ? state.cachedJobRows.length : 0;
+    var cachedJobCount = state.cachedJobRows ? state.cachedJobRows.length : 0;
+
+    function dumpObj(obj) {
+      var lines = [];
+      for (var k in obj) {
+        if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
+        var v = obj[k];
+        if (v && typeof v === "object") {
+          lines.push(k + ": " + JSON.stringify(v).substr(0, 140));
+        } else if (v != null && v !== "") {
+          lines.push(k + ": " + asText(v).substr(0, 100));
+        }
+      }
+      return lines.join("\n") || "(empty)";
+    }
 
     var html = '<details class="wpj-diag">' +
       '<summary class="wpj-diag-hdr">Field Mapping Diagnostic</summary>' +
       '<div class="wpj-diag-body">';
 
     html += '<div class="wpj-diag-sec">' +
-      '<div class="wpj-diag-sec-title">window.project (' + (projectWindow ? Object.keys(projectWindow).length + ' keys' : 'not found') + ')</div>';
+      '<div class="wpj-diag-sec-title">Project data — window.project (' + (projectWindow ? Object.keys(projectWindow).length + " keys" : "not found") + ')</div>';
     if (projectWindow) {
-      var pLines = [];
-      for (var pk in projectWindow) {
-        if (!Object.prototype.hasOwnProperty.call(projectWindow, pk)) continue;
-        var pv = projectWindow[pk];
-        if (pv && typeof pv !== "object") pLines.push(pk + ": " + asText(pv).substr(0, 80));
-      }
-      html += '<pre class="wpj-diag-pre">' + esc(pLines.join("\n") || "(no scalar values)") + '</pre>';
+      html += '<pre class="wpj-diag-pre">' + esc(dumpObj(projectWindow)) + '</pre>';
     } else {
-      html += '<div class="wpj-diag-note">window.project is empty or not set — project data cannot be read</div>';
+      html += '<div class="wpj-diag-note">window.project not found. Waiting for AJAX cache below...</div>';
     }
     html += '</div>';
 
     html += '<div class="wpj-diag-sec">' +
-      '<div class="wpj-diag-sec-title">Job rows (' + jobRows.length + ' total, ' + cachedCount + ' from AJAX cache)</div>';
-    if (firstJob) {
-      var jLines = [];
-      for (var jk in firstJob) {
-        if (!Object.prototype.hasOwnProperty.call(firstJob, jk)) continue;
-        var jv = firstJob[jk];
-        if (jv && typeof jv === "object") {
-          jLines.push(jk + ": " + JSON.stringify(jv).substr(0, 120));
-        } else if (jv != null && jv !== "") {
-          jLines.push(jk + ": " + asText(jv).substr(0, 80));
-        }
-      }
-      html += '<pre class="wpj-diag-pre">' + esc(jLines.join("\n") || "(empty row)") + '</pre>';
+      '<div class="wpj-diag-sec-title">Project data — AJAX cache (' + (cached ? Object.keys(cached).length + " keys" : "not yet captured") + ')</div>';
+    if (cached) {
+      html += '<pre class="wpj-diag-pre">' + esc(dumpObj(cached)) + '</pre>';
     } else {
-      html += '<div class="wpj-diag-note">No job rows found. Navigate to the Jobs tab and back, or wait for the AJAX cache to populate.</div>';
+      html += '<div class="wpj-diag-note">Navigate away and back, or open and close the project, to trigger an AJAX project data response.</div>';
+    }
+    html += '</div>';
+
+    html += '<div class="wpj-diag-sec">' +
+      '<div class="wpj-diag-sec-title">Job rows (' + jobRows.length + ' valid, ' + cachedJobCount + ' from AJAX job cache)</div>';
+    if (firstJob) {
+      html += '<pre class="wpj-diag-pre">' + esc(dumpObj(firstJob)) + '</pre>';
+    } else {
+      html += '<div class="wpj-diag-note">No valid job rows found. Open the Jobs tab (to trigger the AJAX load), then come back here.</div>';
     }
     html += '</div>';
 
@@ -2939,38 +2992,46 @@
       ".wpj-phase-count{font-size:10px;color:#94a3b8;background:#f1f5f9;padding:1px 7px;border-radius:9px;font-weight:600;}",
       ".wpj-phase--onsite .wpj-phase-count{background:#fed7aa;color:#9a3412;}",
       /* ---- Site dividers ---- */
-      ".wpj-site-divider{display:flex;align-items:center;gap:14px;padding:8px 16px;background:linear-gradient(135deg,#fff7ed,#fff);border-top:2px solid #f97316;border-bottom:1px solid #fed7aa;}",
-      ".wpj-site-divider--end{background:linear-gradient(135deg,#fff,#f0f9ff);border-top-color:#38bdf8;border-bottom-color:#bae6fd;}",
-      ".wpj-site-divider-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#ea580c;flex-shrink:0;}",
-      ".wpj-site-divider--end .wpj-site-divider-label{color:#0284c7;}",
-      ".wpj-site-divider-date{font-size:13px;font-weight:700;color:#1e293b;}",
-      /* ---- Milestone rows ---- */
-      ".wpj-mrow{display:grid;grid-template-columns:4px 1fr auto auto;align-items:center;border-bottom:1px solid #f8fafc;min-height:52px;background:#fff;}",
-      ".wpj-phase--onsite .wpj-mrow{background:#fffbf4;}",
-      ".wpj-mrow:last-child{border-bottom:0;}",
-      ".wpj-mrow:hover{background:#fafafa;}",
-      ".wpj-phase--onsite .wpj-mrow:hover{background:#fff3e8;}",
-      ".wpj-mrow-accent{align-self:stretch;}",
-      ".wpj-mrow-body{padding:10px 12px;min-width:0;}",
-      ".wpj-mrow-name{font-size:13px;font-weight:600;color:#0f172a;line-height:1.3;}",
+      /* ---- Timeline horizontal track ---- */
+      ".wpj-tl-scroll{overflow-x:auto;overflow-y:visible;padding-bottom:6px;}",
+      ".wpj-tl-track{display:flex;align-items:stretch;min-width:max-content;}",
+      /* ---- Phase columns ---- */
+      ".wpj-tphase{flex:0 0 auto;min-width:140px;display:flex;flex-direction:column;}",
+      ".wpj-tphase--onsite{background:#fffbf4;}",
+      ".wpj-tphase-hdr{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f8fafc;border-bottom:1px solid #f1f5f9;border-right:1px solid #e2e8ef;border-top:3px solid #94a3b8;}",
+      ".wpj-tphase--onsite .wpj-tphase-hdr{background:#fff7ed;border-bottom-color:#fed7aa;border-right-color:#fed7aa;}",
+      ".wpj-tphase-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}",
+      ".wpj-tphase-name{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;white-space:nowrap;}",
+      ".wpj-tphase-body{flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;border-right:1px solid #e2e8ef;}",
+      ".wpj-tphase--onsite .wpj-tphase-body{border-right-color:#fed7aa;}",
+      /* ---- Site dividers ---- */
+      ".wpj-tdivider{flex:0 0 56px;display:flex;align-items:center;justify-content:center;border-left:2px solid #f97316;border-right:2px solid #f97316;background:linear-gradient(180deg,#fff7ed 0%,#fff 100%);}",
+      ".wpj-tdivider--end{border-left-color:#38bdf8;border-right-color:#38bdf8;background:linear-gradient(180deg,#f0f9ff 0%,#fff 100%);}",
+      ".wpj-tdivider-inner{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0;}",
+      ".wpj-tdivider-label{writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#ea580c;}",
+      ".wpj-tdivider--end .wpj-tdivider-label{color:#0284c7;}",
+      ".wpj-tdivider-date{writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);font-size:9px;font-weight:600;color:#1e293b;}",
+      /* ---- Milestone pins ---- */
+      ".wpj-pin{display:flex;flex-direction:column;gap:3px;padding:8px 9px;border-radius:6px;background:#fff;border:1px solid #e2e8ef;border-left:3px solid #e2e8ef;}",
+      ".wpj-tphase--onsite .wpj-pin{background:#fffbf4;}",
+      ".wpj-pin:hover{box-shadow:0 2px 8px rgba(0,0,0,.06);}",
+      ".wpj-pin--complete{border-left-color:#22c55e;}",
+      ".wpj-pin--in-progress{border-left-color:#3b82f6;}",
+      ".wpj-pin--at-risk{border-left-color:#f59e0b;}",
+      ".wpj-pin--blocked,.wpj-pin--missing{border-left-color:#ef4444;}",
+      ".wpj-pin-name{font-size:11px;font-weight:600;color:#1e293b;line-height:1.3;}",
+      ".wpj-crit-pin{color:#f59e0b;font-size:10px;}",
+      ".wpj-pin-date{font-size:10px;color:#94a3b8;margin-bottom:3px;}",
+      ".wpj-pin-date--unset{color:#cbd5e1;font-style:italic;}",
+      ".wpj-pin--complete .wpj-pin-date{color:#16a34a;}",
+      ".wpj-pin--at-risk .wpj-pin-date{color:#d97706;}",
+      ".wpj-pin--blocked .wpj-pin-date,.wpj-pin--missing .wpj-pin-date{color:#dc2626;}",
+      ".wpj-pin-hints{display:flex;gap:3px;flex-wrap:wrap;margin-top:3px;}",
+      ".wpj-phint{font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;}",
+      ".wpj-phint--blocked{background:#fee2e2;color:#dc2626;}",
+      ".wpj-phint--at-risk{background:#fef3c7;color:#b45309;}",
+      ".wpj-phint--missing-data,.wpj-phint--warning{background:#f1f5f9;color:#64748b;}",
       ".wpj-crit{color:#f59e0b;font-size:11px;}",
-      ".wpj-mrow-dept{font-size:11px;color:#94a3b8;margin-top:2px;}",
-      ".wpj-mrow-hints{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;}",
-      ".wpj-hint{font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;}",
-      ".wpj-hint--blocked{background:#fee2e2;color:#dc2626;}",
-      ".wpj-hint--at-risk{background:#fef3c7;color:#b45309;}",
-      ".wpj-hint--missing-data,.wpj-hint--warning{background:#f1f5f9;color:#64748b;}",
-      ".wpj-mrow-right{padding:10px 8px 10px 0;text-align:right;}",
-      ".wpj-mrow-date{font-size:12px;font-weight:700;color:#1e293b;white-space:nowrap;}",
-      ".wpj-mrow-date--unset{color:#cbd5e1;font-weight:400;font-style:italic;font-size:11px;}",
-      ".wpj-mrow-datelabel{font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:#94a3b8;text-align:right;margin-top:2px;}",
-      ".wpj-mrow-datelabel--actual{color:#16a34a;}",
-      ".wpj-mrow-chip{padding:10px 12px 10px 4px;}",
-      ".wpj-mrow--complete .wpj-mrow-accent{background:#22c55e;}",
-      ".wpj-mrow--in-progress .wpj-mrow-accent{background:#3b82f6;}",
-      ".wpj-mrow--not-started .wpj-mrow-accent{background:#94a3b8;}",
-      ".wpj-mrow--at-risk .wpj-mrow-accent{background:#f59e0b;}",
-      ".wpj-mrow--blocked .wpj-mrow-accent,.wpj-mrow--missing .wpj-mrow-accent{background:#ef4444;}",
       /* ---- Status chips ---- */
       ".wpj-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;}",
       ".wpj-chip-complete{background:#dcfce7;color:#15803d;}",
@@ -3021,7 +3082,7 @@
       ".wpj-diag-note{font-size:11px;color:#94a3b8;font-style:italic;}",
       /* ---- Responsive ---- */
       "@media(max-width:860px){.wpj-hdr{flex-direction:column;align-items:flex-start;}.wpj-win{grid-template-columns:1fr;}.wpj-win-arrow{display:none;}.wpj-mrow{grid-template-columns:4px 1fr;}.wpj-mrow-right,.wpj-mrow-chip{display:none;}}",
-      "@media(max-width:480px){.wpj-shell{padding:5px;}.wpj-segmented button{padding:4px 7px;}.wpj-site-divider{flex-direction:column;align-items:flex-start;gap:3px;}}"
+      "@media(max-width:480px){.wpj-shell{padding:5px;}.wpj-segmented button{padding:4px 7px;}}"
     ].join("\n");
 
     $("<style></style>", { id: CFG.stylesId, text: css }).appendTo("head");
