@@ -1775,212 +1775,240 @@
     return out.length ? out : milestones;
   }
 
+  function indexIssuesByMilestone(issues) {
+    var out = {};
+    for (var i = 0; i < issues.length; i++) {
+      var id = issues[i].milestoneId;
+      if (id) {
+        if (!out[id]) out[id] = [];
+        out[id].push(issues[i]);
+      }
+    }
+    return out;
+  }
+
+  function maybePreloadJobData() {
+    if (state.cachedJobRows && state.cachedJobRows.length) return;
+    var $grid = $("#jobs_grid,#project_jobs_grid,table[id*='jobs'][id*='grid']").first();
+    if (!$grid.length || typeof $grid.jqGrid !== "function") return;
+    var url;
+    try { url = $grid.jqGrid("getGridParam", "url"); } catch (e) {}
+    if (!url) return;
+    $.ajax({
+      url: url, method: "GET", dataType: "json",
+      success: function (data) {
+        tryCacheJobsFromResponse({ responseText: JSON.stringify(data) });
+        if (state.cachedJobRows && state.cachedJobRows.length) {
+          scheduleMaintainProjectJourney(50, { forceScan: true });
+        }
+      }
+    });
+  }
+
   function buildJourneyHtml(data, analysis) {
+    maybePreloadJobData();
     var operationalMilestones = getOperationalMilestones(data.milestones || []);
     var visibleMilestones = state.showCriticalOnly ? filterCriticalMilestones(operationalMilestones) : operationalMilestones;
+    var issuesByMilestone = indexIssuesByMilestone(analysis.issues);
 
-    return '' +
-      '<div class="wpj-shell">' +
-        buildHeaderSummary(data, analysis) +
-        buildEventWrapper(data) +
-        buildJourneyToolbar() +
-        '<div class="wpj-main-grid">' +
-          '<div class="wpj-primary">' +
-            buildTimeline(visibleMilestones, state.showCriticalOnly) +
-            buildDepartmentReadiness(analysis.departmentReadiness) +
-          '</div>' +
-          '<div class="wpj-side">' +
-            buildIssuesPanel(analysis.issues) +
-          '</div>' +
-        '</div>' +
-      '</div>';
+    return '<div class="wpj-shell">' +
+      buildHeaderSummary(data, analysis) +
+      buildEventWrapper(data) +
+      buildIssuesPanel(analysis.issues) +
+      buildTimeline(visibleMilestones, state.showCriticalOnly, issuesByMilestone, data) +
+      buildDepartmentReadiness(analysis.departmentReadiness) +
+    '</div>';
   }
 
   function buildHeaderSummary(data, analysis) {
     var score = analysis.readiness.score;
     var scoreClass = getScoreClass(score);
+    var statusCls = cssClass(analysis.status);
     var meta = [];
-    if (data.project.clientName) meta.push("Client: " + data.project.clientName);
-    if (data.project.venue) meta.push("Venue: " + data.project.venue);
-    if (data.isMock) meta.push("Mock data");
+    if (data.project.venue) meta.push(data.project.venue);
+    if (data.project.clientName) meta.push(data.project.clientName);
+    if (data.isMock) meta.push("Sample data");
 
-    return '' +
-      '<section class="wpj-header hirehop_panel ui-corner-all font_scale">' +
-        '<div class="wpj-header-main">' +
-          '<div class="wpj-kicker">Event Journey</div>' +
-          '<h2>' + esc(data.project.name || "Untitled project") + '</h2>' +
-          '<div class="wpj-meta">' + esc(meta.length ? meta.join(" | ") : "Current HireHop project") + '</div>' +
+    return '<div class="wpj-hdr">' +
+      '<div class="wpj-hdr-main">' +
+        '<div class="wpj-hdr-kicker">Event Journey</div>' +
+        '<h2>' + esc(data.project.name || "Untitled Project") + '</h2>' +
+        (meta.length ? '<div class="wpj-hdr-meta">' + esc(meta.join(" · ")) + '</div>' : '') +
+      '</div>' +
+      '<div class="wpj-hdr-aside">' +
+        '<span class="wpj-badge wpj-badge--' + statusCls + '">' + esc(analysis.status) + '</span>' +
+        '<div class="wpj-readiness">' +
+          '<div class="wpj-readiness-pct ' + scoreClass + '">' + score + '%</div>' +
+          '<div class="wpj-readiness-track"><div class="wpj-readiness-fill ' + scoreClass + '" style="width:' + score + '%"></div></div>' +
+          '<div class="wpj-readiness-label">' + esc(analysis.readiness.complete + " of " + analysis.readiness.total + " milestones complete") + '</div>' +
         '</div>' +
-        '<div class="wpj-header-stats">' +
-          '<div class="wpj-stat">' +
-            '<span class="wpj-stat-label">Status</span>' +
-            buildStatusChip(analysis.status) +
-          '</div>' +
-          '<div class="wpj-stat wpj-score-stat">' +
-            '<span class="wpj-stat-label">Readiness</span>' +
-            '<div class="wpj-score-row">' +
-              '<strong class="' + scoreClass + '">' + score + '%</strong>' +
-              '<span>' + esc(analysis.readiness.complete + " of " + analysis.readiness.total + " milestones complete") + '</span>' +
-            '</div>' +
-            '<div class="wpj-progress" aria-hidden="true"><span class="' + scoreClass + '" style="width:' + score + '%"></span></div>' +
-          '</div>' +
-        '</div>' +
-      '</section>';
+      '</div>' +
+    '</div>';
   }
 
   function buildEventWrapper(data) {
-    var startMissing = !data.wiseEventStart;
-    var endMissing = !data.wiseEventEnd;
-
-    return '' +
-      '<section class="wpj-wrapper hirehop_panel ui-corner-all font_scale">' +
-        '<div class="wpj-section-title">' +
-          '<h3>Event Window</h3>' +
-          '<span>The on-site period for this project</span>' +
-        '</div>' +
-        '<div class="wpj-wrapper-grid">' +
-          '<div class="wpj-wrapper-card' + (startMissing ? ' wpj-wrapper-card--missing' : '') + '">' +
-            '<span>On Site From</span>' +
-            '<strong>' + esc(formatDateTime(data.wiseEventStart) || "Not set") + '</strong>' +
-            '<small>' + (startMissing ? 'Set the project start date in HireHop to unlock journey checks' : 'First moment Wise is active on site') + '</small>' +
-          '</div>' +
-          '<div class="wpj-wrapper-card' + (endMissing ? ' wpj-wrapper-card--missing' : '') + '">' +
-            '<span>On Site Until</span>' +
-            '<strong>' + esc(formatDateTime(data.wiseEventEnd) || "Not set") + '</strong>' +
-            '<small>' + (endMissing ? 'Set the project end date in HireHop to enable full journey checks' : 'Final moment Wise is active on site') + '</small>' +
-          '</div>' +
-        '</div>' +
-      '</section>';
-  }
-
-  function buildJourneyToolbar() {
-    return '' +
-      '<section class="wpj-toolbar hirehop_panel ui-corner-all font_scale" aria-label="Journey view controls">' +
-        '<div class="wpj-section-title">' +
-          '<h3>Milestones</h3>' +
-          '<span>Checked against the event window</span>' +
-        '</div>' +
-        '<div class="wpj-actions">' +
-          '<div class="wpj-segmented" role="group" aria-label="Milestone filter">' +
-            '<button type="button" class="' + (!state.showCriticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="all">Show All Milestones</button>' +
-            '<button type="button" class="' + (state.showCriticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="critical">Show Critical Path Only</button>' +
-          '</div>' +
-          '<button type="button" class="wpj-refresh" data-wise-project-journey-refresh>Refresh</button>' +
-        '</div>' +
-      '</section>';
-  }
-
-  function buildTimeline(milestones, criticalOnly) {
-    var groups = groupMilestones(milestones);
-    var html = '<section class="wpj-timeline hirehop_panel ui-corner-all font_scale" aria-label="Journey timeline">';
-
-    if (!milestones.length) {
-      html += '<div class="wpj-empty">No ' + (criticalOnly ? "critical " : "") + 'milestones to show.</div>';
-    }
-
-    for (var i = 0; i < groups.length; i++) {
-      html += '' +
-        '<div class="wpj-group">' +
-          '<div class="wpj-group-title">' +
-            '<h4>' + esc(groups[i].group) + '</h4>' +
-            '<span>' + groups[i].items.length + '</span>' +
-          '</div>' +
-          '<div class="wpj-card-row">';
-
-      for (var m = 0; m < groups[i].items.length; m++) {
-        html += buildMilestoneCard(groups[i].items[m]);
-      }
-
-      html += '</div></div>';
-    }
-
-    html += '</section>';
-    return html;
-  }
-
-  function buildMilestoneCard(milestone) {
-    var status = normaliseStatus(milestone.status);
-    var risk = normaliseRisk(milestone.riskLevel || status);
-    var dependencies = milestone.dependencies.length ? milestone.dependencies.join(", ") : "None";
-
-    return '' +
-      '<article class="wpj-milestone wpj-status-' + cssClass(status) + ' wpj-risk-' + cssClass(risk) + '">' +
-        '<div class="wpj-milestone-head">' +
-          '<div>' +
-            '<h5>' + esc(milestone.name) + '</h5>' +
-            '<span>' + esc(milestone.owner || "Owner missing") + '</span>' +
-          '</div>' +
-          buildStatusChip(status) +
-        '</div>' +
-        '<div class="wpj-datetime">' +
-          '<span>Planned</span>' +
-          '<strong>' + esc(formatDateTime(milestone.plannedDateTime) || "Not yet scheduled") + '</strong>' +
-        '</div>' +
-        (milestone.actualDateTime ? '<div class="wpj-datetime"><span>Actual</span><strong>' + esc(formatDateTime(milestone.actualDateTime)) + '</strong></div>' : '') +
-        '<div class="wpj-card-footer">' +
-          '<span class="wpj-risk-dot" aria-hidden="true"></span>' +
-          '<span>' + esc(risk === "None" ? "No current risk" : risk) + '</span>' +
-          (milestone.criticalPath ? '<strong>Critical</strong>' : '') +
-        '</div>' +
-        '<details class="wpj-details">' +
-          '<summary>Details</summary>' +
-          '<dl>' +
-            '<dt>Dependencies</dt><dd>' + esc(dependencies) + '</dd>' +
-            '<dt>Notes</dt><dd>' + esc(milestone.notes || "No notes") + '</dd>' +
-          '</dl>' +
-        '</details>' +
-      '</article>';
+    var hasStart = !!data.wiseEventStart;
+    var hasEnd = !!data.wiseEventEnd;
+    return '<div class="wpj-win">' +
+      '<div class="wpj-win-card' + (hasStart ? '' : ' wpj-win-card--unset') + '">' +
+        '<div class="wpj-win-label">On Site From</div>' +
+        '<div class="wpj-win-value">' + esc(formatDateTime(data.wiseEventStart) || "Not yet set") + '</div>' +
+        '<div class="wpj-win-sub' + (hasStart ? '' : ' wpj-win-sub--warn') + '">' + esc(hasStart ? "First moment Wise is active on site" : "Set the project start date in HireHop") + '</div>' +
+      '</div>' +
+      '<div class="wpj-win-arrow">→</div>' +
+      '<div class="wpj-win-card' + (hasEnd ? '' : ' wpj-win-card--unset') + '">' +
+        '<div class="wpj-win-label">On Site Until</div>' +
+        '<div class="wpj-win-value">' + esc(formatDateTime(data.wiseEventEnd) || "Not yet set") + '</div>' +
+        '<div class="wpj-win-sub' + (hasEnd ? '' : ' wpj-win-sub--warn') + '">' + esc(hasEnd ? "Final moment Wise is active on site" : "Set the project end date in HireHop") + '</div>' +
+      '</div>' +
+    '</div>';
   }
 
   function buildIssuesPanel(issues) {
-    var html = '' +
-      '<section class="wpj-issues hirehop_panel ui-corner-all font_scale">' +
-        '<div class="wpj-section-title">' +
-          '<h3>Issues</h3>' +
-          '<span>' + issues.length + ' active</span>' +
-        '</div>';
-
-    if (!issues.length) {
-      html += '<div class="wpj-empty">No journey exceptions found.</div>';
-    } else {
-      html += '<ol class="wpj-issue-list">';
-      for (var i = 0; i < issues.length; i++) {
-        html += '' +
-          '<li class="wpj-issue wpj-issue-' + cssClass(issues[i].severity) + '">' +
-            '<span>' + esc(issues[i].severity) + '</span>' +
-            '<strong>' + esc(issues[i].title) + '</strong>' +
-            '<p>' + esc(issues[i].message) + '</p>' +
-          '</li>';
-      }
-      html += '</ol>';
+    if (!issues.length) return '';
+    var blocked = 0, atRisk = 0;
+    for (var i = 0; i < issues.length; i++) {
+      if (issues[i].severity === "Blocked") blocked++;
+      else if (issues[i].severity === "At Risk") atRisk++;
     }
+    var parts = [issues.length + " issue" + (issues.length !== 1 ? "s" : "")];
+    if (blocked) parts.push(blocked + " blocking");
+    if (atRisk) parts.push(atRisk + " at risk");
 
-    html += '</section>';
+    var html = '<details class="wpj-alerts' + (blocked ? ' wpj-alerts--blocked' : ' wpj-alerts--risk') + '">' +
+      '<summary>' +
+        '<span class="wpj-alerts-icon">⚠</span>' +
+        '<span class="wpj-alerts-text">' + esc(parts.join(" · ")) + '</span>' +
+        '<span class="wpj-alerts-caret">▾</span>' +
+      '</summary>' +
+      '<div class="wpj-alerts-body">';
+    for (var j = 0; j < issues.length; j++) {
+      html += '<div class="wpj-alert wpj-alert--' + cssClass(issues[j].severity) + '">' +
+        '<span class="wpj-alert-sev">' + esc(issues[j].severity) + '</span>' +
+        '<div class="wpj-alert-content">' +
+          '<strong>' + esc(issues[j].title) + '</strong>' +
+          '<p>' + esc(issues[j].message) + '</p>' +
+        '</div>' +
+      '</div>';
+    }
+    html += '</div></details>';
     return html;
   }
 
-  function buildDepartmentReadiness(rows) {
-    var html = '' +
-      '<section class="wpj-departments hirehop_panel ui-corner-all font_scale">' +
-        '<div class="wpj-section-title">' +
-          '<h3>Readiness By Department</h3>' +
-          '<span>Weighted by owned milestones</span>' +
-        '</div>' +
-        '<div class="wpj-department-grid">';
+  function buildTimeline(milestones, criticalOnly, issuesByMilestone, data) {
+    issuesByMilestone = issuesByMilestone || {};
+    data = data || {};
+    var groups = groupMilestones(milestones);
+    var onsitePhases = { "Site Arrival": true, "Build": true, "Show": true, "Derig": true, "Site Clear": true };
+    var siteStartAdded = false, siteEndAdded = false;
+    var phaseColors = {
+      "Pre-Production": "#7c3aed", "Supplier / Kit Prep": "#0369a1",
+      "Load / Transport": "#0891b2", "Site Arrival": "#c2410c",
+      "Build": "#ea580c", "Show": "#dc2626", "Derig": "#b45309", "Site Clear": "#4a6fa5"
+    };
 
-    for (var i = 0; i < rows.length; i++) {
-      html += '' +
-        '<div class="wpj-department">' +
-          '<div class="wpj-department-head">' +
-            '<strong>' + esc(rows[i].department) + '</strong>' +
-            '<span>' + rows[i].score + '%</span>' +
-          '</div>' +
-          '<div class="wpj-progress" aria-hidden="true"><span class="' + getScoreClass(rows[i].score) + '" style="width:' + rows[i].score + '%"></span></div>' +
-          '<small>' + esc(rows[i].total ? rows[i].complete + " of " + rows[i].total + " complete" : "No mapped milestones yet") + '</small>' +
-        '</div>';
+    var html = '<div class="wpj-flow">' +
+      '<div class="wpj-flow-bar">' +
+        '<div class="wpj-segmented">' +
+          '<button type="button" class="' + (!criticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="all">All milestones</button>' +
+          '<button type="button" class="' + (criticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="critical">Critical path only</button>' +
+        '</div>' +
+        '<button type="button" class="wpj-refresh-btn" data-wise-project-journey-refresh>⟳ Refresh</button>' +
+      '</div>';
+
+    if (!milestones.length) {
+      html += '<div class="wpj-empty-state">No ' + (criticalOnly ? "critical " : "") + "milestones to show.</div>";
     }
 
-    html += '</div></section>';
+    for (var i = 0; i < groups.length; i++) {
+      var group = groups[i];
+      var isOnsite = !!onsitePhases[group.group];
+
+      if (isOnsite && !siteStartAdded) {
+        siteStartAdded = true;
+        html += buildSiteDivider("On Site Begins", data.wiseEventStart, false);
+      }
+      if (group.group === "Site Clear" && !siteEndAdded) {
+        siteEndAdded = true;
+        html += buildSiteDivider("On Site Ends", data.wiseEventEnd, true);
+      }
+
+      var dotColor = phaseColors[group.group] || "#64748b";
+      html += '<div class="wpj-phase' + (isOnsite ? " wpj-phase--onsite" : "") + '">' +
+        '<div class="wpj-phase-hdr">' +
+          '<span class="wpj-phase-dot" style="background:' + dotColor + '"></span>' +
+          '<span class="wpj-phase-name">' + esc(group.group) + '</span>' +
+          '<span class="wpj-phase-count">' + group.items.length + '</span>' +
+        '</div>';
+
+      for (var m = 0; m < group.items.length; m++) {
+        html += buildMilestoneCard(group.items[m], issuesByMilestone[group.items[m].id] || []);
+      }
+      html += '</div>';
+    }
+
+    html += '</div>';
+    return html;
+  }
+
+  function buildSiteDivider(label, dateTime, isEnd) {
+    return '<div class="wpj-site-divider' + (isEnd ? " wpj-site-divider--end" : "") + '">' +
+      '<div class="wpj-site-divider-label">' + esc(label) + '</div>' +
+      '<div class="wpj-site-divider-date">' + esc(formatDateTime(dateTime) || "Date not set") + '</div>' +
+    '</div>';
+  }
+
+  function buildMilestoneCard(milestone, rowIssues) {
+    rowIssues = rowIssues || [];
+    var status = normaliseStatus(milestone.status);
+    var statusCls = cssClass(status);
+    var hasDate = !!milestone.plannedDateTime;
+    var hasActual = !!milestone.actualDateTime;
+    var dateDisplay = hasActual ? formatDateTime(milestone.actualDateTime) :
+                      hasDate ? formatDateTime(milestone.plannedDateTime) : null;
+
+    var hintsHtml = "";
+    if (rowIssues.length) {
+      hintsHtml = '<div class="wpj-mrow-hints">';
+      for (var h = 0; h < Math.min(rowIssues.length, 2); h++) {
+        hintsHtml += '<span class="wpj-hint wpj-hint--' + cssClass(rowIssues[h].severity) + '">' + esc(rowIssues[h].title) + '</span>';
+      }
+      hintsHtml += '</div>';
+    }
+
+    return '<div class="wpj-mrow wpj-mrow--' + statusCls + '">' +
+      '<div class="wpj-mrow-accent"></div>' +
+      '<div class="wpj-mrow-body">' +
+        '<div class="wpj-mrow-name">' + esc(milestone.name) + (milestone.criticalPath ? '<span class="wpj-crit"> ★</span>' : '') + '</div>' +
+        '<div class="wpj-mrow-dept">' + esc(milestone.owner || "No department") + '</div>' +
+        hintsHtml +
+      '</div>' +
+      '<div class="wpj-mrow-right">' +
+        '<div class="wpj-mrow-date' + (dateDisplay ? '' : ' wpj-mrow-date--unset') + '">' + esc(dateDisplay || "Not yet scheduled") + '</div>' +
+        (hasActual ? '<div class="wpj-mrow-datelabel wpj-mrow-datelabel--actual">Confirmed</div>' : '') +
+      '</div>' +
+      '<div class="wpj-mrow-chip">' + buildStatusChip(status) + '</div>' +
+    '</div>';
+  }
+
+  function buildDepartmentReadiness(rows) {
+    var html = '<div class="wpj-depts">' +
+      '<div class="wpj-depts-hdr">Department Readiness</div>' +
+      '<div class="wpj-depts-grid">';
+    for (var i = 0; i < rows.length; i++) {
+      var score = rows[i].score;
+      var scoreClass = getScoreClass(score);
+      var hasWork = rows[i].total > 0;
+      html += '<div class="wpj-dept">' +
+        '<div class="wpj-dept-head">' +
+          '<span class="wpj-dept-name">' + esc(rows[i].department) + '</span>' +
+          '<span class="wpj-dept-pct ' + (hasWork ? scoreClass : "wpj-score-none") + '">' + (hasWork ? score + "%" : "—") + '</span>' +
+        '</div>' +
+        '<div class="wpj-dept-bar"><div class="wpj-dept-fill ' + scoreClass + '" style="width:' + score + '%"></div></div>' +
+        '<div class="wpj-dept-sub">' + esc(hasWork ? rows[i].complete + " of " + rows[i].total + " complete" : "No milestones assigned") + '</div>' +
+      '</div>';
+    }
+    html += '</div></div>';
     return html;
   }
 
@@ -2737,188 +2765,145 @@
     if ($("#" + CFG.stylesId).length) return;
 
     var css = [
-      ".wise-project-journey-panel{box-sizing:border-box;background:#f6f7f9;color:#20242a;}",
+      /* ---- HireHop tab wiring ---- */
+      ".wise-project-journey-panel{box-sizing:border-box;background:#f0f2f8!important;scrollbar-gutter:stable;}",
       ".wise-journey-active>.ui-tabs-panel:not([data-wise-project-journey-panel]),.wise-journey-active>[role='tabpanel']:not([data-wise-project-journey-panel]){display:none!important;}",
       ".wise-journey-active>[data-wise-project-journey-panel='1']{display:block!important;}",
-      '[data-wise-project-journey-tab="1"].is-wise-journey-active{background:#256f8f!important;border-color:#256f8f!important;}',
+      '[data-wise-project-journey-tab="1"].is-wise-journey-active{background:#0369a1!important;border-color:#0369a1!important;}',
       '[data-wise-project-journey-tab="1"].is-wise-journey-active>a{color:#fff!important;}',
-      ".wpj-shell{box-sizing:border-box;padding:14px 16px 18px;font-family:Arial,Helvetica,sans-serif;color:#20242a;}",
+      /* ---- Shell ---- */
+      ".wpj-shell{box-sizing:border-box;padding:8px;font-family:inherit;color:#0f172a;background:#f0f2f8;}",
       ".wpj-shell *{box-sizing:border-box;}",
-      ".wpj-header,.wpj-wrapper,.wpj-toolbar,.wpj-timeline,.wpj-departments,.wpj-issues{border:1px solid #d8dde3;background:#fff;border-radius:8px;}",
-      ".wpj-header{display:flex;gap:14px;align-items:stretch;justify-content:space-between;padding:14px;margin-bottom:12px;}",
-      ".wpj-header-main{min-width:220px;}",
-      ".wpj-kicker{font-size:11px;font-weight:bold;letter-spacing:0;text-transform:uppercase;color:#52606d;margin-bottom:4px;}",
-      ".wpj-header h2{margin:0 0 6px;font-size:22px;line-height:1.2;color:#20242a;font-weight:bold;}",
-      ".wpj-meta{font-size:12px;line-height:1.4;color:#52606d;}",
-      ".wpj-header-stats{display:grid;grid-template-columns:minmax(150px,190px) minmax(210px,280px);gap:10px;align-items:stretch;}",
-      ".wpj-stat{border:1px solid #e1e5ea;border-radius:8px;padding:10px;background:#fbfcfd;}",
-      ".wpj-stat-label{display:block;font-size:11px;text-transform:uppercase;font-weight:bold;color:#52606d;margin-bottom:7px;letter-spacing:0;}",
-      ".wpj-score-row{display:flex;align-items:baseline;gap:8px;white-space:normal;}",
-      ".wpj-score-row strong{font-size:24px;line-height:1;}",
-      ".wpj-score-row span{font-size:12px;color:#52606d;}",
-      ".wpj-progress{height:8px;border-radius:8px;background:#e8ebef;overflow:hidden;margin-top:8px;}",
-      ".wpj-progress span{display:block;height:100%;border-radius:8px;background:#256f8f;}",
-      ".wpj-score-good{color:#277a42;}",
-      ".wpj-score-mid{color:#9b6500;}",
-      ".wpj-score-bad{color:#b42318;}",
-      ".wpj-progress .wpj-score-good{background:#2e8540;}",
-      ".wpj-progress .wpj-score-mid{background:#d18a00;}",
-      ".wpj-progress .wpj-score-bad{background:#d92d20;}",
-      ".wpj-wrapper{padding:14px;margin-bottom:12px;border-color:#c7d7df;background:#fafdff;}",
-      ".wpj-section-title{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;}",
-      ".wpj-section-title h3,.wpj-group-title h4{margin:0;font-size:16px;line-height:1.25;color:#20242a;}",
-      ".wpj-section-title span,.wpj-group-title span{font-size:12px;color:#52606d;}",
-      ".wpj-wrapper-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}",
-      ".wpj-wrapper-card{border:1px solid #d7e4ea;border-radius:8px;background:#fff;padding:10px;min-height:92px;}",
-      ".wpj-wrapper-card--missing{border-color:#f2b8b5;background:#fff9f9;}",
-      ".wpj-wrapper-card span,.wpj-fixed-card>span{display:block;font-size:11px;font-weight:bold;text-transform:uppercase;color:#52606d;margin-bottom:6px;letter-spacing:0;}",
-      ".wpj-wrapper-card strong{display:block;font-size:16px;line-height:1.25;color:#1d5f7c;margin-bottom:5px;}",
-      ".wpj-wrapper-card small,.wpj-fixed-date small,.wpj-department small{display:block;font-size:11px;line-height:1.35;color:#63707c;}",
-      ".wpj-fixed-date{padding:6px 0;border-top:1px solid #e7edf1;}",
-      ".wpj-fixed-date:first-of-type{border-top:0;padding-top:0;}",
-      ".wpj-fixed-date strong{display:block;font-size:13px;color:#20242a;}",
-      ".wpj-fixed-date span{display:block;font-size:12px;color:#1d5f7c;margin:2px 0;}",
-      ".wpj-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin-bottom:12px;}",
-      ".wpj-toolbar .wpj-section-title{margin-bottom:0;display:block;}",
-      ".wpj-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}",
-      ".wpj-segmented{display:inline-flex;border:1px solid #b8c5cf;border-radius:8px;overflow:hidden;background:#fff;}",
-      ".wpj-segmented button,.wpj-refresh{border:0;background:#fff;color:#20242a;font:inherit;font-size:12px;font-weight:bold;padding:7px 10px;cursor:pointer;}",
-      ".wpj-segmented button+button{border-left:1px solid #b8c5cf;}",
-      ".wpj-segmented button.is-active{background:#256f8f;color:#fff;}",
-      ".wpj-refresh{border:1px solid #b8c5cf;border-radius:8px;background:#fff;}",
-      ".wpj-main-grid{display:grid;grid-template-columns:minmax(0,1fr) 310px;gap:12px;align-items:start;}",
-      ".wpj-primary{min-width:0;}",
-      ".wpj-timeline{padding:14px;margin-bottom:12px;}",
-      ".wpj-group{margin-bottom:14px;}",
-      ".wpj-group:last-child{margin-bottom:0;}",
-      ".wpj-group-title{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;border-bottom:1px solid #eceff3;padding-bottom:6px;}",
-      ".wpj-card-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}",
-      ".wpj-milestone{border:1px solid #d8dde3;border-left-width:5px;border-radius:8px;background:#fff;padding:10px;min-width:0;}",
-      ".wpj-milestone-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;}",
-      ".wpj-milestone h5{margin:0 0 3px;font-size:14px;line-height:1.25;color:#20242a;}",
-      ".wpj-milestone-head span{font-size:12px;color:#52606d;}",
-      ".wpj-datetime{display:grid;grid-template-columns:62px minmax(0,1fr);gap:8px;align-items:baseline;margin:5px 0;}",
-      ".wpj-datetime span{font-size:11px;text-transform:uppercase;color:#63707c;font-weight:bold;letter-spacing:0;}",
-      ".wpj-datetime strong{font-size:13px;line-height:1.3;color:#20242a;word-break:break-word;}",
-      ".wpj-card-footer{display:flex;align-items:center;gap:6px;margin-top:8px;font-size:12px;color:#52606d;}",
-      ".wpj-card-footer strong{margin-left:auto;color:#20242a;font-size:11px;text-transform:uppercase;}",
-      ".wpj-risk-dot{width:9px;height:9px;border-radius:50%;background:#8a95a3;display:inline-block;flex:0 0 auto;}",
-      ".wpj-details{margin-top:8px;border-top:1px solid #eef1f4;padding-top:7px;}",
-      ".wpj-details summary{cursor:pointer;font-size:12px;font-weight:bold;color:#256f8f;}",
-      ".wpj-details dl{display:grid;grid-template-columns:88px minmax(0,1fr);gap:4px 8px;margin:8px 0 0;font-size:12px;line-height:1.35;}",
-      ".wpj-details dt{font-weight:bold;color:#52606d;}",
-      ".wpj-details dd{margin:0;color:#20242a;word-break:break-word;}",
-      ".wpj-chip{display:inline-flex;align-items:center;justify-content:center;min-height:22px;padding:3px 8px;border-radius:8px;font-size:11px;font-weight:bold;white-space:nowrap;border:1px solid transparent;}",
-      ".wpj-chip-complete{background:#e8f5ec;color:#226c3a;border-color:#b8dfc4;}",
-      ".wpj-chip-in-progress{background:#e6f2fb;color:#1b658f;border-color:#bad9ee;}",
-      ".wpj-chip-not-started{background:#eef1f4;color:#52606d;border-color:#d6dce2;}",
-      ".wpj-chip-at-risk{background:#fff4dc;color:#8a5a00;border-color:#e7c16f;}",
-      ".wpj-chip-blocked,.wpj-chip-missing{background:#fdecec;color:#b42318;border-color:#f2b8b5;}",
-      ".wpj-status-complete{border-left-color:#2e8540;}",
-      ".wpj-status-in-progress{border-left-color:#256f8f;}",
-      ".wpj-status-not-started{border-left-color:#8a95a3;}",
-      ".wpj-status-at-risk{border-left-color:#d18a00;}",
-      ".wpj-status-blocked,.wpj-status-missing{border-left-color:#d92d20;}",
-      ".wpj-risk-none .wpj-risk-dot{background:#2e8540;}",
-      ".wpj-risk-at-risk .wpj-risk-dot{background:#d18a00;}",
-      ".wpj-risk-blocked .wpj-risk-dot,.wpj-risk-missing .wpj-risk-dot{background:#d92d20;}",
-      ".wpj-risk-low .wpj-risk-dot{background:#256f8f;}",
-      ".wpj-departments{padding:14px;}",
-      ".wpj-department-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;}",
-      ".wpj-department{border:1px solid #e1e5ea;border-radius:8px;background:#fbfcfd;padding:10px;}",
-      ".wpj-department-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;}",
-      ".wpj-department-head span{font-weight:bold;color:#20242a;}",
-      ".wpj-issues{padding:14px;position:sticky;top:8px;}",
-      ".wpj-issue-list{list-style:none;margin:0;padding:0;display:grid;gap:8px;}",
-      ".wpj-issue{border:1px solid #e1e5ea;border-left-width:5px;border-radius:8px;background:#fff;padding:9px;}",
-      ".wpj-issue span{display:inline-block;font-size:10px;text-transform:uppercase;font-weight:bold;color:#52606d;margin-bottom:4px;letter-spacing:0;}",
-      ".wpj-issue strong{display:block;font-size:13px;line-height:1.3;color:#20242a;margin-bottom:3px;}",
-      ".wpj-issue p{margin:0;font-size:12px;line-height:1.35;color:#52606d;}",
-      ".wpj-issue-blocked{border-left-color:#d92d20;}",
-      ".wpj-issue-at-risk{border-left-color:#d18a00;}",
-      ".wpj-issue-missing-data{border-left-color:#d92d20;}",
-      ".wpj-issue-warning{border-left-color:#8a95a3;}",
-      ".wpj-empty{border:1px dashed #cbd3db;border-radius:8px;background:#fbfcfd;color:#52606d;padding:14px;text-align:center;font-size:13px;}",
-      "@media(max-width:980px){.wpj-header,.wpj-toolbar{display:block;}.wpj-header-stats{grid-template-columns:1fr;margin-top:12px;}.wpj-actions{justify-content:flex-start;margin-top:10px;}.wpj-main-grid{grid-template-columns:1fr;}.wpj-issues{position:static;}.wpj-wrapper-grid{grid-template-columns:1fr;}}",
-      "@media(max-width:620px){.wpj-shell{padding:10px 8px 14px;}.wpj-header h2{font-size:18px;}.wpj-card-row,.wpj-department-grid{grid-template-columns:1fr;}.wpj-segmented{display:flex;width:100%;}.wpj-segmented button{flex:1 1 0;padding-left:6px;padding-right:6px;}.wpj-refresh{width:100%;}.wpj-datetime{grid-template-columns:1fr;gap:2px;}.wpj-details dl{grid-template-columns:1fr;}}",
-      ".wise-project-journey-panel{box-sizing:border-box;background:#fff!important;color:inherit;scrollbar-gutter:stable;}",
-      ".wpj-shell{padding:8px 8px 12px;font-family:inherit;color:inherit;background:#fff;}",
-      ".wpj-header,.wpj-wrapper,.wpj-toolbar,.wpj-timeline,.wpj-departments,.wpj-issues{border:1px solid #a1a1a1;background:#fff;border-radius:4px;margin-bottom:8px;box-shadow:none;}",
-      ".wpj-header{padding:0;display:block;}",
-      ".wpj-header-main{padding:7px 8px;background:#f0f0f0;border-bottom:1px solid #c7c7c7;min-width:0;}",
-      ".wpj-kicker{font-size:11px;color:#333;text-transform:none;margin-bottom:2px;font-weight:bold;}",
-      ".wpj-header h2{font-size:1.2em;line-height:1.25;margin:0;color:#222;font-weight:bold;}",
-      ".wpj-meta{font-size:11px;color:#555;margin-top:3px;}",
-      ".wpj-header-stats{display:grid;grid-template-columns:180px minmax(220px,1fr);gap:0;border-top:0;}",
-      ".wpj-stat{border:0;border-right:1px solid #d0d0d0;border-radius:0;background:#fff;padding:7px 8px;}",
-      ".wpj-stat:last-child{border-right:0;}",
-      ".wpj-stat-label,.wpj-wrapper-card span,.wpj-fixed-card>span,.wpj-datetime span{color:#333;text-transform:none;font-size:11px;letter-spacing:0;font-weight:bold;}",
-      ".wpj-score-row strong{font-size:18px;}",
-      ".wpj-progress{height:7px;border-radius:0;background:#e1e1e1;border:1px solid #c7c7c7;margin-top:6px;}",
-      ".wpj-progress span{border-radius:0;}",
-      ".wpj-wrapper,.wpj-timeline,.wpj-departments,.wpj-issues{padding:0;}",
-      ".wpj-section-title,.wpj-group-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;padding:6px 8px;background:#f0f0f0;border-bottom:1px solid #c7c7c7;}",
-      ".wpj-section-title h3,.wpj-group-title h4{font-size:1.05em;color:#222;font-weight:bold;}",
-      ".wpj-section-title span,.wpj-group-title span{font-size:11px;color:#555;}",
-      ".wpj-wrapper-grid,.wpj-card-row,.wpj-department-grid{padding:8px;}",
-      ".wpj-wrapper-card,.wpj-fixed-card,.wpj-milestone,.wpj-department,.wpj-issue{border:1px solid #d0d0d0;border-radius:3px;background:#fff;box-shadow:none;}",
-      ".wpj-wrapper-card strong,.wpj-fixed-date span{color:#222;}",
-      ".wpj-toolbar{padding:6px 8px;}",
-      ".wpj-toolbar .wpj-section-title{padding:0;background:transparent;border-bottom:0;}",
-      ".wpj-segmented{border:1px solid #a1a1a1;border-radius:4px;background:#fff;}",
-      ".wpj-segmented button,.wpj-refresh{font:inherit;font-size:12px;border:0;background:#f5f5f5;color:#222;padding:5px 8px;}",
-      ".wpj-segmented button+button{border-left:1px solid #a1a1a1;}",
-      ".wpj-segmented button.is-active{background:#1f75cf;color:#fff;}",
-      ".wpj-refresh{border:1px solid #a1a1a1;border-radius:4px;}",
-      ".wpj-main-grid{grid-template-columns:minmax(0,1fr) 300px;gap:8px;}",
-      ".wpj-group{margin:0;border-bottom:1px solid #dedede;}",
-      ".wpj-group:last-child{border-bottom:0;}",
-      ".wpj-group-title{border-bottom:1px solid #dedede;background:#f7f7f7;}",
-      ".wpj-milestone{border-left-width:4px;}",
-      ".wpj-milestone h5{font-size:13px;color:#222;}",
-      ".wpj-details summary{color:#1f75cf;}",
-      ".wpj-chip{border-radius:3px;min-height:19px;padding:2px 6px;font-size:11px;}",
-      ".wpj-issues{position:static;}",
-      ".wpj-issue-list{padding:8px;}",
-      ".wpj-empty{margin:8px;border-color:#c7c7c7;border-radius:3px;background:#f7f7f7;color:#555;}",
-      ".wpj-shell{padding:6px;background:#fff;}",
-      ".wpj-header,.wpj-wrapper,.wpj-toolbar,.wpj-timeline,.wpj-departments,.wpj-issues{margin-bottom:6px;}",
-      ".wpj-header-main{padding:6px 8px;}",
-      ".wpj-header-stats{grid-template-columns:150px minmax(220px,1fr);}",
-      ".wpj-stat{padding:5px 8px;}",
-      ".wpj-score-row{gap:6px;}",
-      ".wpj-score-row strong{font-size:16px;}",
-      ".wpj-wrapper-grid{grid-template-columns:1fr 1fr;gap:6px;padding:6px;}",
-      ".wpj-wrapper-card,.wpj-fixed-card{min-height:0;padding:7px 8px;}",
-      ".wpj-wrapper-card strong{font-size:14px;margin-bottom:2px;}",
-      ".wpj-wrapper-card small,.wpj-fixed-date small,.wpj-department small{font-size:11px;}",
-      ".wpj-fixed-date{padding:4px 0;}",
-      ".wpj-fixed-date strong{font-size:12px;}",
-      ".wpj-fixed-date span{font-size:12px;margin:1px 0;}",
-      ".wpj-toolbar{padding:5px 8px;}",
-      ".wpj-toolbar .wpj-section-title h3{font-size:14px;}",
-      ".wpj-main-grid{grid-template-columns:minmax(0,1fr) 330px;gap:6px;}",
-      ".wpj-group-title{padding:5px 8px;}",
-      ".wpj-card-row{display:block;padding:0;}",
-      ".wpj-milestone{display:grid;grid-template-columns:minmax(180px,1.35fr) minmax(150px,.8fr) minmax(120px,.65fr);gap:6px 10px;align-items:center;margin:0;border-width:0 0 1px 4px;border-radius:0;padding:6px 8px;}",
-      ".wpj-milestone:last-child{border-bottom:0;}",
-      ".wpj-milestone-head{margin:0;align-items:center;}",
-      ".wpj-milestone h5{font-size:12px;margin:0 0 1px;}",
-      ".wpj-milestone-head span{font-size:11px;}",
-      ".wpj-datetime{display:block;margin:0;}",
-      ".wpj-datetime span{display:inline;margin-right:6px;}",
-      ".wpj-datetime strong{display:inline;font-size:12px;}",
-      ".wpj-card-footer{justify-content:flex-end;margin:0;font-size:11px;}",
-      ".wpj-card-footer strong{margin-left:6px;}",
-      ".wpj-details{grid-column:1/-1;margin-top:2px;padding-top:4px;}",
-      ".wpj-details dl{margin-top:4px;grid-template-columns:80px minmax(0,1fr);font-size:11px;}",
-      ".wpj-department-grid{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px;padding:6px;}",
-      ".wpj-department{padding:6px 8px;}",
-      ".wpj-issue-list{gap:6px;padding:6px;}",
-      ".wpj-issue{padding:6px 8px;}",
-      ".wpj-issue strong{font-size:12px;margin-bottom:1px;}",
-      ".wpj-issue p{font-size:11px;}",
-      "@media(max-width:980px){.wpj-wrapper-grid,.wpj-main-grid{grid-template-columns:1fr;}.wpj-milestone{grid-template-columns:1fr;}.wpj-card-footer{justify-content:flex-start;}}"
+      /* ---- Header ---- */
+      ".wpj-hdr{display:flex;align-items:center;gap:14px;background:#fff;border-radius:8px;padding:12px 16px;margin-bottom:8px;border:1px solid #e2e8ef;}",
+      ".wpj-hdr-main{flex:1 1 0;min-width:0;}",
+      ".wpj-hdr-kicker{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:3px;font-weight:700;}",
+      ".wpj-hdr h2{margin:0 0 2px;font-size:18px;font-weight:800;color:#0f172a;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
+      ".wpj-hdr-meta{font-size:12px;color:#64748b;}",
+      ".wpj-hdr-aside{display:flex;align-items:center;gap:14px;flex-shrink:0;}",
+      ".wpj-badge{display:inline-flex;align-items:center;padding:4px 11px;border-radius:12px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;}",
+      ".wpj-badge--ready{background:#dcfce7;color:#15803d;}",
+      ".wpj-badge--in-progress{background:#dbeafe;color:#1d4ed8;}",
+      ".wpj-badge--not-started{background:#f1f5f9;color:#475569;}",
+      ".wpj-badge--at-risk{background:#fef3c7;color:#b45309;}",
+      ".wpj-badge--blocked,.wpj-badge--missing{background:#fee2e2;color:#dc2626;}",
+      ".wpj-readiness{text-align:right;}",
+      ".wpj-readiness-pct{font-size:22px;font-weight:800;line-height:1;}",
+      ".wpj-score-good{color:#16a34a;}",
+      ".wpj-score-mid{color:#d97706;}",
+      ".wpj-score-bad{color:#dc2626;}",
+      ".wpj-score-none{color:#cbd5e1;}",
+      ".wpj-readiness-track{height:5px;border-radius:3px;background:#e2e8ef;width:110px;margin:5px 0 3px;}",
+      ".wpj-readiness-fill{height:100%;border-radius:3px;background:#3b82f6;min-width:0;}",
+      ".wpj-readiness-fill.wpj-score-good{background:#22c55e;}",
+      ".wpj-readiness-fill.wpj-score-mid{background:#f59e0b;}",
+      ".wpj-readiness-fill.wpj-score-bad{background:#ef4444;}",
+      ".wpj-readiness-label{font-size:10px;color:#94a3b8;}",
+      /* ---- Event window ---- */
+      ".wpj-win{display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch;background:#fff;border:1px solid #e2e8ef;border-radius:8px;margin-bottom:8px;overflow:hidden;}",
+      ".wpj-win-card{padding:14px 18px;}",
+      ".wpj-win-card--unset{background:#fef2f2;}",
+      ".wpj-win-arrow{display:flex;align-items:center;justify-content:center;padding:0 18px;color:#cbd5e1;font-size:20px;border-left:1px solid #f1f5f9;border-right:1px solid #f1f5f9;}",
+      ".wpj-win-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:700;color:#94a3b8;margin-bottom:7px;}",
+      ".wpj-win-value{font-size:16px;font-weight:700;color:#0f172a;line-height:1.25;margin-bottom:5px;}",
+      ".wpj-win-card--unset .wpj-win-value{color:#dc2626;font-size:14px;font-weight:600;}",
+      ".wpj-win-sub{font-size:11px;color:#94a3b8;}",
+      ".wpj-win-sub--warn{color:#dc2626;}",
+      /* ---- Issues bar ---- */
+      ".wpj-alerts{margin-bottom:8px;border-radius:8px;overflow:hidden;border:1px solid #fca5a5;}",
+      ".wpj-alerts--risk{border-color:#fcd34d;}",
+      ".wpj-alerts summary{display:flex;align-items:center;gap:8px;padding:9px 14px;background:#fee2e2;cursor:pointer;list-style:none;user-select:none;}",
+      ".wpj-alerts--risk summary{background:#fef9c3;}",
+      ".wpj-alerts summary::-webkit-details-marker{display:none;}",
+      ".wpj-alerts-icon{font-size:13px;}",
+      ".wpj-alerts-text{flex:1 1 0;font-size:12px;font-weight:700;color:#dc2626;}",
+      ".wpj-alerts--risk .wpj-alerts-text{color:#b45309;}",
+      ".wpj-alerts-caret{font-size:11px;color:#94a3b8;}",
+      ".wpj-alerts-body{display:grid;gap:1px;background:#e2e8ef;}",
+      ".wpj-alert{display:grid;grid-template-columns:auto 1fr;gap:10px;align-items:start;padding:9px 14px;background:#fff;}",
+      ".wpj-alert-sev{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;padding:2px 7px;border-radius:10px;white-space:nowrap;margin-top:2px;}",
+      ".wpj-alert--blocked .wpj-alert-sev{background:#fee2e2;color:#dc2626;}",
+      ".wpj-alert--at-risk .wpj-alert-sev{background:#fef3c7;color:#b45309;}",
+      ".wpj-alert--missing-data .wpj-alert-sev,.wpj-alert--warning .wpj-alert-sev{background:#f1f5f9;color:#64748b;}",
+      ".wpj-alert-content strong{display:block;font-size:12px;color:#0f172a;margin-bottom:1px;}",
+      ".wpj-alert-content p{margin:0;font-size:11px;color:#64748b;line-height:1.4;}",
+      /* ---- Journey flow ---- */
+      ".wpj-flow{background:#fff;border:1px solid #e2e8ef;border-radius:8px;margin-bottom:8px;overflow:hidden;}",
+      ".wpj-flow-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:#f8fafc;border-bottom:1px solid #e2e8ef;}",
+      ".wpj-segmented{display:inline-flex;border:1px solid #e2e8ef;border-radius:6px;overflow:hidden;}",
+      ".wpj-segmented button{border:0;background:#fff;color:#64748b;font:inherit;font-size:11px;font-weight:700;padding:5px 11px;cursor:pointer;}",
+      ".wpj-segmented button+button{border-left:1px solid #e2e8ef;}",
+      ".wpj-segmented button.is-active{background:#0f172a;color:#fff;}",
+      ".wpj-refresh-btn{border:1px solid #e2e8ef;border-radius:6px;background:#fff;color:#64748b;font:inherit;font-size:11px;font-weight:700;padding:5px 11px;cursor:pointer;}",
+      /* ---- Phase groups ---- */
+      ".wpj-phase{border-top:1px solid #f1f5f9;}",
+      ".wpj-phase:first-of-type{border-top:0;}",
+      ".wpj-phase--onsite{background:#fffbf4;}",
+      ".wpj-phase-hdr{display:flex;align-items:center;gap:8px;padding:7px 14px;background:#f8fafc;border-bottom:1px solid #f1f5f9;}",
+      ".wpj-phase--onsite .wpj-phase-hdr{background:#fff7ed;border-bottom-color:#fed7aa;}",
+      ".wpj-phase-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}",
+      ".wpj-phase-name{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;flex:1 1 0;}",
+      ".wpj-phase-count{font-size:10px;color:#94a3b8;background:#f1f5f9;padding:1px 7px;border-radius:9px;font-weight:600;}",
+      ".wpj-phase--onsite .wpj-phase-count{background:#fed7aa;color:#9a3412;}",
+      /* ---- Site dividers ---- */
+      ".wpj-site-divider{display:flex;align-items:center;gap:14px;padding:8px 16px;background:linear-gradient(135deg,#fff7ed,#fff);border-top:2px solid #f97316;border-bottom:1px solid #fed7aa;}",
+      ".wpj-site-divider--end{background:linear-gradient(135deg,#fff,#f0f9ff);border-top-color:#38bdf8;border-bottom-color:#bae6fd;}",
+      ".wpj-site-divider-label{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#ea580c;flex-shrink:0;}",
+      ".wpj-site-divider--end .wpj-site-divider-label{color:#0284c7;}",
+      ".wpj-site-divider-date{font-size:13px;font-weight:700;color:#1e293b;}",
+      /* ---- Milestone rows ---- */
+      ".wpj-mrow{display:grid;grid-template-columns:4px 1fr auto auto;align-items:center;border-bottom:1px solid #f8fafc;min-height:52px;background:#fff;}",
+      ".wpj-phase--onsite .wpj-mrow{background:#fffbf4;}",
+      ".wpj-mrow:last-child{border-bottom:0;}",
+      ".wpj-mrow:hover{background:#fafafa;}",
+      ".wpj-phase--onsite .wpj-mrow:hover{background:#fff3e8;}",
+      ".wpj-mrow-accent{align-self:stretch;}",
+      ".wpj-mrow-body{padding:10px 12px;min-width:0;}",
+      ".wpj-mrow-name{font-size:13px;font-weight:600;color:#0f172a;line-height:1.3;}",
+      ".wpj-crit{color:#f59e0b;font-size:11px;}",
+      ".wpj-mrow-dept{font-size:11px;color:#94a3b8;margin-top:2px;}",
+      ".wpj-mrow-hints{display:flex;gap:5px;flex-wrap:wrap;margin-top:5px;}",
+      ".wpj-hint{font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;}",
+      ".wpj-hint--blocked{background:#fee2e2;color:#dc2626;}",
+      ".wpj-hint--at-risk{background:#fef3c7;color:#b45309;}",
+      ".wpj-hint--missing-data,.wpj-hint--warning{background:#f1f5f9;color:#64748b;}",
+      ".wpj-mrow-right{padding:10px 8px 10px 0;text-align:right;}",
+      ".wpj-mrow-date{font-size:12px;font-weight:700;color:#1e293b;white-space:nowrap;}",
+      ".wpj-mrow-date--unset{color:#cbd5e1;font-weight:400;font-style:italic;font-size:11px;}",
+      ".wpj-mrow-datelabel{font-size:9px;text-transform:uppercase;letter-spacing:0.5px;color:#94a3b8;text-align:right;margin-top:2px;}",
+      ".wpj-mrow-datelabel--actual{color:#16a34a;}",
+      ".wpj-mrow-chip{padding:10px 12px 10px 4px;}",
+      ".wpj-mrow--complete .wpj-mrow-accent{background:#22c55e;}",
+      ".wpj-mrow--in-progress .wpj-mrow-accent{background:#3b82f6;}",
+      ".wpj-mrow--not-started .wpj-mrow-accent{background:#94a3b8;}",
+      ".wpj-mrow--at-risk .wpj-mrow-accent{background:#f59e0b;}",
+      ".wpj-mrow--blocked .wpj-mrow-accent,.wpj-mrow--missing .wpj-mrow-accent{background:#ef4444;}",
+      /* ---- Status chips ---- */
+      ".wpj-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;}",
+      ".wpj-chip-complete{background:#dcfce7;color:#15803d;}",
+      ".wpj-chip-in-progress{background:#dbeafe;color:#1d4ed8;}",
+      ".wpj-chip-not-started{background:#f1f5f9;color:#64748b;}",
+      ".wpj-chip-at-risk{background:#fef3c7;color:#b45309;}",
+      ".wpj-chip-blocked,.wpj-chip-missing{background:#fee2e2;color:#dc2626;}",
+      /* ---- Empty state ---- */
+      ".wpj-empty-state{padding:24px;text-align:center;color:#94a3b8;font-size:13px;}",
+      /* ---- Department readiness ---- */
+      ".wpj-depts{background:#fff;border:1px solid #e2e8ef;border-radius:8px;overflow:hidden;}",
+      ".wpj-depts-hdr{padding:7px 14px;background:#f8fafc;border-bottom:1px solid #f1f5f9;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;}",
+      ".wpj-depts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:#f1f5f9;}",
+      ".wpj-dept{background:#fff;padding:11px 14px;}",
+      ".wpj-dept-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}",
+      ".wpj-dept-name{font-size:12px;font-weight:600;color:#1e293b;}",
+      ".wpj-dept-pct{font-size:16px;font-weight:800;line-height:1;}",
+      ".wpj-dept-bar{height:4px;border-radius:2px;background:#f1f5f9;margin-bottom:6px;overflow:hidden;}",
+      ".wpj-dept-fill{height:100%;border-radius:2px;background:#3b82f6;min-width:0;}",
+      ".wpj-dept-fill.wpj-score-good{background:#22c55e;}",
+      ".wpj-dept-fill.wpj-score-mid{background:#f59e0b;}",
+      ".wpj-dept-fill.wpj-score-bad{background:#ef4444;}",
+      ".wpj-dept-sub{font-size:10px;color:#94a3b8;}",
+      /* ---- Responsive ---- */
+      "@media(max-width:860px){.wpj-hdr{flex-direction:column;align-items:flex-start;}.wpj-win{grid-template-columns:1fr;}.wpj-win-arrow{display:none;}.wpj-mrow{grid-template-columns:4px 1fr;}.wpj-mrow-right,.wpj-mrow-chip{display:none;}}",
+      "@media(max-width:480px){.wpj-shell{padding:5px;}.wpj-segmented button{padding:4px 7px;}.wpj-site-divider{flex-direction:column;align-items:flex-start;gap:3px;}}"
     ].join("\n");
 
     $("<style></style>", { id: CFG.stylesId, text: css }).appendTo("head");
