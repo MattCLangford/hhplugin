@@ -26,7 +26,7 @@
   ];
 
   var CFG = {
-    version: "2026-06-24.3",
+    version: "2026-06-24.4",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -144,6 +144,7 @@
     applyTabTemplate($button, $sampleTab);
     bindJourneyButton($button);
     placeJourneyTab($host, $button);
+    ensureNativeTabsRegistration($host, $("#" + CFG.panelId));
   }
 
   function buildJourneyTab($sampleTab) {
@@ -313,6 +314,7 @@
     var $container = getTabsContainer($host);
     var $panel = $("#" + CFG.panelId);
     var created = false;
+    var moved = false;
 
     if (!$panel.length) {
       created = true;
@@ -327,9 +329,12 @@
 
     if ($container.length && !$panel.parent().is($container)) {
       $panel.detach().appendTo($container);
+      moved = true;
     }
 
-    resetPanelLayout($panel);
+    if (created || moved || !$panel.is(":visible")) {
+      resetPanelLayout($panel);
+    }
 
     if (created || !$panel.children().length) {
       renderJourneyPanel();
@@ -337,6 +342,8 @@
       bindJourneyPanelEvents();
     }
 
+    ensureNativeTabsRegistration($host, $panel);
+    if ($panel.is(":visible")) applyJourneyPanelSizing($panel);
     return $panel;
   }
 
@@ -358,6 +365,22 @@
     var $panel = $("#" + CFG.panelId);
     if (!$panel.length) return;
 
+    if (activateNativeTabPanel($host, $("#" + CFG.buttonId), $panel)) {
+      $container.removeClass("wise-checklist-active wise-journey-active");
+      $('[data-wise-checklist-panel="1"]').not($panel).hide().attr("aria-hidden", "true");
+      $('[data-wise-job-checklist="1"]')
+        .removeClass("is-wise-checklist-active")
+        .attr("aria-selected", "false")
+        .attr("aria-expanded", "false");
+      $panel
+        .show()
+        .attr("aria-hidden", "false")
+        .removeAttr("hidden");
+      applyJourneyPanelSizing($panel);
+      setJourneyTabVisualState($host);
+      return;
+    }
+
     $container.removeClass("wise-checklist-active").addClass("wise-journey-active");
     $('[data-wise-checklist-panel="1"]').hide().attr("aria-hidden", "true");
     $('[data-wise-job-checklist="1"]')
@@ -365,7 +388,7 @@
       .attr("aria-selected", "false")
       .attr("aria-expanded", "false");
 
-    $container.children(".ui-tabs-panel,[role='tabpanel']").not($panel).attr("aria-hidden", "true");
+    $container.children(".ui-tabs-panel,[role='tabpanel']").not($panel).hide().attr("aria-hidden", "true");
     $panel
       .removeClass("ui-tabs-hide ui-helper-hidden ui-helper-hidden-accessible")
       .show()
@@ -383,6 +406,47 @@
       .removeClass("is-wise-journey-active")
       .attr("aria-selected", "false")
       .attr("aria-expanded", "false");
+  }
+
+  function ensureNativeTabsRegistration($host, $panel) {
+    var $container = getTabsContainer($host);
+    if (!$container.length || typeof $container.tabs !== "function") return false;
+    if (!$container.hasClass("ui-tabs") && !$container.data("ui-tabs") && !$container.data("tabs")) return false;
+
+    if ($panel && $panel.length) {
+      $panel.addClass("ui-tabs-panel ui-widget-content ui-corner-bottom");
+    }
+
+    try {
+      $container.tabs("refresh");
+      return true;
+    } catch (err) {
+      return false;
+    }
+  }
+
+  function activateNativeTabPanel($host, $button, $panel) {
+    var $container = getTabsContainer($host);
+    if (!$container.length || !$button.length || !$panel.length) return false;
+    if (!ensureNativeTabsRegistration($host, $panel)) return false;
+
+    var index = $host.children("li,[role='tab']").index($button);
+    if (index < 0) return false;
+
+    try {
+      $container.tabs("option", "active", index);
+    } catch (err) {
+      try {
+        $container.tabs("select", index);
+      } catch (err2) {
+        return false;
+      }
+    }
+
+    return $panel.is(":visible") ||
+      $button.hasClass("ui-tabs-active") ||
+      $button.hasClass("ui-state-active") ||
+      $button.attr("aria-selected") === "true";
   }
 
   function applyJourneyPanelSizing($panel) {
@@ -406,11 +470,21 @@
   }
 
   function setJourneyTabVisualState($host) {
-    $host.children('[data-wise-project-journey-tab="1"]').each(function () {
-      $(this)
-        .addClass("is-wise-journey-active")
-        .attr("aria-selected", "true")
-        .attr("aria-expanded", "true");
+    $host.children("li,[role='tab']").each(function () {
+      var $tab = $(this);
+      var active = $tab.is('[data-wise-project-journey-tab="1"]');
+      $tab.toggleClass("is-wise-journey-active", active);
+      if (active) {
+        $tab
+          .addClass("ui-tabs-active ui-state-active")
+          .attr("aria-selected", "true")
+          .attr("aria-expanded", "true");
+      } else if (!$tab.is('[data-wise-job-checklist="1"]')) {
+        $tab
+          .removeClass("ui-tabs-active ui-state-active")
+          .attr("aria-selected", "false")
+          .attr("aria-expanded", "false");
+      }
     });
   }
 
