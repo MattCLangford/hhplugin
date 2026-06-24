@@ -24,9 +24,160 @@
     "Suppliers",
     "Kit / Warehouse"
   ];
+  var FIELD_MAP = {
+    projectSystem: {
+      outgoingDateTime: {
+        name: "Kit Booking Start",
+        logicalName: "{{project.out_datetime}}",
+        objectKeys: ["out_datetime", "OUT_DATETIME", "OUT_DATE_TIME", "out_date_time", "outDateTime", "OUTGOING_DATE_TIME", "outgoing_date_time", "outgoingDateTime", "OUTGOING", "outgoing"],
+        labels: ["kit booking start", "outgoing date time", "outgoing datetime", "outgoing time"],
+        note: "No kit is assigned to a project; kept only as a system field."
+      },
+      startDateTime: {
+        name: "Project/Onsite Start",
+        logicalName: "{{project.start_datetime}}",
+        upstream: "Event_Start_Date__c",
+        objectKeys: ["start_datetime", "START_DATETIME", "START_DATE_TIME", "start_date_time", "startDateTime", "START", "start", "PROJECT_START_DATE_TIME", "project_start_date_time"],
+        labels: ["project/onsite start", "project onsite start", "start date time", "start datetime", "event start", "project start"],
+        note: "First day where Wise has responsibility or action on the event site."
+      },
+      projectEndDateTime: {
+        name: "Project/Onsite End",
+        logicalName: "{{project.end_datetime}}",
+        upstream: "Event_End_Date__c",
+        objectKeys: ["end_datetime", "END_DATETIME", "PROJECT_END_DATE_TIME", "project_end_date_time", "projectEndDateTime", "END_DATE_TIME", "end_date_time", "endDateTime", "PROJECT_END", "project_end", "END", "end"],
+        labels: ["project/onsite end", "project onsite end", "project end date time", "project end datetime", "event end", "project end"],
+        note: "Last day where Wise has responsibility or action on the event site."
+      },
+      returnDateTime: {
+        name: "Kit Booking End",
+        logicalName: "{{project.return_datetime}}",
+        objectKeys: ["return_datetime", "RETURN_DATETIME", "RETURN_DATE_TIME", "return_date_time", "returnDateTime", "RETURN", "return"],
+        labels: ["kit booking end", "return date time", "return datetime", "return time"],
+        note: "No kit is assigned to a project; kept only as a system field."
+      }
+    },
+    projectOperational: {
+      installStart: {
+        name: "Install start",
+        logicalName: "{{project._Install}}",
+        objectKeys: ["_Install", "~_Install", "INSTALL", "install", "install_start", "INSTALL_START"],
+        labels: ["install start", "earliest install activity"]
+      },
+      showStart: {
+        name: "Show start",
+        logicalName: "{{project._ShowStart}}",
+        objectKeys: ["_ShowStart", "~_ShowStart", "SHOW_START", "show_start", "showStart"],
+        labels: ["show start", "event to begin", "guests to enter"]
+      },
+      showEnd: {
+        name: "Show end",
+        logicalName: "{{project._ShowEnd}}",
+        objectKeys: ["_ShowEnd", "~_ShowEnd", "SHOW_END", "show_end", "showEnd"],
+        labels: ["show end", "event to fully end", "guests to leave"]
+      },
+      derigStart: {
+        name: "Derig start",
+        logicalName: "{{project._Derig}}",
+        objectKeys: ["_Derig", "~_Derig", "DERIG", "derig", "derig_start", "DERIG_START"],
+        labels: ["derig start", "earliest derig activity"]
+      }
+    },
+    jobSystem: {
+      kitBookingStart: {
+        name: "Kit Booking Start",
+        logicalName: "{{job.out_datetime}}",
+        aggregate: "earliest",
+        objectKeys: ["out_datetime", "OUT_DATETIME", "OUT_DATE_TIME", "out_date_time", "OUT_DATE", "out_date", "outDateTime", "outDate", "KIT_BOOKING_START", "kit_booking_start"],
+        labels: ["kit booking start", "first day of chargeable kit time"],
+        dateKeys: ["OUT_DATE", "out_date", "KIT_BOOKING_START_DATE", "kit_booking_start_date"],
+        timeKeys: ["OUT_TIME", "out_time", "KIT_BOOKING_START_TIME", "kit_booking_start_time"]
+      },
+      onsiteStart: {
+        name: "Project/Onsite Start",
+        logicalName: "{{job.start_datetime}}",
+        aggregate: "earliest",
+        objectKeys: ["start_datetime", "START_DATETIME", "START_DATE_TIME", "start_date_time", "JOB_DATE", "job_date", "startDateTime", "jobDate", "ONSITE_START"],
+        labels: ["project/onsite start", "project onsite start", "job onsite start"],
+        dateKeys: ["JOB_DATE", "job_date", "START_DATE", "start_date", "ONSITE_START_DATE"],
+        timeKeys: ["JOB_TIME", "job_time", "START_TIME", "start_time", "ONSITE_START_TIME"]
+      },
+      onsiteEnd: {
+        name: "Project/Onsite End",
+        logicalName: "{{job.end_datetime}}",
+        aggregate: "latest",
+        objectKeys: ["end_datetime", "END_DATETIME", "END_DATE_TIME", "end_date_time", "JOB_END", "job_end", "endDateTime", "jobEnd", "ONSITE_END"],
+        labels: ["project/onsite end", "project onsite end", "job onsite end", "clear of site"],
+        dateKeys: ["JOB_END", "job_end", "END_DATE", "end_date", "ONSITE_END_DATE"],
+        timeKeys: ["JOB_END_TIME", "job_end_time", "END_TIME", "end_time", "ONSITE_END_TIME"]
+      },
+      kitBookingEnd: {
+        name: "Kit Booking End",
+        logicalName: "{{job.return_datetime}}",
+        aggregate: "latest",
+        objectKeys: ["return_datetime", "RETURN_DATETIME", "RETURN_DATE_TIME", "return_date_time", "RETURN_DATE", "return_date", "returnDateTime", "returnDate", "KIT_BOOKING_END", "kit_booking_end"],
+        labels: ["kit booking end", "last day of chargeable kit time"],
+        dateKeys: ["RETURN_DATE", "return_date", "KIT_BOOKING_END_DATE", "kit_booking_end_date"],
+        timeKeys: ["RETURN_TIME", "return_time", "KIT_BOOKING_END_TIME", "kit_booking_end_time"]
+      }
+    },
+    jobOperational: {
+      preProd: {
+        name: "Pre-prod Sign off/meeting",
+        logicalName: "{{job._PreProd}}",
+        aggregate: "latest",
+        targetDaysBeforeStart: 21,
+        objectKeys: ["_PreProd", "~_PreProd", "PREPROD", "preprod", "pre_prod", "preProd"],
+        labels: ["pre-prod sign off/meeting", "pre-prod sign off", "pre production sign off"]
+      },
+      supplier: {
+        name: "Supplier engaged",
+        logicalName: "{{job._Supplier}}",
+        aggregate: "latest",
+        targetDaysBeforeStart: 21,
+        objectKeys: ["_Supplier", "~_Supplier", "SUPPLIER", "supplier", "supplier_engaged", "supplierEngaged"],
+        labels: ["supplier engaged", "supplier visibility"]
+      },
+      wisePrep: {
+        name: "Wise prep start",
+        logicalName: "{{job._WisePrep}}",
+        aggregate: "earliest",
+        objectKeys: ["_WisePrep", "~_WisePrep", "WISE_PREP", "wise_prep", "wisePrep"],
+        labels: ["wise prep start", "first wise required prep activity"]
+      },
+      load: {
+        name: "Vehicle Load",
+        logicalName: "{{job._Load}}",
+        aggregate: "earliest",
+        objectKeys: ["_Load", "~_Load", "LOAD", "load", "vehicle_load", "vehicleLoad"],
+        labels: ["vehicle load", "planned load"]
+      },
+      vehicleInstall: {
+        name: "Vehicle Onsite - Install",
+        logicalName: "{{job._VehicleInstall}}",
+        aggregate: "earliest",
+        objectKeys: ["_VehicleInstall", "~_VehicleInstall", "VEHICLE_INSTALL", "vehicle_install", "vehicleInstall"],
+        labels: ["vehicle onsite - install", "vehicle install"]
+      },
+      vehicleDerig: {
+        name: "Vehicle Onsite - Derig",
+        logicalName: "{{job._VehicleDerig}}",
+        aggregate: "latest",
+        objectKeys: ["_VehicleDerig", "~_VehicleDerig", "VEHICLE_DERIG", "vehicle_derig", "vehicleDerig"],
+        labels: ["vehicle onsite - derig", "vehicle derig"]
+      },
+      vehicleTip: {
+        name: "Vehicle Tip",
+        logicalName: "{{job._Tip}}",
+        aggregate: "latest",
+        objectKeys: ["_Tip", "~_Tip", "TIP", "tip", "vehicle_tip", "vehicleTip"],
+        labels: ["vehicle tip"]
+      }
+    }
+  };
 
   var CFG = {
-    version: "2026-06-24.5",
+    version: "2026-06-24.6",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -572,6 +723,8 @@
     };
 
     var systemDates = getProjectSystemDates(projectWindow);
+    var projectOperationalDates = getProjectOperationalDates(projectWindow);
+    var jobDates = getProjectJobDates();
     var wiseEventStart = firstNonEmpty([
       systemDates.startDateTime,
       firstObjectValue(projectWindow, ["WISE_EVENT_START", "wise_event_start", "wiseEventStart", "SALESFORCE_START", "salesforce_start", "EVENT_START", "event_start", "PROJECT_START", "project_start"])
@@ -586,35 +739,12 @@
       wiseEventStart: wiseEventStart,
       wiseEventEnd: wiseEventEnd,
       projectSystemDates: systemDates,
-      hireHopFixedDates: [
-        {
-          label: "Outgoing Date Time",
-          friendlyLabel: "Project outgoing",
-          dateTime: systemDates.outgoingDateTime,
-          note: "Project system bookend; detailed kit timing belongs at job level."
-        },
-        {
-          label: "Start Date Time",
-          friendlyLabel: "Project/Onsite Start",
-          dateTime: wiseEventStart,
-          note: "Wise responsibility/activity starts on site."
-        },
-        {
-          label: "Project End Date Time",
-          friendlyLabel: "Project/Onsite End",
-          dateTime: wiseEventEnd,
-          note: "Wise responsibility/activity ends on site."
-        },
-        {
-          label: "Return Date Time",
-          friendlyLabel: "Project return",
-          dateTime: systemDates.returnDateTime,
-          note: "Project system bookend; detailed return timing belongs at job level."
-        }
-      ],
-      jobKitBookingStart: "",
-      jobKitBookingEnd: "",
-      milestones: buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates),
+      projectOperationalDates: projectOperationalDates,
+      jobDates: jobDates,
+      hireHopFixedDates: buildDefaultFixedDates(wiseEventStart, wiseEventEnd, systemDates),
+      jobKitBookingStart: jobDates.kitBookingStart,
+      jobKitBookingEnd: jobDates.kitBookingEnd,
+      milestones: buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates, projectOperationalDates, jobDates),
       isMock: false
     };
   }
@@ -623,202 +753,558 @@
     projectWindow = projectWindow && typeof projectWindow === "object" ? projectWindow : {};
 
     return {
-      outgoingDateTime: firstNonEmpty([
-        firstObjectValue(projectWindow, ["OUTGOING_DATE_TIME", "outgoing_date_time", "outgoingDateTime", "OUTGOING", "outgoing", "OUT_DATE_TIME", "out_date_time"]),
-        readProjectInfoDateTimeField(["outgoing date time", "outgoing datetime", "outgoing time"])
-      ]),
-      startDateTime: firstNonEmpty([
-        firstObjectValue(projectWindow, ["START_DATE_TIME", "start_date_time", "startDateTime", "START_DATETIME", "start_datetime", "START", "start", "PROJECT_START_DATE_TIME", "project_start_date_time"]),
-        readProjectInfoDateTimeField(["start date time", "start datetime", "project/onsite start", "project onsite start", "wise event start", "salesforce start", "event start", "project start"])
-      ]),
-      projectEndDateTime: firstNonEmpty([
-        firstObjectValue(projectWindow, ["PROJECT_END_DATE_TIME", "project_end_date_time", "projectEndDateTime", "END_DATE_TIME", "end_date_time", "endDateTime", "PROJECT_END", "project_end", "END", "end"]),
-        readProjectInfoDateTimeField(["project end date time", "project end datetime", "project/onsite end", "project onsite end", "wise event end", "salesforce end", "event end", "project end"])
-      ]),
-      returnDateTime: firstNonEmpty([
-        firstObjectValue(projectWindow, ["RETURN_DATE_TIME", "return_date_time", "returnDateTime", "RETURN_DATETIME", "return_datetime", "RETURN", "return"]),
-        readProjectInfoDateTimeField(["return date time", "return datetime", "return time"])
-      ])
+      outgoingDateTime: readMappedProjectDateTime(projectWindow, FIELD_MAP.projectSystem.outgoingDateTime),
+      startDateTime: readMappedProjectDateTime(projectWindow, FIELD_MAP.projectSystem.startDateTime),
+      projectEndDateTime: readMappedProjectDateTime(projectWindow, FIELD_MAP.projectSystem.projectEndDateTime),
+      returnDateTime: readMappedProjectDateTime(projectWindow, FIELD_MAP.projectSystem.returnDateTime)
     };
   }
 
-  function buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates) {
+  function getProjectOperationalDates(projectWindow) {
+    projectWindow = projectWindow && typeof projectWindow === "object" ? projectWindow : {};
+
+    return {
+      installStart: readMappedProjectDateTime(projectWindow, FIELD_MAP.projectOperational.installStart),
+      showStart: readMappedProjectDateTime(projectWindow, FIELD_MAP.projectOperational.showStart),
+      showEnd: readMappedProjectDateTime(projectWindow, FIELD_MAP.projectOperational.showEnd),
+      derigStart: readMappedProjectDateTime(projectWindow, FIELD_MAP.projectOperational.derigStart)
+    };
+  }
+
+  function getProjectJobDates() {
+    var rows = getProjectJobRows();
+    var out = {
+      sourceCount: rows.length,
+      kitBookingStart: aggregateMappedJobDateTime(rows, FIELD_MAP.jobSystem.kitBookingStart),
+      onsiteStart: aggregateMappedJobDateTime(rows, FIELD_MAP.jobSystem.onsiteStart),
+      onsiteEnd: aggregateMappedJobDateTime(rows, FIELD_MAP.jobSystem.onsiteEnd),
+      kitBookingEnd: aggregateMappedJobDateTime(rows, FIELD_MAP.jobSystem.kitBookingEnd),
+      preProd: aggregateMappedJobDateTime(rows, FIELD_MAP.jobOperational.preProd),
+      supplier: aggregateMappedJobDateTime(rows, FIELD_MAP.jobOperational.supplier),
+      wisePrep: aggregateMappedJobDateTime(rows, FIELD_MAP.jobOperational.wisePrep),
+      load: aggregateMappedJobDateTime(rows, FIELD_MAP.jobOperational.load),
+      vehicleInstall: aggregateMappedJobDateTime(rows, FIELD_MAP.jobOperational.vehicleInstall),
+      vehicleDerig: aggregateMappedJobDateTime(rows, FIELD_MAP.jobOperational.vehicleDerig),
+      vehicleTip: aggregateMappedJobDateTime(rows, FIELD_MAP.jobOperational.vehicleTip)
+    };
+
+    out.hasDates = !!(out.kitBookingStart || out.onsiteStart || out.onsiteEnd || out.kitBookingEnd ||
+      out.preProd || out.supplier || out.wisePrep || out.load || out.vehicleInstall || out.vehicleDerig || out.vehicleTip);
+    return out;
+  }
+
+  function readMappedProjectDateTime(projectWindow, map) {
+    return firstNonEmpty([
+      readMappedDateTimeFromObject(projectWindow, map),
+      readProjectInfoDateTimeField((map && map.labels) || [])
+    ]);
+  }
+
+  function aggregateMappedJobDateTime(rows, map) {
+    var values = [];
+    for (var i = 0; i < rows.length; i++) {
+      var value = readMappedDateTimeFromObject(rows[i], map);
+      if (value) values.push(value);
+    }
+    return pickDateTimeValue(values, map && map.aggregate === "latest" ? "latest" : "earliest");
+  }
+
+  function readMappedDateTimeFromObject(object, map) {
+    if (!object || typeof object !== "object" || !map) return "";
+
+    var direct = readMappedObjectValue(object, (map.objectKeys || []).concat(map.labels || []));
+    if (direct && dateValueHasDateAndTime(direct)) return direct;
+
+    var dateValue = readMappedObjectValue(object, map.dateKeys || []);
+    var timeValue = readMappedObjectValue(object, map.timeKeys || []);
+    var combined = combineDateTimeValues([direct, dateValue, timeValue]);
+    return combined || direct || "";
+  }
+
+  function readMappedObjectValue(object, keys) {
+    var aliases = buildFieldAliases(keys || []);
+    var value = firstObjectValue(object, aliases);
+    if (value !== "") return asText(value).trim();
+
+    value = readCustomFieldContainers(object, aliases);
+    if (value !== "") return asText(value).trim();
+
+    var aliasLookup = {};
+    for (var i = 0; i < aliases.length; i++) {
+      aliasLookup[normaliseFieldKey(aliases[i])] = true;
+    }
+
+    for (var key in object) {
+      if (!Object.prototype.hasOwnProperty.call(object, key)) continue;
+      if (!aliasLookup[normaliseFieldKey(key)]) continue;
+      if (object[key] != null && object[key] !== "") return asText(object[key]).trim();
+    }
+
+    return "";
+  }
+
+  function readCustomFieldContainers(object, aliases) {
+    var containers = [
+      object.CUSTOM_FIELDS,
+      object.custom_fields,
+      object.CUSTOMFIELDS,
+      object.customFields,
+      object.PROJECT_CUSTOM_FIELDS,
+      object.project_custom_fields,
+      object.JOB_CUSTOM_FIELDS,
+      object.job_custom_fields
+    ];
+
+    for (var i = 0; i < containers.length; i++) {
+      var value = readCustomFieldContainer(containers[i], aliases);
+      if (value !== "") return value;
+    }
+
+    return "";
+  }
+
+  function readCustomFieldContainer(container, aliases) {
+    container = parsePossibleJson(container);
+    if (!container) return "";
+
+    if ($.isArray(container)) {
+      for (var i = 0; i < container.length; i++) {
+        var item = container[i];
+        if (!item || typeof item !== "object") continue;
+        var key = firstNonEmpty([
+          item.key,
+          item.name,
+          item.label,
+          item.field,
+          item.fieldName,
+          item.logicalName,
+          item.logical_name
+        ]);
+        if (!fieldNameMatches(key, aliases)) continue;
+        return firstNonEmpty([item.value, item.dateTime, item.datetime, item.date, item.text]);
+      }
+      return "";
+    }
+
+    if (typeof container === "object") {
+      return readMappedObjectValue(container, aliases);
+    }
+
+    return "";
+  }
+
+  function parsePossibleJson(value) {
+    if (!value || typeof value !== "string") return value;
+    var text = value.trim();
+    if (!text || (text.charAt(0) !== "{" && text.charAt(0) !== "[")) return value;
+    try {
+      return JSON.parse(text);
+    } catch (err) {
+      return value;
+    }
+  }
+
+  function fieldNameMatches(value, aliases) {
+    var key = normaliseFieldKey(value);
+    if (!key) return false;
+    for (var i = 0; i < aliases.length; i++) {
+      if (key === normaliseFieldKey(aliases[i])) return true;
+    }
+    return false;
+  }
+
+  function buildFieldAliases(keys) {
+    var out = [];
+    for (var i = 0; i < keys.length; i++) {
+      addFieldAlias(out, keys[i]);
+      addFieldAlias(out, "~" + keys[i]);
+      addFieldAlias(out, asText(keys[i]).replace(/^~?_+/, ""));
+    }
+    return out;
+  }
+
+  function addFieldAlias(out, value) {
+    value = asText(value).trim();
+    if (value && out.indexOf(value) === -1) out.push(value);
+  }
+
+  function getProjectJobRows() {
+    var rows = [];
+    appendObjectRows(rows, window.WiseProjectJourneyJobs);
+    appendObjectRows(rows, window.projectJobs);
+    appendObjectRows(rows, window.project_jobs);
+    appendObjectRows(rows, window.jobs);
+    appendObjectRows(rows, window.JOBS);
+    appendObjectRows(rows, window.project && window.project.jobs);
+    appendObjectRows(rows, window.project && window.project.JOBS);
+    appendJqGridRows(rows);
+    appendDomGridRows(rows);
+    return dedupeObjectRows(rows);
+  }
+
+  function appendObjectRows(target, value) {
+    if (!value) return;
+    if ($.isArray(value)) {
+      for (var i = 0; i < value.length; i++) appendObjectRows(target, value[i]);
+      return;
+    }
+    if (value && typeof value === "object") {
+      if ($.isArray(value.rows)) appendObjectRows(target, value.rows);
+      else if ($.isArray(value.data)) appendObjectRows(target, value.data);
+      else if ($.isArray(value.items)) appendObjectRows(target, value.items);
+      else target.push(value.rowData && typeof value.rowData === "object" ? value.rowData : value);
+    }
+  }
+
+  function appendJqGridRows(target) {
+    $("#jobs_grid,#project_jobs_grid,table[id*='jobs'][id*='grid']").each(function () {
+      var $grid = $(this);
+      if (!$grid.length || typeof $grid.jqGrid !== "function") return;
+
+      try {
+        appendObjectRows(target, $grid.jqGrid("getGridParam", "data"));
+      } catch (err) {}
+
+      try {
+        var ids = $grid.jqGrid("getDataIDs") || [];
+        for (var i = 0; i < ids.length; i++) {
+          appendObjectRows(target, $grid.jqGrid("getRowData", ids[i]));
+        }
+      } catch (err2) {}
+    });
+  }
+
+  function appendDomGridRows(target) {
+    $("#jobs_grid,#project_jobs_grid,table[id*='jobs'][id*='grid']").each(function () {
+      var $grid = $(this);
+      var headers = getGridHeaders($grid);
+      $grid.find("tbody tr,tr.jqgrow").each(function () {
+        var row = {};
+        $(this).children("td").each(function (index) {
+          var key = headers[index] || $(this).attr("aria-describedby") || $(this).attr("data-field") || ("col_" + index);
+          row[key] = compactText($(this).text());
+        });
+        if (hasObjectTextValue(row)) target.push(row);
+      });
+    });
+  }
+
+  function getGridHeaders($grid) {
+    var id = $grid.attr("id");
+    var headers = [];
+    var $headers = id ? $("#gbox_" + id).find(".ui-jqgrid-htable th") : $();
+    if (!$headers.length) $headers = $grid.find("thead th");
+
+    $headers.each(function () {
+      headers.push(compactText($(this).text()) || $(this).attr("id") || $(this).attr("aria-describedby") || "");
+    });
+
+    return headers;
+  }
+
+  function dedupeObjectRows(rows) {
+    var seen = {};
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+      if (!rows[i] || typeof rows[i] !== "object") continue;
+      if (!hasObjectTextValue(rows[i])) continue;
+      var key = firstObjectValue(rows[i], ["id", "ID", "job_id", "JOB_ID", "NUMBER", "number"]) || JSON.stringify(rows[i]).substr(0, 180);
+      if (seen[key]) continue;
+      seen[key] = true;
+      out.push(rows[i]);
+    }
+    return out;
+  }
+
+  function hasObjectTextValue(object) {
+    for (var key in object) {
+      if (!Object.prototype.hasOwnProperty.call(object, key)) continue;
+      if (compactText(object[key])) return true;
+    }
+    return false;
+  }
+
+  function pickDateTimeValue(values, mode) {
+    var chosen = "";
+    var chosenDate = null;
+
+    for (var i = 0; i < values.length; i++) {
+      var value = asText(values[i]).trim();
+      if (!value) continue;
+      var date = parseDate(value);
+      if (!date) {
+        if (!chosen) chosen = value;
+        continue;
+      }
+      if (!chosenDate ||
+          (mode === "latest" && date.getTime() > chosenDate.getTime()) ||
+          (mode !== "latest" && date.getTime() < chosenDate.getTime())) {
+        chosenDate = date;
+        chosen = value;
+      }
+    }
+
+    return chosen;
+  }
+
+  function normaliseFieldKey(value) {
+    return normaliseComparable(value).replace(/[^a-z0-9]+/g, "");
+  }
+
+  function buildDefaultFixedDates(wiseEventStart, wiseEventEnd, systemDates) {
     systemDates = normaliseProjectSystemDates(systemDates || {});
+
+    return [
+      {
+        label: "Start Date Time",
+        friendlyLabel: "Project/Onsite Start",
+        dateTime: systemDates.startDateTime || wiseEventStart,
+        note: FIELD_MAP.projectSystem.startDateTime.logicalName + " via " + FIELD_MAP.projectSystem.startDateTime.upstream
+      },
+      {
+        label: "Project End Date Time",
+        friendlyLabel: "Project/Onsite End",
+        dateTime: systemDates.projectEndDateTime || wiseEventEnd,
+        note: FIELD_MAP.projectSystem.projectEndDateTime.logicalName + " via " + FIELD_MAP.projectSystem.projectEndDateTime.upstream
+      }
+    ];
+  }
+
+  function buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates, projectOperationalDates, jobDates) {
+    systemDates = normaliseProjectSystemDates(systemDates || {});
+    projectOperationalDates = normaliseProjectOperationalDates(projectOperationalDates || {});
+    jobDates = normaliseJobJourneyDates(jobDates || {});
+    var hasJobSource = hasJobJourneySource(jobDates);
+    var projectStart = wiseEventStart || systemDates.startDateTime;
+    var projectEnd = wiseEventEnd || systemDates.projectEndDateTime;
 
     return [
       {
         id: "pre-production",
         group: "Pre-Production",
-        name: "Pre-production sign-off",
-        plannedDateTime: "",
+        name: "Pre-prod Sign off/meeting",
+        plannedDateTime: jobDates.preProd,
         actualDateTime: "",
         owner: "Project Management",
-        status: "Not Started",
-        riskLevel: "None",
+        status: jobDates.preProd ? "Not Started" : "Missing",
+        riskLevel: jobDates.preProd ? "None" : "Missing",
         criticalPath: false,
         optional: true,
         timingType: "offsite-prep",
         dependencies: [],
-        notes: "Optional until a production sign-off field is mapped."
+        targetDaysBeforeStart: FIELD_MAP.jobOperational.preProd.targetDaysBeforeStart,
+        notes: "Mapped from " + FIELD_MAP.jobOperational.preProd.logicalName + "; target is at least 21 days before Project/Onsite Start."
       },
       {
-        id: "project-outgoing",
+        id: "supplier-engaged",
         group: "Supplier / Kit Prep",
-        name: "Project outgoing",
-        plannedDateTime: systemDates.outgoingDateTime,
-        actualDateTime: "",
-        owner: "Kit / Warehouse",
-        status: systemDates.outgoingDateTime ? "Not Started" : "Missing",
-        riskLevel: systemDates.outgoingDateTime ? "None" : "Missing",
-        criticalPath: true,
-        timingType: "offsite-prep",
-        dependencies: ["pre-production"],
-        notes: "Mapped from Outgoing Date Time."
-      },
-      {
-        id: "supplier-delivery",
-        group: "Supplier / Kit Prep",
-        name: "Supplier delivery confirmed",
-        plannedDateTime: "",
+        name: "Supplier engaged",
+        plannedDateTime: jobDates.supplier,
         actualDateTime: "",
         owner: "Suppliers",
-        status: "Not Started",
-        riskLevel: "None",
+        status: jobDates.supplier ? "Not Started" : "Missing",
+        riskLevel: jobDates.supplier ? "None" : "Missing",
         criticalPath: false,
         optional: true,
         timingType: "offsite-prep",
         dependencies: ["pre-production"],
-        notes: "Optional until supplier timing is mapped."
+        targetDaysBeforeStart: FIELD_MAP.jobOperational.supplier.targetDaysBeforeStart,
+        notes: "Mapped from " + FIELD_MAP.jobOperational.supplier.logicalName + "; target is at least 3 weeks before Project/Onsite Start."
       },
       {
-        id: "kit-prep",
+        id: "wise-prep-start",
         group: "Supplier / Kit Prep",
-        name: "Kit prep complete",
-        plannedDateTime: systemDates.outgoingDateTime,
+        name: "Wise prep start",
+        plannedDateTime: jobDates.wisePrep,
         actualDateTime: "",
-        owner: "Kit / Warehouse",
-        status: systemDates.outgoingDateTime ? "Not Started" : "Missing",
-        riskLevel: systemDates.outgoingDateTime ? "None" : "Missing",
-        criticalPath: true,
-        timingType: "offsite-prep",
-        dependencies: ["project-outgoing"],
-        notes: "Seeded from Outgoing Date Time until job-level prep timing is mapped."
-      },
-      {
-        id: "load",
-        group: "Load / Transport",
-        name: "Vehicle allocated and loaded",
-        plannedDateTime: "",
-        actualDateTime: "",
-        owner: "Crew & Logistics",
-        status: "Not Started",
-        riskLevel: "None",
+        owner: "Project Management",
+        status: jobDates.wisePrep ? "Not Started" : "Missing",
+        riskLevel: jobDates.wisePrep ? "None" : "Missing",
         criticalPath: false,
         optional: true,
         timingType: "offsite-prep",
-        dependencies: ["kit-prep"],
-        notes: "Optional until vehicle allocation timing is mapped."
+        dependencies: ["supplier-engaged"],
+        notes: "Mapped from " + FIELD_MAP.jobOperational.wisePrep.logicalName + "."
       },
       {
-        id: "site-arrival",
-        group: "Site Arrival",
-        name: "Site arrival",
-        plannedDateTime: wiseEventStart,
+        id: "kit-booking-start",
+        group: "Supplier / Kit Prep",
+        name: "Kit Booking Start",
+        plannedDateTime: jobDates.kitBookingStart,
+        actualDateTime: "",
+        owner: "Kit / Warehouse",
+        status: jobDates.kitBookingStart ? "Not Started" : "Missing",
+        riskLevel: jobDates.kitBookingStart ? "None" : "Missing",
+        criticalPath: true,
+        optional: !hasJobSource,
+        timingType: "offsite-prep",
+        dependencies: ["wise-prep-start"],
+        notes: "Earliest " + FIELD_MAP.jobSystem.kitBookingStart.logicalName + " across project jobs."
+      },
+      {
+        id: "vehicle-load",
+        group: "Load / Transport",
+        name: "Vehicle Load",
+        plannedDateTime: jobDates.load,
         actualDateTime: "",
         owner: "Crew & Logistics",
-        status: wiseEventStart ? "Not Started" : "Missing",
-        riskLevel: wiseEventStart ? "None" : "Missing",
-        criticalPath: true,
-        timingType: "onsite",
-        dependencies: ["load"],
-        notes: "Defaulted from Project/Onsite Start until a specific site arrival time is mapped."
+        status: jobDates.load ? "Not Started" : "Missing",
+        riskLevel: jobDates.load ? "None" : "Missing",
+        criticalPath: false,
+        optional: true,
+        timingType: "offsite-prep",
+        dependencies: ["kit-booking-start"],
+        notes: "Mapped from " + FIELD_MAP.jobOperational.load.logicalName + "."
       },
       {
-        id: "build-start",
+        id: "vehicle-onsite-install",
+        group: "Site Arrival",
+        name: "Vehicle Onsite - Install",
+        plannedDateTime: jobDates.vehicleInstall,
+        actualDateTime: "",
+        owner: "Crew & Logistics",
+        status: jobDates.vehicleInstall ? "Not Started" : "Missing",
+        riskLevel: jobDates.vehicleInstall ? "None" : "Missing",
+        criticalPath: false,
+        optional: true,
+        timingType: "onsite",
+        dependencies: ["vehicle-load"],
+        notes: "Mapped from " + FIELD_MAP.jobOperational.vehicleInstall.logicalName + "; otherwise use " + FIELD_MAP.jobSystem.onsiteStart.logicalName + " where vehicle is the earliest resource."
+      },
+      {
+        id: "job-onsite-start",
+        group: "Site Arrival",
+        name: "Job onsite start",
+        plannedDateTime: jobDates.onsiteStart || projectStart,
+        actualDateTime: "",
+        owner: "Crew & Logistics",
+        status: (jobDates.onsiteStart || projectStart) ? "Not Started" : "Missing",
+        riskLevel: (jobDates.onsiteStart || projectStart) ? "None" : "Missing",
+        criticalPath: true,
+        optional: !hasJobSource && !!projectStart,
+        timingType: "onsite",
+        dependencies: ["vehicle-onsite-install"],
+        notes: jobDates.onsiteStart ? "Earliest " + FIELD_MAP.jobSystem.onsiteStart.logicalName + " across project jobs." : "Using Project/Onsite Start until job-level onsite starts are available."
+      },
+      {
+        id: "install-start",
         group: "Build",
-        name: "Build start",
-        plannedDateTime: wiseEventStart,
+        name: "Install start",
+        plannedDateTime: projectOperationalDates.installStart,
         actualDateTime: "",
         owner: "Production",
-        status: wiseEventStart ? "Not Started" : "Missing",
-        riskLevel: wiseEventStart ? "None" : "Missing",
-        criticalPath: true,
+        status: projectOperationalDates.installStart ? "Not Started" : "Missing",
+        riskLevel: projectOperationalDates.installStart ? "None" : "Missing",
+        criticalPath: false,
+        optional: true,
         timingType: "onsite",
-        dependencies: ["site-arrival"],
-        notes: "Seeded from Project/Onsite Start until a specific build time is mapped."
+        dependencies: ["job-onsite-start"],
+        notes: "Mapped from " + FIELD_MAP.projectOperational.installStart.logicalName + "; job onsite starts should be on or after this time."
       },
       {
         id: "show-start",
         group: "Show",
         name: "Show start",
-        plannedDateTime: "",
+        plannedDateTime: projectOperationalDates.showStart,
         actualDateTime: "",
         owner: "Technical",
-        status: "Not Started",
-        riskLevel: "None",
+        status: projectOperationalDates.showStart ? "Not Started" : "Missing",
+        riskLevel: projectOperationalDates.showStart ? "None" : "Missing",
         criticalPath: false,
         optional: true,
         timingType: "onsite",
-        dependencies: ["build-start"],
-        notes: "Optional until show timing is mapped."
+        dependencies: ["install-start"],
+        notes: "Mapped from " + FIELD_MAP.projectOperational.showStart.logicalName + "."
       },
       {
         id: "show-end",
         group: "Show",
         name: "Show end",
-        plannedDateTime: "",
+        plannedDateTime: projectOperationalDates.showEnd,
         actualDateTime: "",
         owner: "Technical",
-        status: "Not Started",
-        riskLevel: "None",
+        status: projectOperationalDates.showEnd ? "Not Started" : "Missing",
+        riskLevel: projectOperationalDates.showEnd ? "None" : "Missing",
         criticalPath: false,
         optional: true,
         timingType: "onsite",
         dependencies: ["show-start"],
-        notes: "Optional until show timing is mapped."
+        notes: "Mapped from " + FIELD_MAP.projectOperational.showEnd.logicalName + "."
       },
       {
         id: "derig-start",
         group: "Derig",
         name: "Derig start",
-        plannedDateTime: "",
+        plannedDateTime: projectOperationalDates.derigStart,
         actualDateTime: "",
         owner: "Production",
-        status: "Not Started",
-        riskLevel: "None",
+        status: projectOperationalDates.derigStart ? "Not Started" : "Missing",
+        riskLevel: projectOperationalDates.derigStart ? "None" : "Missing",
         criticalPath: false,
         optional: true,
         timingType: "onsite",
         dependencies: ["show-end"],
-        notes: "Optional until derig timing is mapped."
+        notes: "Mapped from " + FIELD_MAP.projectOperational.derigStart.logicalName + "."
+      },
+      {
+        id: "vehicle-onsite-derig",
+        group: "Derig",
+        name: "Vehicle Onsite - Derig",
+        plannedDateTime: jobDates.vehicleDerig,
+        actualDateTime: "",
+        owner: "Crew & Logistics",
+        status: jobDates.vehicleDerig ? "Not Started" : "Missing",
+        riskLevel: jobDates.vehicleDerig ? "None" : "Missing",
+        criticalPath: false,
+        optional: true,
+        timingType: "onsite",
+        dependencies: ["derig-start"],
+        notes: "Mapped from " + FIELD_MAP.jobOperational.vehicleDerig.logicalName + "; otherwise use " + FIELD_MAP.jobSystem.onsiteEnd.logicalName + " where vehicle is the latest resource."
       },
       {
         id: "site-clear",
         group: "Site Clear",
         name: "Site clear",
-        plannedDateTime: wiseEventEnd,
+        plannedDateTime: jobDates.onsiteEnd || projectEnd,
         actualDateTime: "",
         owner: "Crew & Logistics",
-        status: wiseEventEnd ? "Not Started" : "Missing",
-        riskLevel: wiseEventEnd ? "None" : "Missing",
+        status: (jobDates.onsiteEnd || projectEnd) ? "Not Started" : "Missing",
+        riskLevel: (jobDates.onsiteEnd || projectEnd) ? "None" : "Missing",
         criticalPath: true,
+        optional: !hasJobSource && !!projectEnd,
         timingType: "onsite",
-        dependencies: ["derig-start"],
-        notes: "Defaulted from Project/Onsite End until a specific clear time is mapped."
+        dependencies: ["vehicle-onsite-derig"],
+        notes: jobDates.onsiteEnd ? "Latest " + FIELD_MAP.jobSystem.onsiteEnd.logicalName + " across project jobs." : "Using Project/Onsite End until job-level clear times are available."
       },
       {
-        id: "project-return",
+        id: "kit-booking-end",
         group: "Site Clear",
-        name: "Project return",
-        plannedDateTime: systemDates.returnDateTime,
+        name: "Kit Booking End",
+        plannedDateTime: jobDates.kitBookingEnd,
         actualDateTime: "",
         owner: "Kit / Warehouse",
-        status: systemDates.returnDateTime ? "Not Started" : "Missing",
-        riskLevel: systemDates.returnDateTime ? "None" : "Missing",
+        status: jobDates.kitBookingEnd ? "Not Started" : "Missing",
+        riskLevel: jobDates.kitBookingEnd ? "None" : "Missing",
         criticalPath: true,
+        optional: !hasJobSource,
         timingType: "offsite",
         dependencies: ["site-clear"],
-        notes: "Mapped from Return Date Time."
+        notes: "Latest " + FIELD_MAP.jobSystem.kitBookingEnd.logicalName + " across project jobs."
+      },
+      {
+        id: "vehicle-tip",
+        group: "Site Clear",
+        name: "Vehicle Tip",
+        plannedDateTime: jobDates.vehicleTip,
+        actualDateTime: "",
+        owner: "Crew & Logistics",
+        status: jobDates.vehicleTip ? "Not Started" : "Missing",
+        riskLevel: jobDates.vehicleTip ? "None" : "Missing",
+        criticalPath: false,
+        optional: true,
+        timingType: "offsite",
+        dependencies: ["kit-booking-end"],
+        notes: "Mapped from " + FIELD_MAP.jobOperational.vehicleTip.logicalName + "."
       }
     ];
   }
@@ -827,6 +1313,8 @@
     raw = raw || {};
     var project = raw.project && typeof raw.project === "object" ? raw.project : {};
     var systemDates = normaliseProjectSystemDates(raw.projectSystemDates || raw.systemDates || raw);
+    var projectOperationalDates = normaliseProjectOperationalDates(raw.projectOperationalDates || raw.operationalDates || raw.projectMilestones || raw);
+    var jobDates = normaliseJobJourneyDates(raw.jobDates || raw.jobSystemDates || raw.jobMilestoneDates || raw);
     var wiseEventStart = firstNonEmpty([raw.wiseEventStart, project.wiseEventStart, systemDates.startDateTime, raw.eventStart, raw.start]);
     var wiseEventEnd = firstNonEmpty([raw.wiseEventEnd, project.wiseEventEnd, systemDates.projectEndDateTime, raw.eventEnd, raw.end]);
     var milestones = normaliseMilestones(raw.milestones || raw.journeyMilestones || [], wiseEventStart, wiseEventEnd);
@@ -842,10 +1330,12 @@
       wiseEventStart: asText(wiseEventStart),
       wiseEventEnd: asText(wiseEventEnd),
       projectSystemDates: systemDates,
+      projectOperationalDates: projectOperationalDates,
+      jobDates: jobDates,
       hireHopFixedDates: normaliseFixedDates(raw.hireHopFixedDates || raw.fixedDates || [], wiseEventStart, wiseEventEnd, systemDates),
-      jobKitBookingStart: asText(raw.jobKitBookingStart || raw.kitBookingStart || ""),
-      jobKitBookingEnd: asText(raw.jobKitBookingEnd || raw.kitBookingEnd || ""),
-      milestones: milestones.length ? milestones : buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates),
+      jobKitBookingStart: asText(raw.jobKitBookingStart || raw.kitBookingStart || jobDates.kitBookingStart || ""),
+      jobKitBookingEnd: asText(raw.jobKitBookingEnd || raw.kitBookingEnd || jobDates.kitBookingEnd || ""),
+      milestones: milestones.length ? milestones : buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates, projectOperationalDates, jobDates),
       departments: normaliseDepartments(raw.departments || DEPARTMENTS)
     };
   }
@@ -854,11 +1344,49 @@
     value = value && typeof value === "object" ? value : {};
 
     return {
-      outgoingDateTime: asText(value.outgoingDateTime || value.outgoing || value.outgoingDate || ""),
-      startDateTime: asText(value.startDateTime || value.startDate || value.projectStartDateTime || ""),
-      projectEndDateTime: asText(value.projectEndDateTime || value.projectEnd || value.endDateTime || value.endDate || ""),
-      returnDateTime: asText(value.returnDateTime || value.return || value.returnDate || "")
+      outgoingDateTime: asText(value.outgoingDateTime || value.out_datetime || value.outgoing || value.outgoingDate || ""),
+      startDateTime: asText(value.startDateTime || value.start_datetime || value.startDate || value.projectStartDateTime || ""),
+      projectEndDateTime: asText(value.projectEndDateTime || value.end_datetime || value.projectEnd || value.endDateTime || value.endDate || ""),
+      returnDateTime: asText(value.returnDateTime || value.return_datetime || value.return || value.returnDate || "")
     };
+  }
+
+  function normaliseProjectOperationalDates(value) {
+    value = value && typeof value === "object" ? value : {};
+
+    return {
+      installStart: asText(value.installStart || value._Install || value.install || ""),
+      showStart: asText(value.showStart || value._ShowStart || value.show_start || ""),
+      showEnd: asText(value.showEnd || value._ShowEnd || value.show_end || ""),
+      derigStart: asText(value.derigStart || value._Derig || value.derig || "")
+    };
+  }
+
+  function normaliseJobJourneyDates(value) {
+    value = value && typeof value === "object" ? value : {};
+
+    var out = {
+      sourceCount: Number(value.sourceCount || value.count || 0) || 0,
+      kitBookingStart: asText(value.kitBookingStart || value.out_datetime || value.outDateTime || value.out || ""),
+      onsiteStart: asText(value.onsiteStart || value.start_datetime || value.startDateTime || value.start || ""),
+      onsiteEnd: asText(value.onsiteEnd || value.end_datetime || value.endDateTime || value.end || ""),
+      kitBookingEnd: asText(value.kitBookingEnd || value.return_datetime || value.returnDateTime || value.return || ""),
+      preProd: asText(value.preProd || value._PreProd || value.preProduction || ""),
+      supplier: asText(value.supplier || value._Supplier || value.supplierEngaged || ""),
+      wisePrep: asText(value.wisePrep || value._WisePrep || ""),
+      load: asText(value.load || value._Load || value.vehicleLoad || ""),
+      vehicleInstall: asText(value.vehicleInstall || value._VehicleInstall || ""),
+      vehicleDerig: asText(value.vehicleDerig || value._VehicleDerig || ""),
+      vehicleTip: asText(value.vehicleTip || value._Tip || "")
+    };
+
+    out.hasDates = !!(out.kitBookingStart || out.onsiteStart || out.onsiteEnd || out.kitBookingEnd ||
+      out.preProd || out.supplier || out.wisePrep || out.load || out.vehicleInstall || out.vehicleDerig || out.vehicleTip);
+    return out;
+  }
+
+  function hasJobJourneySource(jobDates) {
+    return !!(jobDates && jobDates.hasDates);
   }
 
   function normaliseFixedDates(fixedDates, wiseEventStart, wiseEventEnd, systemDates) {
@@ -877,30 +1405,7 @@
     }
 
     if (!out.length) {
-      out.push({
-        label: "Outgoing Date Time",
-        friendlyLabel: "Project outgoing",
-        dateTime: systemDates && systemDates.outgoingDateTime ? systemDates.outgoingDateTime : "",
-        note: "Project system bookend; detailed kit timing belongs at job level."
-      });
-      out.push({
-        label: "Start Date Time",
-        friendlyLabel: "Project/Onsite Start",
-        dateTime: systemDates && systemDates.startDateTime ? systemDates.startDateTime : wiseEventStart,
-        note: "Wise responsibility/activity starts on site."
-      });
-      out.push({
-        label: "Project End Date Time",
-        friendlyLabel: "Project/Onsite End",
-        dateTime: systemDates && systemDates.projectEndDateTime ? systemDates.projectEndDateTime : wiseEventEnd,
-        note: "Wise responsibility/activity ends on site."
-      });
-      out.push({
-        label: "Return Date Time",
-        friendlyLabel: "Project return",
-        dateTime: systemDates && systemDates.returnDateTime ? systemDates.returnDateTime : "",
-        note: "Project system bookend; detailed return timing belongs at job level."
-      });
+      return buildDefaultFixedDates(wiseEventStart, wiseEventEnd, systemDates);
     }
 
     return out;
@@ -931,6 +1436,7 @@
         dependencies: normaliseDependencies(item.dependencies),
         notes: asText(item.notes || item.note || ""),
         timingType: normaliseTimingType(item.timingType || item.locationType || ""),
+        targetDaysBeforeStart: Number(item.targetDaysBeforeStart || item.daysBeforeStart || 0) || 0,
         allowOutsideWrapper: item.allowOutsideWrapper === true || item.offsitePrep === true
       });
     }
@@ -1025,6 +1531,13 @@
         issues.push(createIssue("At Risk", "Supplier timing missing", milestone.name + " needs a confirmed supplier timing before the journey is ready.", milestone.id, milestone.criticalPath));
       }
 
+      if (planned && wrapperStart && milestone.targetDaysBeforeStart) {
+        var target = new Date(wrapperStart.getTime() - (milestone.targetDaysBeforeStart * 24 * 60 * 60 * 1000));
+        if (planned.getTime() > target.getTime()) {
+          issues.push(createIssue("At Risk", milestone.name + " is inside the target lead time", "Target is at least " + milestone.targetDaysBeforeStart + " days before Project/Onsite Start.", milestone.id, milestone.criticalPath));
+        }
+      }
+
       if (normaliseStatus(milestone.status) === "Blocked") {
         issues.push(createIssue("Blocked", milestone.name + " is blocked", milestone.notes || "Resolve the blocker before this journey can be considered ready.", milestone.id, milestone.criticalPath));
       } else if (normaliseStatus(milestone.status) === "At Risk") {
@@ -1044,8 +1557,7 @@
       }
     }
 
-    if ((!data.jobKitBookingStart || !data.jobKitBookingEnd) &&
-        !(data.projectSystemDates && data.projectSystemDates.outgoingDateTime && data.projectSystemDates.returnDateTime)) {
+    if (hasJobJourneySource(data.jobDates) && (!data.jobKitBookingStart || !data.jobKitBookingEnd)) {
       issues.push(createIssue("Missing Data", "Job operational kit timing is missing", "Map job-level prep, return and supplier timings so they are not confused with project wrapper dates.", "kit-booking", true));
     }
 
@@ -1092,14 +1604,14 @@
   }
 
   function addRelationshipIssues(issues, byId, wrapperEnd) {
-    var crewCall = byId["crew-call"] || byId["crew_call"];
-    var buildStart = byId["build-start"] || byId["build_start"];
+    var onsiteStart = byId["job-onsite-start"] || byId["job_onsite_start"];
+    var installStart = byId["install-start"] || byId["install_start"];
     var showEnd = byId["show-end"] || byId["show_end"];
     var derigStart = byId["derig-start"] || byId["derig_start"];
     var siteClear = byId["site-clear"] || byId["site_clear"];
 
-    if (crewCall && buildStart && compareMilestoneTimes(crewCall, buildStart) > 0) {
-      issues.push(createIssue("At Risk", "Crew call is after build start", "Crew need to be called before build starts.", crewCall.id, true));
+    if (onsiteStart && installStart && compareMilestoneTimes(onsiteStart, installStart) > 0) {
+      issues.push(createIssue("At Risk", "Job onsite start is after install start", "Job onsite activity should begin before the first install activity.", onsiteStart.id, true));
     }
 
     if (derigStart && showEnd && compareMilestoneTimes(derigStart, showEnd) < 0) {

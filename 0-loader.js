@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-06-24.5",
+    version: "2026-06-24.6",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -22,7 +22,7 @@
       stage: { file: "8-stagedesigner.js", version: "2.0" },
       checklist: { file: "9-jobchecklist.js", version: "1.0" },
       projectJobs: { file: "10-projectjobs-qol.js", version: "0.5" },
-      projectJourney: { file: "11-projectjourney.js", version: "0.5" }
+      projectJourney: { file: "11-projectjourney.js", version: "0.6" }
     }
   };
 
