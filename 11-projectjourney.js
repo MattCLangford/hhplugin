@@ -185,7 +185,7 @@
   };
 
   var CFG = {
-    version: "2026-06-24.9",
+    version: "2026-06-24.10",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -808,7 +808,12 @@
   }
 
   function getProjectJobDates() {
-    var rows = getProjectJobRows();
+    var allRows = getProjectJobRows();
+    // Filter to active jobs only (exclude cancelled/archived)
+    var rows = [];
+    for (var fi = 0; fi < allRows.length; fi++) {
+      if (isActiveJob(allRows[fi])) rows.push(allRows[fi]);
+    }
     var out = {
       sourceCount: rows.length,
       kitBookingStart: aggregateMappedJobDateTime(rows, FIELD_MAP.jobSystem.kitBookingStart),
@@ -1020,6 +1025,53 @@
     return false;
   }
 
+  function extractJobId(row) {
+    if (!row || typeof row !== "object") return "";
+    var raw = firstObjectValue(row, ["ID", "id", "JOB_ID", "job_id"]);
+    return asText(raw).replace(/<[^>]+>/g, "").replace(/\D/g, "").trim();
+  }
+
+  function isActiveJob(row) {
+    if (!row || typeof row !== "object") return true;
+    var statusText = asText(firstObjectValue(row, ["STATUS", "status"])).toLowerCase();
+    // Exclude clearly inactive statuses by text
+    if (statusText && (statusText.indexOf("cancel") !== -1 || statusText.indexOf("archived") !== -1)) return false;
+    // Exclude by numeric status if available as a pure number
+    var statusNum = row.STATUS;
+    if (typeof statusNum === "number" || (typeof statusNum === "string" && /^\d+$/.test(statusNum))) {
+      var n = Number(statusNum);
+      // HireHop: status 7+ often means cancelled/archived — but we only know 5=confirmed-return, so be conservative
+      if (n === 99) return false; // placeholder for known bad codes
+    }
+    return true;
+  }
+
+  function mergeJobRow(existing, incoming) {
+    var merged = {};
+    for (var k in existing) {
+      if (Object.prototype.hasOwnProperty.call(existing, k)) merged[k] = existing[k];
+    }
+    for (var k2 in incoming) {
+      if (!Object.prototype.hasOwnProperty.call(incoming, k2)) continue;
+      var v = incoming[k2];
+      if (v == null || v === "") continue;
+      if ($.isArray(v) && !v.length) continue;
+      merged[k2] = v;
+    }
+    // Always take CUSTOM_FIELDS from whichever side has more entries
+    var eCF = existing.CUSTOM_FIELDS;
+    var iCF = incoming.CUSTOM_FIELDS;
+    if (eCF && iCF && typeof eCF === "object" && typeof iCF === "object" &&
+        !$.isArray(eCF) && !$.isArray(iCF)) {
+      var mergedCF = {};
+      for (var ck in eCF) { if (Object.prototype.hasOwnProperty.call(eCF, ck)) mergedCF[ck] = eCF[ck]; }
+      for (var ck2 in iCF) { if (Object.prototype.hasOwnProperty.call(iCF, ck2)) mergedCF[ck2] = iCF[ck2]; }
+      merged.CUSTOM_FIELDS = mergedCF;
+      merged.fields = mergedCF;
+    }
+    return merged;
+  }
+
   function tryCacheJobsFromResponse(xhr) {
     if (!xhr || !xhr.responseText || xhr.responseText.length > 2000000) return;
     var data;
@@ -1036,8 +1088,27 @@
     }
     if (!jobRows.length) return;
 
-    if (!state.cachedJobRows || jobRows.length >= state.cachedJobRows.length) {
+    if (!state.cachedJobRows) {
       state.cachedJobRows = jobRows;
+      return;
+    }
+
+    // Upsert: merge incoming rows into the cache by job ID
+    // Richer API data (with CUSTOM_FIELDS) wins over bare DOM-scraped rows
+    for (var j = 0; j < jobRows.length; j++) {
+      var incoming = jobRows[j];
+      var inId = extractJobId(incoming);
+      var found = false;
+      if (inId) {
+        for (var k = 0; k < state.cachedJobRows.length; k++) {
+          if (extractJobId(state.cachedJobRows[k]) === inId) {
+            state.cachedJobRows[k] = mergeJobRow(state.cachedJobRows[k], incoming);
+            found = true;
+            break;
+          }
+        }
+      }
+      if (!found) state.cachedJobRows.push(incoming);
     }
   }
 
@@ -1866,21 +1937,60 @@
   }
 
   function maybePreloadJobData() {
-    if (state.cachedJobRows && state.cachedJobRows.length) return;
     var $grid = $("#jobs_grid,#project_jobs_grid,table[id*='jobs'][id*='grid']").first();
     if (!$grid.length || typeof $grid.jqGrid !== "function") return;
-    var url;
-    try { url = $grid.jqGrid("getGridParam", "url"); } catch (e) {}
-    if (!url) return;
-    $.ajax({
-      url: url, method: "GET", dataType: "json",
-      success: function (data) {
-        tryCacheJobsFromResponse({ responseText: JSON.stringify(data) });
-        if (state.cachedJobRows && state.cachedJobRows.length) {
-          scheduleMaintainProjectJourney(50, { forceScan: true });
-        }
+
+    // Step 1: load grid list (basic job fields) if we have nothing yet
+    if (!state.cachedJobRows || !state.cachedJobRows.length) {
+      var url;
+      try { url = $grid.jqGrid("getGridParam", "url"); } catch (e) {}
+      if (url) {
+        $.ajax({
+          url: url, method: "GET", dataType: "json",
+          success: function (data) {
+            tryCacheJobsFromResponse({ responseText: JSON.stringify(data) });
+            maybePreloadJobDetails(); // Step 2 after grid loads
+            if (state.cachedJobRows && state.cachedJobRows.length) {
+              scheduleMaintainProjectJourney(50, { forceScan: true });
+            }
+          }
+        });
+        return;
       }
-    });
+    }
+
+    maybePreloadJobDetails();
+  }
+
+  function maybePreloadJobDetails() {
+    if (!state.cachedJobRows || !state.cachedJobRows.length) return;
+    // Find jobs that have no CUSTOM_FIELDS (or empty ones) and have a valid ID
+    var toFetch = [];
+    for (var i = 0; i < state.cachedJobRows.length; i++) {
+      var row = state.cachedJobRows[i];
+      var cf = row.CUSTOM_FIELDS;
+      var hasRichData = cf && typeof cf === "object" && !$.isArray(cf) && Object.keys(cf).length > 0;
+      if (!hasRichData) {
+        var id = extractJobId(row);
+        if (id && toFetch.indexOf(id) === -1) toFetch.push(id);
+      }
+    }
+    if (!toFetch.length) return;
+    // Limit to first 5 to avoid hammering the API
+    toFetch = toFetch.slice(0, 5);
+    for (var j = 0; j < toFetch.length; j++) {
+      (function (jobId) {
+        $.ajax({
+          url: "api/job_data.php?id=" + encodeURIComponent(jobId),
+          method: "GET", dataType: "json",
+          success: function (data) {
+            if (!data || typeof data !== "object") return;
+            tryCacheJobsFromResponse({ responseText: JSON.stringify(data) });
+            scheduleMaintainProjectJourney(120, { forceScan: true });
+          }
+        });
+      })(toFetch[j]);
+    }
   }
 
   function buildJourneyHtml(data, analysis) {
