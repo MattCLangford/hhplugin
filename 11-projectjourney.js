@@ -29,8 +29,8 @@
       outgoingDateTime: {
         name: "Kit Booking Start",
         logicalName: "{{project.out_datetime}}",
-        objectKeys: ["DATE_OUT", "date_out", "DATEOUT", "dateOut", "out_datetime", "OUT_DATETIME", "OUT_DATE_TIME", "out_date_time", "outDateTime", "OUTGOING_DATE_TIME", "outgoing_date_time", "outgoingDateTime", "OUTGOING", "outgoing"],
-        dateKeys: ["DATE_OUT", "date_out", "DATEOUT"],
+        objectKeys: ["OUT_DATE", "out_date", "DATE_OUT", "date_out", "DATEOUT", "dateOut", "out_datetime", "OUT_DATETIME", "OUT_DATE_TIME", "out_date_time", "outDateTime", "OUTGOING_DATE_TIME", "outgoing_date_time", "outgoingDateTime", "OUTGOING", "outgoing"],
+        dateKeys: ["OUT_DATE", "out_date", "DATE_OUT", "date_out", "DATEOUT"],
         timeKeys: ["TIME_OUT", "time_out", "TIMEOUT"],
         labels: ["kit booking start", "outgoing date time", "outgoing datetime", "outgoing time"],
         note: "No kit is assigned to a project; kept only as a system field."
@@ -39,8 +39,8 @@
         name: "Project/Onsite Start",
         logicalName: "{{project.start_datetime}}",
         upstream: "Event_Start_Date__c",
-        objectKeys: ["DATE", "date", "DATETIME", "datetime", "start_datetime", "START_DATETIME", "START_DATE_TIME", "start_date_time", "startDateTime", "START", "start", "PROJECT_DATE", "PROJECT_START_DATE_TIME", "project_start_date_time"],
-        dateKeys: ["DATE", "date", "PROJECT_DATE", "project_date", "START_DATE", "start_date"],
+        objectKeys: ["START_DATE", "start_date", "DATE", "date", "DATETIME", "datetime", "start_datetime", "START_DATETIME", "START_DATE_TIME", "start_date_time", "startDateTime", "START", "start", "PROJECT_DATE", "PROJECT_START_DATE_TIME", "project_start_date_time"],
+        dateKeys: ["START_DATE", "start_date", "DATE", "date", "PROJECT_DATE", "project_date"],
         timeKeys: ["TIME", "time", "START_TIME", "start_time", "PROJECT_TIME", "project_time"],
         labels: ["project/onsite start", "project onsite start", "start date time", "start datetime", "event start", "project start"],
         note: "First day where Wise has responsibility or action on the event site."
@@ -49,8 +49,8 @@
         name: "Project/Onsite End",
         logicalName: "{{project.end_datetime}}",
         upstream: "Event_End_Date__c",
-        objectKeys: ["DATE_END", "date_end", "DATEEND", "dateEnd", "end_datetime", "END_DATETIME", "PROJECT_END_DATE_TIME", "project_end_date_time", "projectEndDateTime", "END_DATE_TIME", "end_date_time", "endDateTime", "PROJECT_END", "project_end"],
-        dateKeys: ["DATE_END", "date_end", "DATEEND", "END_DATE", "end_date"],
+        objectKeys: ["END_DATE", "end_date", "DATE_END", "date_end", "DATEEND", "dateEnd", "end_datetime", "END_DATETIME", "PROJECT_END_DATE_TIME", "project_end_date_time", "projectEndDateTime", "END_DATE_TIME", "end_date_time", "endDateTime", "PROJECT_END", "project_end"],
+        dateKeys: ["END_DATE", "end_date", "DATE_END", "date_end", "DATEEND"],
         timeKeys: ["TIME_END", "time_end", "TIMEEND", "END_TIME", "end_time"],
         labels: ["project/onsite end", "project onsite end", "project end date time", "project end datetime", "event end", "project end"],
         note: "Last day where Wise has responsibility or action on the event site."
@@ -58,8 +58,8 @@
       returnDateTime: {
         name: "Kit Booking End",
         logicalName: "{{project.return_datetime}}",
-        objectKeys: ["DATE_RETURN", "date_return", "DATERETURN", "dateReturn", "return_datetime", "RETURN_DATETIME", "RETURN_DATE_TIME", "return_date_time", "returnDateTime", "RETURN", "return"],
-        dateKeys: ["DATE_RETURN", "date_return", "DATERETURN", "RETURN_DATE", "return_date"],
+        objectKeys: ["RETURN_DATE", "return_date", "DATE_RETURN", "date_return", "DATERETURN", "dateReturn", "return_datetime", "RETURN_DATETIME", "RETURN_DATE_TIME", "return_date_time", "returnDateTime", "RETURN", "return"],
+        dateKeys: ["RETURN_DATE", "return_date", "DATE_RETURN", "date_return", "DATERETURN"],
         timeKeys: ["TIME_RETURN", "time_return", "TIMERETURN", "RETURN_TIME", "return_time"],
         labels: ["kit booking end", "return date time", "return datetime", "return time"],
         note: "No kit is assigned to a project; kept only as a system field."
@@ -185,7 +185,7 @@
   };
 
   var CFG = {
-    version: "2026-06-24.7",
+    version: "2026-06-24.8",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -716,9 +716,11 @@
      * This fallback only reads obvious current-page/window values so the tab can
      * render safely before the live data contract is connected.
      */
-    var projectWindow = (window.project && typeof window.project === "object" && !isFileRecord(window.project))
-      ? window.project
-      : (state.cachedProjectData || {});
+    var projectWindow = (window.proj_data && typeof window.proj_data === "object" && !isFileRecord(window.proj_data))
+      ? window.proj_data
+      : (window.project && typeof window.project === "object" && !isFileRecord(window.project))
+        ? window.project
+        : (state.cachedProjectData || {});
     var project = {
       id: getCurrentProjectId(),
       name: firstNonEmpty([
@@ -1960,99 +1962,211 @@
   function buildTimeline(milestones, criticalOnly, issuesByMilestone, data) {
     issuesByMilestone = issuesByMilestone || {};
     data = data || {};
-    var groups = groupMilestones(milestones);
+
+    var bars = '<div class="wpj-flow-bar">' +
+      '<div class="wpj-segmented">' +
+        '<button type="button" class="' + (!criticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="all">All milestones</button>' +
+        '<button type="button" class="' + (criticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="critical">Critical path only</button>' +
+      '</div>' +
+      '<button type="button" class="wpj-refresh-btn" data-wise-project-journey-refresh>⟳ Refresh</button>' +
+    '</div>';
+
+    if (!milestones.length) {
+      return '<div class="wpj-flow">' + bars + '<div class="wpj-empty-state">No milestones to show.</div></div>';
+    }
+
+    // Collect all parseable dates to determine range
+    var allD = [];
+    function pushDate(v) { var d = parseDate(v); if (d) { d.setHours(0,0,0,0); allD.push(d); } }
+    for (var i = 0; i < milestones.length; i++) {
+      pushDate(milestones[i].plannedDateTime);
+      pushDate(milestones[i].actualDateTime);
+    }
+    pushDate(data.wiseEventStart);
+    pushDate(data.wiseEventEnd);
+
+    if (!allD.length) {
+      return '<div class="wpj-flow">' + bars +
+        '<div class="wpj-empty-state">No scheduled dates yet — milestones will appear on a timeline once dates are set.</div></div>';
+    }
+
+    var earliest = allD[0], latest = allD[0];
+    for (var k = 1; k < allD.length; k++) {
+      if (allD[k] < earliest) earliest = allD[k];
+      if (allD[k] > latest) latest = allD[k];
+    }
+
+    var startDate = new Date(earliest); startDate.setDate(startDate.getDate() - 1); startDate.setHours(0,0,0,0);
+    var endDate = new Date(latest); endDate.setDate(endDate.getDate() + 1); endDate.setHours(0,0,0,0);
+
+    var days = [];
+    var cur = new Date(startDate);
+    while (cur <= endDate) { days.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
+
+    var today = new Date(); today.setHours(0,0,0,0);
+    var DAY_N = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+    var MON_N = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    function dIdx(v) {
+      var d = parseDate(v); if (!d) return -1;
+      d.setHours(0,0,0,0);
+      return Math.round((d - startDate) / 86400000);
+    }
+    function isToday(d) { return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate(); }
+    function isWknd(d) { return d.getDay() === 0 || d.getDay() === 6; }
+
+    var esIdx = dIdx(data.wiseEventStart);
+    var eeIdx = dIdx(data.wiseEventEnd);
+    function isSite(i) { return esIdx >= 0 && eeIdx >= 0 && i >= esIdx && i <= eeIdx; }
+
+    function cells(markerIdx, mCls) {
+      var h = "";
+      for (var ci = 0; ci < days.length; ci++) {
+        var cls = "wpj-gc";
+        if (isToday(days[ci])) cls += " wpj-gc--today";
+        if (isWknd(days[ci])) cls += " wpj-gc--wknd";
+        if (isSite(ci)) cls += " wpj-gc--site";
+        if (ci === esIdx) cls += " wpj-gc--ses";
+        if (ci === eeIdx) cls += " wpj-gc--see";
+        h += '<div class="' + cls + '">';
+        if (ci === markerIdx) h += '<span class="wpj-gm wpj-gm--' + (mCls || "not-started") + '">◆</span>';
+        h += '</div>';
+      }
+      return h;
+    }
+
+    // Month groups for header
+    var months = [];
+    for (var di = 0; di < days.length; di++) {
+      var mk = days[di].getFullYear() + "-" + days[di].getMonth();
+      if (!months.length || months[months.length-1].key !== mk) {
+        months.push({ key: mk, label: MON_N[days[di].getMonth()] + " " + days[di].getFullYear(), count: 0 });
+      }
+      months[months.length-1].count++;
+    }
+
     var onsitePhases = { "Site Arrival": true, "Build": true, "Show": true, "Derig": true, "Site Clear": true };
-    var siteStartAdded = false, siteEndAdded = false;
     var phaseColors = {
       "Pre-Production": "#7c3aed", "Supplier / Kit Prep": "#0369a1",
       "Load / Transport": "#0891b2", "Site Arrival": "#c2410c",
       "Build": "#ea580c", "Show": "#dc2626", "Derig": "#b45309", "Site Clear": "#4a6fa5"
     };
 
-    var html = '<div class="wpj-flow">' +
-      '<div class="wpj-flow-bar">' +
-        '<div class="wpj-segmented">' +
-          '<button type="button" class="' + (!criticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="all">All milestones</button>' +
-          '<button type="button" class="' + (criticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="critical">Critical path only</button>' +
-        '</div>' +
-        '<button type="button" class="wpj-refresh-btn" data-wise-project-journey-refresh>⟳ Refresh</button>' +
-      '</div>' +
-      '<div class="wpj-tl-scroll">' +
-        '<div class="wpj-tl-track">';
+    var html = '<div class="wpj-flow">' + bars + '<div class="wpj-gantt-outer"><div class="wpj-gantt-inner">';
 
-    if (!milestones.length) {
-      html += '<div class="wpj-empty-state">No ' + (criticalOnly ? "critical " : "") + "milestones to show.</div>";
+    // Sticky header
+    html += '<div class="wpj-gantt-hrow">' +
+      '<div class="wpj-glcol wpj-glcol--hdr"></div>' +
+      '<div class="wpj-grcol wpj-grcol--hdr">' +
+        '<div class="wpj-gantt-months">';
+    for (var mg = 0; mg < months.length; mg++) {
+      html += '<div class="wpj-gantt-month" style="width:calc(' + months[mg].count + '*var(--wpj-col-w))">' + esc(months[mg].label) + '</div>';
+    }
+    html += '</div><div class="wpj-gantt-dayhdr">';
+    for (var dh = 0; dh < days.length; dh++) {
+      var cls = "wpj-gdc";
+      if (isToday(days[dh])) cls += " wpj-gdc--today";
+      if (isWknd(days[dh])) cls += " wpj-gdc--wknd";
+      if (isSite(dh)) cls += " wpj-gdc--site";
+      if (dh === esIdx) cls += " wpj-gdc--ses";
+      if (dh === eeIdx) cls += " wpj-gdc--see";
+      html += '<div class="' + cls + '"><div class="wpj-gd-num">' + days[dh].getDate() + '</div><div class="wpj-gd-name">' + DAY_N[days[dh].getDay()] + '</div></div>';
+    }
+    html += '</div></div></div>';
+
+    // Body
+    html += '<div class="wpj-gantt-body">';
+    var groups = groupMilestones(milestones);
+    var ssAdded = false, seAdded = false;
+    var unscheduled = [];
+
+    function siteRow(label, labelCls, dateStr, markerIdx, arrowChar, arrowCls) {
+      var r = '<div class="wpj-gantt-srow' + (labelCls === "wpj-sdiv-label--end" ? " wpj-gantt-srow--end" : "") + '">' +
+        '<div class="wpj-glcol wpj-glcol--sdiv">' +
+          '<span class="wpj-sdiv-label ' + labelCls + '">' + esc(label) + '</span>' +
+          '<span class="wpj-sdiv-date">' + esc(dateStr) + '</span>' +
+        '</div><div class="wpj-grcol">';
+      for (var si = 0; si < days.length; si++) {
+        var sc = "wpj-gc wpj-gc--sdrow" + (isSite(si) ? " wpj-gc--site" : "") + (si === markerIdx ? arrowCls : "");
+        r += '<div class="' + sc + '">' + (si === markerIdx ? '<span class="wpj-sdiv-arr ' + arrowCls + '">' + arrowChar + '</span>' : '') + '</div>';
+      }
+      return r + '</div></div>';
     }
 
-    for (var i = 0; i < groups.length; i++) {
-      var group = groups[i];
+    for (var gi = 0; gi < groups.length; gi++) {
+      var group = groups[gi];
       var isOnsite = !!onsitePhases[group.group];
-
-      if (isOnsite && !siteStartAdded) {
-        siteStartAdded = true;
-        html += buildSiteDivider("On Site Begins", data.wiseEventStart, false);
-      }
-      if (group.group === "Site Clear" && !siteEndAdded) {
-        siteEndAdded = true;
-        html += buildSiteDivider("On Site Ends", data.wiseEventEnd, true);
-      }
-
       var dotColor = phaseColors[group.group] || "#64748b";
-      html += '<div class="wpj-tphase' + (isOnsite ? " wpj-tphase--onsite" : "") + '">' +
-        '<div class="wpj-tphase-hdr" style="border-top-color:' + dotColor + '">' +
-          '<span class="wpj-tphase-dot" style="background:' + dotColor + '"></span>' +
-          '<span class="wpj-tphase-name">' + esc(group.group) + '</span>' +
-        '</div>' +
-        '<div class="wpj-tphase-body">';
 
-      for (var m = 0; m < group.items.length; m++) {
-        html += buildMilestonePin(group.items[m], issuesByMilestone[group.items[m].id] || []);
+      if (isOnsite && !ssAdded) {
+        ssAdded = true;
+        html += siteRow("On Site Begins", "", formatDateTime(data.wiseEventStart) || "TBC", esIdx, "▼", " wpj-gc--ses");
+      }
+      if (group.group === "Site Clear" && !seAdded) {
+        seAdded = true;
+        html += siteRow("On Site Ends", "wpj-sdiv-label--end", formatDateTime(data.wiseEventEnd) || "TBC", eeIdx, "▲", " wpj-gc--see");
       }
 
-      html += '</div></div>';
+      // Phase header row
+      html += '<div class="wpj-gantt-prow' + (isOnsite ? " wpj-gantt-prow--onsite" : "") + '">' +
+        '<div class="wpj-glcol wpj-glcol--ph">' +
+          '<span class="wpj-ph-dot" style="background:' + dotColor + '"></span>' +
+          '<span class="wpj-ph-name">' + esc(group.group) + '</span>' +
+        '</div>' +
+        '<div class="wpj-grcol">' + cells(-1, null) + '</div>' +
+      '</div>';
+
+      for (var mi = 0; mi < group.items.length; mi++) {
+        var ms = group.items[mi];
+        var status = normaliseStatus(ms.status);
+        var sCls = cssClass(status);
+        var dateVal = ms.actualDateTime || ms.plannedDateTime;
+        var idx = dIdx(dateVal);
+        var msIssues = issuesByMilestone[ms.id] || [];
+        var issueTag = msIssues.length ? ' <span class="wpj-gi-hint">' + msIssues.length + '!</span>' : '';
+
+        if (idx < 0) { unscheduled.push(ms); continue; }
+
+        html += '<div class="wpj-gantt-mrow wpj-gantt-mrow--' + sCls + (isOnsite ? " wpj-gantt-mrow--onsite" : "") + '">' +
+          '<div class="wpj-glcol wpj-glcol--ms">' +
+            '<div class="wpj-gi-name">' + esc(ms.name) + (ms.criticalPath ? '<span class="wpj-crit-pin"> ★</span>' : '') + issueTag + '</div>' +
+            '<div class="wpj-gi-sub">' + esc(formatDateTime(dateVal) || "") + ' ' + buildStatusChip(status) + '</div>' +
+          '</div>' +
+          '<div class="wpj-grcol">' + cells(idx, sCls) + '</div>' +
+        '</div>';
+      }
     }
 
     html += '</div></div></div>';
+
+    if (unscheduled.length) {
+      html += '<details class="wpj-gantt-unsched"><summary>Not yet scheduled — ' + unscheduled.length + ' milestone' + (unscheduled.length > 1 ? "s" : "") + '</summary><div class="wpj-gantt-unsched-body">';
+      for (var ui = 0; ui < unscheduled.length; ui++) {
+        html += '<div class="wpj-gantt-unsched-row"><span class="wpj-gi-name">' + esc(unscheduled[ui].name) + '</span>' +
+          buildStatusChip(normaliseStatus(unscheduled[ui].status)) + '</div>';
+      }
+      html += '</div></details>';
+    }
+
+    html += '</div>';
     return html;
   }
 
   function buildSiteDivider(label, dateTime, isEnd) {
-    return '<div class="wpj-tdivider' + (isEnd ? " wpj-tdivider--end" : "") + '">' +
-      '<div class="wpj-tdivider-inner">' +
-        '<span class="wpj-tdivider-label">' + esc(label) + '</span>' +
-        '<span class="wpj-tdivider-date">' + esc(formatDateTime(dateTime) || "TBC") + '</span>' +
-      '</div>' +
-    '</div>';
+    return '<span class="wpj-sdiv-label' + (isEnd ? " wpj-sdiv-label--end" : "") + '">' + esc(label) + '</span>';
   }
 
   function buildMilestonePin(milestone, rowIssues) {
-    rowIssues = rowIssues || [];
-    var status = normaliseStatus(milestone.status);
-    var statusCls = cssClass(status);
-    var hasDate = !!milestone.plannedDateTime;
-    var hasActual = !!milestone.actualDateTime;
-    var dateDisplay = hasActual ? formatDateTime(milestone.actualDateTime) :
-                      hasDate ? formatDateTime(milestone.plannedDateTime) : null;
-
-    var hintsHtml = "";
-    if (rowIssues.length) {
-      hintsHtml = '<div class="wpj-pin-hints">';
-      for (var h = 0; h < Math.min(rowIssues.length, 2); h++) {
-        hintsHtml += '<span class="wpj-phint wpj-phint--' + cssClass(rowIssues[h].severity) + '">' + esc(rowIssues[h].title) + '</span>';
-      }
-      hintsHtml += '</div>';
-    }
-
-    return '<div class="wpj-pin wpj-pin--' + statusCls + '">' +
-      '<div class="wpj-pin-name">' + esc(milestone.name) + (milestone.criticalPath ? '<span class="wpj-crit-pin"> ★</span>' : '') + '</div>' +
-      '<div class="wpj-pin-date' + (dateDisplay ? '' : ' wpj-pin-date--unset') + '">' + esc(dateDisplay || "Not scheduled") + '</div>' +
-      buildStatusChip(status) +
-      hintsHtml +
-    '</div>';
+    return buildMilestoneCard(milestone, rowIssues);
   }
 
   function buildMilestoneCard(milestone, rowIssues) {
-    return buildMilestonePin(milestone, rowIssues);
+    rowIssues = rowIssues || [];
+    var status = normaliseStatus(milestone.status);
+    var dateDisplay = milestone.actualDateTime ? formatDateTime(milestone.actualDateTime) :
+                      milestone.plannedDateTime ? formatDateTime(milestone.plannedDateTime) : null;
+    return '<div class="wpj-gi-name">' + esc(milestone.name) + '</div>' +
+      '<div class="wpj-gi-sub">' + esc(dateDisplay || "Not scheduled") + ' ' + buildStatusChip(status) + '</div>';
   }
 
   function buildDepartmentReadiness(rows) {
@@ -3066,45 +3180,82 @@
       ".wpj-phase-count{font-size:10px;color:#94a3b8;background:#f1f5f9;padding:1px 7px;border-radius:9px;font-weight:600;}",
       ".wpj-phase--onsite .wpj-phase-count{background:#fed7aa;color:#9a3412;}",
       /* ---- Site dividers ---- */
-      /* ---- Timeline horizontal track ---- */
-      ".wpj-tl-scroll{overflow-x:auto;overflow-y:visible;padding-bottom:6px;}",
-      ".wpj-tl-track{display:flex;align-items:stretch;min-width:max-content;}",
-      /* ---- Phase columns ---- */
-      ".wpj-tphase{flex:0 0 auto;min-width:140px;display:flex;flex-direction:column;}",
-      ".wpj-tphase--onsite{background:#fffbf4;}",
-      ".wpj-tphase-hdr{display:flex;align-items:center;gap:6px;padding:6px 10px;background:#f8fafc;border-bottom:1px solid #f1f5f9;border-right:1px solid #e2e8ef;border-top:3px solid #94a3b8;}",
-      ".wpj-tphase--onsite .wpj-tphase-hdr{background:#fff7ed;border-bottom-color:#fed7aa;border-right-color:#fed7aa;}",
-      ".wpj-tphase-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}",
-      ".wpj-tphase-name{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;white-space:nowrap;}",
-      ".wpj-tphase-body{flex:1;padding:8px;display:flex;flex-direction:column;gap:6px;border-right:1px solid #e2e8ef;}",
-      ".wpj-tphase--onsite .wpj-tphase-body{border-right-color:#fed7aa;}",
-      /* ---- Site dividers ---- */
-      ".wpj-tdivider{flex:0 0 56px;display:flex;align-items:center;justify-content:center;border-left:2px solid #f97316;border-right:2px solid #f97316;background:linear-gradient(180deg,#fff7ed 0%,#fff 100%);}",
-      ".wpj-tdivider--end{border-left-color:#38bdf8;border-right-color:#38bdf8;background:linear-gradient(180deg,#f0f9ff 0%,#fff 100%);}",
-      ".wpj-tdivider-inner{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 0;}",
-      ".wpj-tdivider-label{writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#ea580c;}",
-      ".wpj-tdivider--end .wpj-tdivider-label{color:#0284c7;}",
-      ".wpj-tdivider-date{writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);font-size:9px;font-weight:600;color:#1e293b;}",
-      /* ---- Milestone pins ---- */
-      ".wpj-pin{display:flex;flex-direction:column;gap:3px;padding:8px 9px;border-radius:6px;background:#fff;border:1px solid #e2e8ef;border-left:3px solid #e2e8ef;}",
-      ".wpj-tphase--onsite .wpj-pin{background:#fffbf4;}",
-      ".wpj-pin:hover{box-shadow:0 2px 8px rgba(0,0,0,.06);}",
-      ".wpj-pin--complete{border-left-color:#22c55e;}",
-      ".wpj-pin--in-progress{border-left-color:#3b82f6;}",
-      ".wpj-pin--at-risk{border-left-color:#f59e0b;}",
-      ".wpj-pin--blocked,.wpj-pin--missing{border-left-color:#ef4444;}",
-      ".wpj-pin-name{font-size:11px;font-weight:600;color:#1e293b;line-height:1.3;}",
+      /* ---- Gantt chart ---- */
+      ":root{--wpj-col-w:40px;--wpj-lcol-w:220px;}",
+      ".wpj-gantt-outer{overflow-x:auto;background:#fff;border:1px solid #e2e8ef;border-radius:8px;}",
+      ".wpj-gantt-inner{display:inline-block;min-width:100%;}",
+      ".wpj-gantt-hrow,.wpj-gantt-prow,.wpj-gantt-mrow,.wpj-gantt-srow{display:flex;align-items:stretch;}",
+      /* Left sticky col */
+      ".wpj-glcol{position:sticky;left:0;z-index:3;width:var(--wpj-lcol-w);min-width:var(--wpj-lcol-w);flex-shrink:0;background:#fff;border-right:1px solid #e2e8ef;}",
+      ".wpj-glcol--hdr{background:#f8fafc;border-bottom:1px solid #e2e8ef;}",
+      ".wpj-grcol{display:flex;flex:1;}",
+      ".wpj-grcol--hdr{display:flex;flex-direction:column;}",
+      /* Month row */
+      ".wpj-gantt-months{display:flex;border-bottom:1px solid #e2e8ef;}",
+      ".wpj-gantt-month{display:flex;align-items:center;padding:0 8px;height:22px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;background:#f8fafc;border-right:1px solid #e2e8ef;white-space:nowrap;overflow:hidden;}",
+      /* Day header cells */
+      ".wpj-gantt-dayhdr{display:flex;}",
+      ".wpj-gdc{width:var(--wpj-col-w);min-width:var(--wpj-col-w);flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3px 0;border-right:1px solid #f1f5f9;background:#f8fafc;}",
+      ".wpj-gdc--wknd{background:#f0f4f8;}",
+      ".wpj-gdc--today{background:#dbeafe;}",
+      ".wpj-gdc--site{background:#fff7ed;}",
+      ".wpj-gdc--ses{background:#fed7aa;border-left:2px solid #f97316;}",
+      ".wpj-gdc--see{background:#bae6fd;border-right:2px solid #38bdf8;}",
+      ".wpj-gd-num{font-size:11px;font-weight:700;color:#374151;line-height:1;}",
+      ".wpj-gdc--today .wpj-gd-num{color:#1d4ed8;}",
+      ".wpj-gd-name{font-size:9px;color:#94a3b8;text-transform:uppercase;}",
+      /* Grid cells */
+      ".wpj-gc{width:var(--wpj-col-w);min-width:var(--wpj-col-w);flex-shrink:0;display:flex;align-items:center;justify-content:center;border-right:1px solid #f8fafc;border-bottom:1px solid #f8fafc;}",
+      ".wpj-gc--wknd{background:rgba(0,0,0,.015);}",
+      ".wpj-gc--today{background:rgba(29,78,216,.05);}",
+      ".wpj-gc--site{background:rgba(249,115,22,.05);}",
+      ".wpj-gc--ses{border-left:2px solid #f97316;}",
+      ".wpj-gc--see{border-right:2px solid #38bdf8;}",
+      /* Markers */
+      ".wpj-gm{font-size:15px;line-height:1;}",
+      ".wpj-gm--complete{color:#22c55e;}",
+      ".wpj-gm--in-progress{color:#3b82f6;}",
+      ".wpj-gm--at-risk{color:#f59e0b;}",
+      ".wpj-gm--blocked,.wpj-gm--missing{color:#ef4444;}",
+      ".wpj-gm--not-started{color:#cbd5e1;}",
+      /* Phase header rows */
+      ".wpj-gantt-prow{background:#f8fafc;border-bottom:1px solid #f1f5f9;min-height:28px;}",
+      ".wpj-gantt-prow--onsite{background:#fff7ed;}",
+      ".wpj-glcol--ph{display:flex;align-items:center;gap:6px;padding:5px 10px;background:#f8fafc;}",
+      ".wpj-gantt-prow--onsite .wpj-glcol--ph{background:#fff7ed;}",
+      ".wpj-ph-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}",
+      ".wpj-ph-name{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;}",
+      /* Milestone rows */
+      ".wpj-gantt-mrow{border-bottom:1px solid #f8fafc;min-height:46px;}",
+      ".wpj-gantt-mrow--onsite{background:#fffbf4;}",
+      ".wpj-gantt-mrow--onsite .wpj-glcol--ms{background:#fffbf4;}",
+      ".wpj-glcol--ms{display:flex;flex-direction:column;justify-content:center;padding:8px 10px 8px 12px;border-left:3px solid transparent;}",
+      ".wpj-gantt-mrow--complete .wpj-glcol--ms{border-left-color:#22c55e;}",
+      ".wpj-gantt-mrow--in-progress .wpj-glcol--ms{border-left-color:#3b82f6;}",
+      ".wpj-gantt-mrow--at-risk .wpj-glcol--ms{border-left-color:#f59e0b;}",
+      ".wpj-gantt-mrow--blocked .wpj-glcol--ms,.wpj-gantt-mrow--missing .wpj-glcol--ms{border-left-color:#ef4444;}",
+      ".wpj-gi-name{font-size:12px;font-weight:600;color:#1e293b;line-height:1.3;}",
+      ".wpj-gi-sub{font-size:10px;color:#94a3b8;margin-top:2px;display:flex;gap:5px;align-items:center;flex-wrap:wrap;}",
+      ".wpj-gi-hint{font-size:9px;font-weight:700;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:3px;}",
       ".wpj-crit-pin{color:#f59e0b;font-size:10px;}",
-      ".wpj-pin-date{font-size:10px;color:#94a3b8;margin-bottom:3px;}",
-      ".wpj-pin-date--unset{color:#cbd5e1;font-style:italic;}",
-      ".wpj-pin--complete .wpj-pin-date{color:#16a34a;}",
-      ".wpj-pin--at-risk .wpj-pin-date{color:#d97706;}",
-      ".wpj-pin--blocked .wpj-pin-date,.wpj-pin--missing .wpj-pin-date{color:#dc2626;}",
-      ".wpj-pin-hints{display:flex;gap:3px;flex-wrap:wrap;margin-top:3px;}",
-      ".wpj-phint{font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;}",
-      ".wpj-phint--blocked{background:#fee2e2;color:#dc2626;}",
-      ".wpj-phint--at-risk{background:#fef3c7;color:#b45309;}",
-      ".wpj-phint--missing-data,.wpj-phint--warning{background:#f1f5f9;color:#64748b;}",
+      /* Site divider rows */
+      ".wpj-gantt-srow{background:#fff7ed;border-top:2px solid #f97316;border-bottom:2px solid #f97316;min-height:34px;}",
+      ".wpj-gantt-srow--end{background:#f0f9ff;border-top-color:#38bdf8;border-bottom-color:#38bdf8;}",
+      ".wpj-glcol--sdiv{display:flex;flex-direction:column;justify-content:center;padding:5px 10px 5px 12px;background:#fff7ed;}",
+      ".wpj-gantt-srow--end .wpj-glcol--sdiv{background:#f0f9ff;}",
+      ".wpj-sdiv-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#ea580c;}",
+      ".wpj-sdiv-label--end{color:#0284c7;}",
+      ".wpj-sdiv-date{font-size:11px;font-weight:700;color:#1e293b;}",
+      ".wpj-sdiv-arr{font-size:12px;color:#f97316;line-height:1;}",
+      ".wpj-gc--ses .wpj-sdiv-arr{color:#f97316;}",
+      ".wpj-gc--see .wpj-sdiv-arr{color:#0284c7;}",
+      ".wpj-gc--sdrow{border-bottom:0;}",
+      /* Unscheduled section */
+      ".wpj-gantt-unsched{border-top:1px solid #e2e8ef;margin-top:1px;}",
+      ".wpj-gantt-unsched>summary{padding:7px 14px;background:#f8fafc;cursor:pointer;list-style:none;font-size:11px;font-weight:700;color:#64748b;display:block;}",
+      ".wpj-gantt-unsched>summary::-webkit-details-marker{display:none;}",
+      ".wpj-gantt-unsched-body{padding:2px 0;}",
+      ".wpj-gantt-unsched-row{display:flex;align-items:center;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #f8fafc;}",
       ".wpj-crit{color:#f59e0b;font-size:11px;}",
       /* ---- Status chips ---- */
       ".wpj-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;}",
