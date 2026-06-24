@@ -2102,12 +2102,11 @@
   }
 
   function buildDiagnosticPanel() {
-    var projectWindow = window.project && typeof window.project === "object" && !isFileRecord(window.project)
-      ? window.project : null;
-    var cached = state.cachedProjectData || null;
+    var cachedProj = state.cachedProjectData || null;
     var jobRows = getProjectJobRows();
     var firstJob = jobRows && jobRows.length ? jobRows[0] : null;
     var cachedJobCount = state.cachedJobRows ? state.cachedJobRows.length : 0;
+    var projectId = getCurrentProjectId();
 
     function dumpObj(obj) {
       var lines = [];
@@ -2115,42 +2114,114 @@
         if (!Object.prototype.hasOwnProperty.call(obj, k)) continue;
         var v = obj[k];
         if (v && typeof v === "object") {
-          lines.push(k + ": " + JSON.stringify(v).substr(0, 140));
+          lines.push(k + ": " + JSON.stringify(v).substr(0, 160));
         } else if (v != null && v !== "") {
-          lines.push(k + ": " + asText(v).substr(0, 100));
+          lines.push(k + ": " + asText(v).substr(0, 120));
         }
       }
       return lines.join("\n") || "(empty)";
     }
 
+    // Scan window for anything that looks like project data
+    var windowMatches = [];
+    var scanNames = ["project", "proj", "project_data", "projectData", "currentProject",
+                     "hp", "hirehop", "hp_project", "hirehop_project", "project_info",
+                     "projectInfo", "page_data", "pageData", "app", "appData", "data",
+                     "record", "mainRecord", "main_record", "entity", "model"];
+    for (var si = 0; si < scanNames.length; si++) {
+      try {
+        var wv = window[scanNames[si]];
+        if (wv && typeof wv === "object" && !$.isArray(wv) && !isFileRecord(wv)) {
+          var hasDate = !!(wv.DATE || wv.date || wv.DATE_END || wv.DATE_OUT ||
+                           wv.START_DATETIME || wv.start_datetime || wv.DATETIME);
+          var hasName = !!(wv.NAME || wv.name || wv.TITLE || wv.title);
+          if (hasDate || hasName) windowMatches.push(scanNames[si]);
+        }
+      } catch (e) {}
+    }
+    // Also scan by project ID match
+    if (projectId) {
+      for (var wk in window) {
+        try {
+          var wo = window[wk];
+          if (!wo || typeof wo !== "object" || $.isArray(wo)) continue;
+          if (isFileRecord(wo)) continue;
+          var wid = asText(wo.ID || wo.id || wo.PROJECT_ID || wo.project_id).trim();
+          if (wid === asText(projectId).trim() && windowMatches.indexOf(wk) === -1) {
+            windowMatches.push(wk + " [ID match]");
+          }
+        } catch (e) {}
+      }
+    }
+
+    // Dump #proj_info inputs
+    var projInfoLines = [];
+    var $info = $("#proj_info").first();
+    if ($info.length) {
+      $info.find("input,select,textarea").each(function() {
+        var $f = $(this);
+        var val = asText($f.val()).trim();
+        if (!val) return;
+        var id = $f.attr("id") || "";
+        var name = $f.attr("name") || "";
+        var dataField = $f.attr("data-field") || $f.attr("data-name") || "";
+        var label = $('label[for="' + id + '"]').first().text().trim() ||
+                    $f.closest("td,th,div,li").find("label,b,strong").first().text().trim() || "";
+        projInfoLines.push(
+          "[" + (id || name || dataField || "?") + "]" +
+          (label ? " (" + label + ")" : "") +
+          " = " + val
+        );
+      });
+    }
+
     var html = '<details class="wpj-diag">' +
-      '<summary class="wpj-diag-hdr">Field Mapping Diagnostic</summary>' +
+      '<summary class="wpj-diag-hdr">Field Mapping Diagnostic (Project ID: ' + (projectId || "unknown") + ')</summary>' +
       '<div class="wpj-diag-body">';
 
+    // Window variable scan
     html += '<div class="wpj-diag-sec">' +
-      '<div class="wpj-diag-sec-title">Project data — window.project (' + (projectWindow ? Object.keys(projectWindow).length + " keys" : "not found") + ')</div>';
-    if (projectWindow) {
-      html += '<pre class="wpj-diag-pre">' + esc(dumpObj(projectWindow)) + '</pre>';
+      '<div class="wpj-diag-sec-title">Window variables with project-like data</div>';
+    if (windowMatches.length) {
+      html += '<pre class="wpj-diag-pre">' + esc(windowMatches.join("\n")) + '</pre>';
+      for (var wi = 0; wi < windowMatches.length; wi++) {
+        var wname = windowMatches[wi].replace(" [ID match]", "");
+        try {
+          html += '<pre class="wpj-diag-pre" style="margin-top:4px">' + esc("window." + wname + ":\n" + dumpObj(window[wname])) + '</pre>';
+        } catch(e) {}
+      }
     } else {
-      html += '<div class="wpj-diag-note">window.project not found. Waiting for AJAX cache below...</div>';
+      html += '<div class="wpj-diag-note">No matching window variables found. Project data may only exist in DOM form fields or an uncaptured AJAX response.</div>';
     }
     html += '</div>';
 
+    // #proj_info form inputs
     html += '<div class="wpj-diag-sec">' +
-      '<div class="wpj-diag-sec-title">Project data — AJAX cache (' + (cached ? Object.keys(cached).length + " keys" : "not yet captured") + ')</div>';
-    if (cached) {
-      html += '<pre class="wpj-diag-pre">' + esc(dumpObj(cached)) + '</pre>';
+      '<div class="wpj-diag-sec-title">#proj_info form inputs (' + projInfoLines.length + ' with values)</div>';
+    if (projInfoLines.length) {
+      html += '<pre class="wpj-diag-pre">' + esc(projInfoLines.join("\n")) + '</pre>';
     } else {
-      html += '<div class="wpj-diag-note">Navigate away and back, or open and close the project, to trigger an AJAX project data response.</div>';
+      html += '<div class="wpj-diag-note">#proj_info not found or has no inputs with values.</div>';
     }
     html += '</div>';
 
+    // AJAX cached project data
     html += '<div class="wpj-diag-sec">' +
-      '<div class="wpj-diag-sec-title">Job rows (' + jobRows.length + ' valid, ' + cachedJobCount + ' from AJAX job cache)</div>';
+      '<div class="wpj-diag-sec-title">AJAX-cached project data (' + (cachedProj ? Object.keys(cachedProj).length + " keys" : "not yet captured") + ')</div>';
+    if (cachedProj) {
+      html += '<pre class="wpj-diag-pre">' + esc(dumpObj(cachedProj)) + '</pre>';
+    } else {
+      html += '<div class="wpj-diag-note">No project AJAX response captured yet. Navigate away from and back to this project to trigger a fresh load.</div>';
+    }
+    html += '</div>';
+
+    // Job rows
+    html += '<div class="wpj-diag-sec">' +
+      '<div class="wpj-diag-sec-title">Job rows (' + jobRows.length + ' valid, ' + cachedJobCount + ' from AJAX cache)</div>';
     if (firstJob) {
       html += '<pre class="wpj-diag-pre">' + esc(dumpObj(firstJob)) + '</pre>';
     } else {
-      html += '<div class="wpj-diag-note">No valid job rows found. Open the Jobs tab (to trigger the AJAX load), then come back here.</div>';
+      html += '<div class="wpj-diag-note">No valid job rows. Open the Jobs tab on this project then return here.</div>';
     }
     html += '</div>';
 
@@ -2602,16 +2673,19 @@
     if (!value) return "";
     if (dateValueHasDateAndTime(value)) return value;
 
+    // Try progressively wider scopes — HireHop often puts date/time in adjacent cells
     var scopes = [
       $field.closest("td,th"),
+      $field.parent(),
       $field.closest("tr"),
-      $field.closest(".field-row,.form-row,.row,.ui-helper-clearfix,li"),
-      $field.parent()
+      $field.closest(".field-row,.form-row,.row,.ui-helper-clearfix,li,.form-group"),
+      $field.closest("tr").parent().closest("tr"),  // parent row of a nested table
+      $field.closest("table")
     ];
 
     for (var i = 0; i < scopes.length; i++) {
       var combined = readDateTimeFromScope(scopes[i], value);
-      if (combined) return combined;
+      if (combined && combined !== value) return combined;
     }
 
     return value;
