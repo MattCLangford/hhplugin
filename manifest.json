@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-06-24.4",
+  "version": "2026-06-24.5",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "0.5",
+      "cacheVersion": "0.6",
       "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
       "recommendedLoadOrder": 1
     }
@@ -91,7 +91,7 @@
     {
       "file": "11-projectjourney.js",
       "status": "lazy-project-tabs",
-      "cacheVersion": "0.4",
+      "cacheVersion": "0.5",
       "role": "Project page Journey tab that visualises the Wise Event Wrapper from Start Date Time and Project End Date Time, operational milestones, critical path, readiness score, department readiness, and issues/exceptions with mock data plus live-data mapping hooks, using native tab activation where available.",
       "recommendedLoadOrder": 11
     }

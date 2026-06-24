@@ -26,7 +26,7 @@
   ];
 
   var CFG = {
-    version: "2026-06-24.4",
+    version: "2026-06-24.5",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -588,6 +588,12 @@
       projectSystemDates: systemDates,
       hireHopFixedDates: [
         {
+          label: "Outgoing Date Time",
+          friendlyLabel: "Project outgoing",
+          dateTime: systemDates.outgoingDateTime,
+          note: "Project system bookend; detailed kit timing belongs at job level."
+        },
+        {
           label: "Start Date Time",
           friendlyLabel: "Project/Onsite Start",
           dateTime: wiseEventStart,
@@ -598,11 +604,17 @@
           friendlyLabel: "Project/Onsite End",
           dateTime: wiseEventEnd,
           note: "Wise responsibility/activity ends on site."
+        },
+        {
+          label: "Return Date Time",
+          friendlyLabel: "Project return",
+          dateTime: systemDates.returnDateTime,
+          note: "Project system bookend; detailed return timing belongs at job level."
         }
       ],
       jobKitBookingStart: "",
       jobKitBookingEnd: "",
-      milestones: buildDefaultMilestones(wiseEventStart, wiseEventEnd),
+      milestones: buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates),
       isMock: false
     };
   }
@@ -613,24 +625,26 @@
     return {
       outgoingDateTime: firstNonEmpty([
         firstObjectValue(projectWindow, ["OUTGOING_DATE_TIME", "outgoing_date_time", "outgoingDateTime", "OUTGOING", "outgoing", "OUT_DATE_TIME", "out_date_time"]),
-        readProjectInfoField(["outgoing date time", "outgoing datetime", "outgoing time"])
+        readProjectInfoDateTimeField(["outgoing date time", "outgoing datetime", "outgoing time"])
       ]),
       startDateTime: firstNonEmpty([
         firstObjectValue(projectWindow, ["START_DATE_TIME", "start_date_time", "startDateTime", "START_DATETIME", "start_datetime", "START", "start", "PROJECT_START_DATE_TIME", "project_start_date_time"]),
-        readProjectInfoField(["start date time", "start datetime", "project/onsite start", "project onsite start", "wise event start", "salesforce start", "event start", "project start"])
+        readProjectInfoDateTimeField(["start date time", "start datetime", "project/onsite start", "project onsite start", "wise event start", "salesforce start", "event start", "project start"])
       ]),
       projectEndDateTime: firstNonEmpty([
         firstObjectValue(projectWindow, ["PROJECT_END_DATE_TIME", "project_end_date_time", "projectEndDateTime", "END_DATE_TIME", "end_date_time", "endDateTime", "PROJECT_END", "project_end", "END", "end"]),
-        readProjectInfoField(["project end date time", "project end datetime", "project/onsite end", "project onsite end", "wise event end", "salesforce end", "event end", "project end"])
+        readProjectInfoDateTimeField(["project end date time", "project end datetime", "project/onsite end", "project onsite end", "wise event end", "salesforce end", "event end", "project end"])
       ]),
       returnDateTime: firstNonEmpty([
         firstObjectValue(projectWindow, ["RETURN_DATE_TIME", "return_date_time", "returnDateTime", "RETURN_DATETIME", "return_datetime", "RETURN", "return"]),
-        readProjectInfoField(["return date time", "return datetime", "return time"])
+        readProjectInfoDateTimeField(["return date time", "return datetime", "return time"])
       ])
     };
   }
 
-  function buildDefaultMilestones(wiseEventStart, wiseEventEnd) {
+  function buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates) {
+    systemDates = normaliseProjectSystemDates(systemDates || {});
+
     return [
       {
         id: "pre-production",
@@ -639,12 +653,27 @@
         plannedDateTime: "",
         actualDateTime: "",
         owner: "Project Management",
-        status: "Missing",
-        riskLevel: "Missing",
-        criticalPath: true,
+        status: "Not Started",
+        riskLevel: "None",
+        criticalPath: false,
+        optional: true,
         timingType: "offsite-prep",
         dependencies: [],
-        notes: "Map to the agreed production sign-off or final brief field."
+        notes: "Optional until a production sign-off field is mapped."
+      },
+      {
+        id: "project-outgoing",
+        group: "Supplier / Kit Prep",
+        name: "Project outgoing",
+        plannedDateTime: systemDates.outgoingDateTime,
+        actualDateTime: "",
+        owner: "Kit / Warehouse",
+        status: systemDates.outgoingDateTime ? "Not Started" : "Missing",
+        riskLevel: systemDates.outgoingDateTime ? "None" : "Missing",
+        criticalPath: true,
+        timingType: "offsite-prep",
+        dependencies: ["pre-production"],
+        notes: "Mapped from Outgoing Date Time."
       },
       {
         id: "supplier-delivery",
@@ -653,26 +682,27 @@
         plannedDateTime: "",
         actualDateTime: "",
         owner: "Suppliers",
-        status: "Missing",
-        riskLevel: "Missing",
-        criticalPath: true,
+        status: "Not Started",
+        riskLevel: "None",
+        criticalPath: false,
+        optional: true,
         timingType: "offsite-prep",
         dependencies: ["pre-production"],
-        notes: "Map supplier delivery or collection timing here."
+        notes: "Optional until supplier timing is mapped."
       },
       {
         id: "kit-prep",
         group: "Supplier / Kit Prep",
         name: "Kit prep complete",
-        plannedDateTime: "",
+        plannedDateTime: systemDates.outgoingDateTime,
         actualDateTime: "",
         owner: "Kit / Warehouse",
-        status: "Missing",
-        riskLevel: "Missing",
+        status: systemDates.outgoingDateTime ? "Not Started" : "Missing",
+        riskLevel: systemDates.outgoingDateTime ? "None" : "Missing",
         criticalPath: true,
         timingType: "offsite-prep",
-        dependencies: ["pre-production"],
-        notes: "Map from job-level kit prep and return data once available."
+        dependencies: ["project-outgoing"],
+        notes: "Seeded from Outgoing Date Time until job-level prep timing is mapped."
       },
       {
         id: "load",
@@ -681,12 +711,13 @@
         plannedDateTime: "",
         actualDateTime: "",
         owner: "Crew & Logistics",
-        status: "Missing",
-        riskLevel: "Missing",
-        criticalPath: true,
+        status: "Not Started",
+        riskLevel: "None",
+        criticalPath: false,
+        optional: true,
         timingType: "offsite-prep",
         dependencies: ["kit-prep"],
-        notes: "Map vehicle allocation and load timing here."
+        notes: "Optional until vehicle allocation timing is mapped."
       },
       {
         id: "site-arrival",
@@ -700,21 +731,21 @@
         criticalPath: true,
         timingType: "onsite",
         dependencies: ["load"],
-        notes: "Defaulted from Wise Event Start until a specific site arrival time is mapped."
+        notes: "Defaulted from Project/Onsite Start until a specific site arrival time is mapped."
       },
       {
         id: "build-start",
         group: "Build",
         name: "Build start",
-        plannedDateTime: "",
+        plannedDateTime: wiseEventStart,
         actualDateTime: "",
         owner: "Production",
-        status: "Missing",
-        riskLevel: "Missing",
+        status: wiseEventStart ? "Not Started" : "Missing",
+        riskLevel: wiseEventStart ? "None" : "Missing",
         criticalPath: true,
         timingType: "onsite",
         dependencies: ["site-arrival"],
-        notes: "Map build start from job schedule or production plan."
+        notes: "Seeded from Project/Onsite Start until a specific build time is mapped."
       },
       {
         id: "show-start",
@@ -723,12 +754,13 @@
         plannedDateTime: "",
         actualDateTime: "",
         owner: "Technical",
-        status: "Missing",
-        riskLevel: "Missing",
-        criticalPath: true,
+        status: "Not Started",
+        riskLevel: "None",
+        criticalPath: false,
+        optional: true,
         timingType: "onsite",
         dependencies: ["build-start"],
-        notes: "Map show start from the operational schedule."
+        notes: "Optional until show timing is mapped."
       },
       {
         id: "show-end",
@@ -737,12 +769,13 @@
         plannedDateTime: "",
         actualDateTime: "",
         owner: "Technical",
-        status: "Missing",
-        riskLevel: "Missing",
-        criticalPath: true,
+        status: "Not Started",
+        riskLevel: "None",
+        criticalPath: false,
+        optional: true,
         timingType: "onsite",
         dependencies: ["show-start"],
-        notes: "Map show end from the operational schedule."
+        notes: "Optional until show timing is mapped."
       },
       {
         id: "derig-start",
@@ -751,12 +784,13 @@
         plannedDateTime: "",
         actualDateTime: "",
         owner: "Production",
-        status: "Missing",
-        riskLevel: "Missing",
-        criticalPath: true,
+        status: "Not Started",
+        riskLevel: "None",
+        criticalPath: false,
+        optional: true,
         timingType: "onsite",
         dependencies: ["show-end"],
-        notes: "Map derig start from job schedule."
+        notes: "Optional until derig timing is mapped."
       },
       {
         id: "site-clear",
@@ -770,7 +804,21 @@
         criticalPath: true,
         timingType: "onsite",
         dependencies: ["derig-start"],
-        notes: "Defaulted from Wise Event End until a specific clear time is mapped."
+        notes: "Defaulted from Project/Onsite End until a specific clear time is mapped."
+      },
+      {
+        id: "project-return",
+        group: "Site Clear",
+        name: "Project return",
+        plannedDateTime: systemDates.returnDateTime,
+        actualDateTime: "",
+        owner: "Kit / Warehouse",
+        status: systemDates.returnDateTime ? "Not Started" : "Missing",
+        riskLevel: systemDates.returnDateTime ? "None" : "Missing",
+        criticalPath: true,
+        timingType: "offsite",
+        dependencies: ["site-clear"],
+        notes: "Mapped from Return Date Time."
       }
     ];
   }
@@ -797,7 +845,7 @@
       hireHopFixedDates: normaliseFixedDates(raw.hireHopFixedDates || raw.fixedDates || [], wiseEventStart, wiseEventEnd, systemDates),
       jobKitBookingStart: asText(raw.jobKitBookingStart || raw.kitBookingStart || ""),
       jobKitBookingEnd: asText(raw.jobKitBookingEnd || raw.kitBookingEnd || ""),
-      milestones: milestones.length ? milestones : buildDefaultMilestones(wiseEventStart, wiseEventEnd),
+      milestones: milestones.length ? milestones : buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates),
       departments: normaliseDepartments(raw.departments || DEPARTMENTS)
     };
   }
@@ -830,6 +878,12 @@
 
     if (!out.length) {
       out.push({
+        label: "Outgoing Date Time",
+        friendlyLabel: "Project outgoing",
+        dateTime: systemDates && systemDates.outgoingDateTime ? systemDates.outgoingDateTime : "",
+        note: "Project system bookend; detailed kit timing belongs at job level."
+      });
+      out.push({
         label: "Start Date Time",
         friendlyLabel: "Project/Onsite Start",
         dateTime: systemDates && systemDates.startDateTime ? systemDates.startDateTime : wiseEventStart,
@@ -840,6 +894,12 @@
         friendlyLabel: "Project/Onsite End",
         dateTime: systemDates && systemDates.projectEndDateTime ? systemDates.projectEndDateTime : wiseEventEnd,
         note: "Wise responsibility/activity ends on site."
+      });
+      out.push({
+        label: "Return Date Time",
+        friendlyLabel: "Project return",
+        dateTime: systemDates && systemDates.returnDateTime ? systemDates.returnDateTime : "",
+        note: "Project system bookend; detailed return timing belongs at job level."
       });
     }
 
@@ -867,6 +927,7 @@
         status: status,
         riskLevel: normaliseRisk(item.riskLevel || item.risk || status),
         criticalPath: item.criticalPath === true || item.critical === true,
+        optional: item.optional === true || item.required === false,
         dependencies: normaliseDependencies(item.dependencies),
         notes: asText(item.notes || item.note || ""),
         timingType: normaliseTimingType(item.timingType || item.locationType || ""),
@@ -931,20 +992,20 @@
     var wrapperEnd = parseDate(data.wiseEventEnd);
 
     if (!wrapperStart) {
-      issues.push(createIssue("Blocked", "Wise Event Start is missing", "The Salesforce event wrapper start is required before operational dates can be trusted.", "event-wrapper", true));
+      issues.push(createIssue("Blocked", "Project/Onsite Start is missing", "Start Date Time is required before operational dates can be trusted.", "event-wrapper", true));
     }
     if (!wrapperEnd) {
-      issues.push(createIssue("Blocked", "Wise Event End is missing", "The Salesforce event wrapper end is required before operational dates can be trusted.", "event-wrapper", true));
+      issues.push(createIssue("Blocked", "Project/Onsite End is missing", "Project End Date Time is required before operational dates can be trusted.", "event-wrapper", true));
     }
     if (wrapperStart && wrapperEnd && wrapperStart.getTime() > wrapperEnd.getTime()) {
-      issues.push(createIssue("Blocked", "Wise Event End is before Wise Event Start", "Check the Salesforce wrapper dates before planning operational milestones.", "event-wrapper", true));
+      issues.push(createIssue("Blocked", "Project/Onsite End is before Project/Onsite Start", "Check the HireHop project system dates before planning operational milestones.", "event-wrapper", true));
     }
 
     for (var i = 0; i < milestones.length; i++) {
       var milestone = milestones[i];
       var planned = parseDate(milestone.plannedDateTime);
 
-      if (!milestone.plannedDateTime) {
+      if (!milestone.plannedDateTime && !milestone.optional) {
         issues.push(createIssue(milestone.criticalPath ? "Blocked" : "Missing Data", milestone.name + " has no planned datetime", "Add a planned date/time so the milestone can be checked against the wrapper.", milestone.id, milestone.criticalPath));
       }
 
@@ -953,14 +1014,14 @@
       }
 
       if (planned && wrapperStart && isOperationalOnsite(milestone) && planned.getTime() < wrapperStart.getTime()) {
-        issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " is before Wise Event Start", "Onsite operational work sits outside the Salesforce event wrapper.", milestone.id, milestone.criticalPath));
+        issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " is before Project/Onsite Start", "Onsite operational work sits outside the HireHop project wrapper.", milestone.id, milestone.criticalPath));
       }
 
       if (planned && wrapperEnd && isOperationalOnsite(milestone) && planned.getTime() > wrapperEnd.getTime()) {
-        issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " is after Wise Event End", "Onsite operational work extends beyond the Salesforce event wrapper.", milestone.id, milestone.criticalPath));
+        issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " is after Project/Onsite End", "Onsite operational work extends beyond the HireHop project wrapper.", milestone.id, milestone.criticalPath));
       }
 
-      if (isSupplierMilestone(milestone) && !milestone.plannedDateTime) {
+      if (isSupplierMilestone(milestone) && !milestone.plannedDateTime && !milestone.optional) {
         issues.push(createIssue("At Risk", "Supplier timing missing", milestone.name + " needs a confirmed supplier timing before the journey is ready.", milestone.id, milestone.criticalPath));
       }
 
@@ -974,18 +1035,60 @@
         var dependency = byId[milestone.dependencies[d]];
         if (!dependency) {
           issues.push(createIssue("Missing Data", milestone.name + " has an unmapped dependency", "Dependency '" + milestone.dependencies[d] + "' is not present in the journey data.", milestone.id, milestone.criticalPath));
-        } else if (normaliseStatus(dependency.status) !== "Complete") {
-          issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " depends on incomplete work", dependency.name + " must be complete first.", milestone.id, milestone.criticalPath));
+        } else {
+          var dependencyIssue = getDependencyIssue(milestone, dependency);
+          if (dependencyIssue) {
+            issues.push(createIssue(dependencyIssue.severity, dependencyIssue.title, dependencyIssue.detail, milestone.id, milestone.criticalPath));
+          }
         }
       }
     }
 
-    if (!data.jobKitBookingStart || !data.jobKitBookingEnd) {
+    if ((!data.jobKitBookingStart || !data.jobKitBookingEnd) &&
+        !(data.projectSystemDates && data.projectSystemDates.outgoingDateTime && data.projectSystemDates.returnDateTime)) {
       issues.push(createIssue("Missing Data", "Job operational kit timing is missing", "Map job-level prep, return and supplier timings so they are not confused with project wrapper dates.", "kit-booking", true));
     }
 
     addRelationshipIssues(issues, byId, wrapperEnd);
     return sortIssues(dedupeIssues(issues));
+  }
+
+  function getDependencyIssue(milestone, dependency) {
+    if (milestone.optional) return null;
+    if (dependency.optional && !dependency.plannedDateTime) return null;
+
+    var dependencyStatus = normaliseStatus(dependency.status);
+    if (dependencyStatus === "Complete") return null;
+
+    var milestoneStatus = normaliseStatus(milestone.status);
+    var milestonePlanned = parseDate(milestone.plannedDateTime);
+    var dependencyPlanned = parseDate(dependency.plannedDateTime);
+
+    if (dependencyStatus === "Blocked" && milestonePlanned) {
+      return {
+        severity: milestone.criticalPath ? "At Risk" : "Warning",
+        title: milestone.name + " depends on blocked work",
+        detail: dependency.name + " is blocked and must be resolved first."
+      };
+    }
+
+    if (milestoneStatus === "In Progress" || milestoneStatus === "Complete" || milestone.actualDateTime) {
+      return {
+        severity: milestone.criticalPath ? "At Risk" : "Warning",
+        title: milestone.name + " started before dependency complete",
+        detail: dependency.name + " should be complete before this milestone moves forward."
+      };
+    }
+
+    if (milestonePlanned && dependencyPlanned && milestonePlanned.getTime() < dependencyPlanned.getTime()) {
+      return {
+        severity: milestone.criticalPath ? "At Risk" : "Warning",
+        title: milestone.name + " is planned before its dependency",
+        detail: dependency.name + " is planned later than this milestone."
+      };
+    }
+
+    return null;
   }
 
   function addRelationshipIssues(issues, byId, wrapperEnd) {
@@ -1005,12 +1108,12 @@
 
     var siteClearDate = siteClear ? parseDate(siteClear.plannedDateTime) : null;
     if (siteClearDate && wrapperEnd && siteClearDate.getTime() > wrapperEnd.getTime()) {
-      issues.push(createIssue("At Risk", "Site clear is after Wise Event End", "The operational clear time extends beyond the Salesforce wrapper.", siteClear.id, true));
+      issues.push(createIssue("At Risk", "Site clear is after Project/Onsite End", "The operational clear time extends beyond the HireHop project wrapper.", siteClear.id, true));
     }
   }
 
   function calculateReadiness(data, issues) {
-    var milestones = data.milestones || [];
+    var milestones = getScoredMilestones(data.milestones || []);
     var weighted = 0;
     var possible = 0;
 
@@ -1037,14 +1140,15 @@
   function calculateDepartmentReadiness(data, issues) {
     var departments = data.departments || DEPARTMENTS;
     var milestones = data.milestones || [];
+    var scoredMilestones = getScoredMilestones(milestones);
     var out = [];
 
     for (var d = 0; d < departments.length; d++) {
       var department = departments[d];
       var selected = [];
-      for (var i = 0; i < milestones.length; i++) {
-        if (normaliseComparable(milestones[i].owner) === normaliseComparable(department)) {
-          selected.push(milestones[i]);
+      for (var i = 0; i < scoredMilestones.length; i++) {
+        if (normaliseComparable(scoredMilestones[i].owner) === normaliseComparable(department)) {
+          selected.push(scoredMilestones[i]);
         }
       }
 
@@ -1069,7 +1173,7 @@
   }
 
   function calculateOverallStatus(data, issues, readinessScore) {
-    var milestones = data.milestones || [];
+    var milestones = getScoredMilestones(data.milestones || []);
 
     for (var i = 0; i < issues.length; i++) {
       if (issues[i].severity === "Blocked") return "Blocked";
@@ -1082,6 +1186,16 @@
     }
 
     return readinessScore >= 85 ? "Ready" : "At Risk";
+  }
+
+  function getScoredMilestones(milestones) {
+    var out = [];
+    for (var i = 0; i < milestones.length; i++) {
+      if (!milestones[i].optional || milestones[i].plannedDateTime || normaliseStatus(milestones[i].status) === "Complete") {
+        out.push(milestones[i]);
+      }
+    }
+    return out.length ? out : milestones;
   }
 
   function buildJourneyHtml(data, analysis) {
@@ -1485,7 +1599,7 @@
           criticalPath: true,
           timingType: "onsite",
           dependencies: ["load"],
-          notes: "Aligned with Wise Event Start."
+          notes: "Aligned with Project/Onsite Start."
         },
         {
           id: "build-start",
@@ -1555,7 +1669,7 @@
           criticalPath: true,
           timingType: "onsite",
           dependencies: ["derig-start"],
-          notes: "Planned clear is beyond the Salesforce wrapper."
+          notes: "Planned clear is beyond the HireHop project wrapper."
         }
       ]
     };
@@ -1702,6 +1816,126 @@
     return value;
   }
 
+  function readProjectInfoDateTimeField(labels) {
+    var $info = $("#proj_info").first();
+    if (!$info.length) return "";
+
+    var labelLookup = {};
+    for (var i = 0; i < labels.length; i++) {
+      labelLookup[normaliseComparable(labels[i])] = true;
+    }
+
+    var value = readProjectInfoDateTimeControlField($info, labelLookup);
+    if (value) return value;
+
+    $info.find("tr,.field-row,.form-row,.row,.ui-helper-clearfix,li").each(function () {
+      if (value) return false;
+      var $scope = $(this);
+      var text = normaliseComparable(getElementTextWithControlMeta($scope));
+      if (!matchesProjectInfoLabel(text, labelLookup)) return;
+
+      value = readDateTimeFromScope($scope) || readValueFromRow($scope);
+      return false;
+    });
+
+    return value;
+  }
+
+  function readProjectInfoDateTimeControlField($info, labelLookup) {
+    var value = "";
+
+    $info.find("input,textarea,select").each(function () {
+      if (value) return false;
+      var $field = $(this);
+      if (!asText($field.val()).trim()) return;
+
+      var text = getProjectInfoControlText($field);
+      if (!matchesProjectInfoLabel(text, labelLookup)) return;
+
+      value = readDateTimeForControl($field);
+      return false;
+    });
+
+    return value;
+  }
+
+  function readDateTimeForControl($field) {
+    var value = asText($field.val()).trim();
+    if (!value) return "";
+    if (dateValueHasDateAndTime(value)) return value;
+
+    var scopes = [
+      $field.closest("td,th"),
+      $field.closest("tr"),
+      $field.closest(".field-row,.form-row,.row,.ui-helper-clearfix,li"),
+      $field.parent()
+    ];
+
+    for (var i = 0; i < scopes.length; i++) {
+      var combined = readDateTimeFromScope(scopes[i], value);
+      if (combined) return combined;
+    }
+
+    return value;
+  }
+
+  function readDateTimeFromScope($scope, preferredValue) {
+    if (!$scope || !$scope.length) return "";
+
+    var values = [];
+    $scope.find("input,textarea,select").each(function () {
+      var value = asText($(this).val()).trim();
+      if (value) values.push(value);
+    });
+
+    var text = compactText($scope.clone().children("input,textarea,select,script,style").remove().end().text());
+    if (text) values.push(text);
+    if (preferredValue) values.unshift(preferredValue);
+
+    return combineDateTimeValues(values);
+  }
+
+  function combineDateTimeValues(values) {
+    var full = "";
+    var date = "";
+    var time = "";
+
+    for (var i = 0; i < values.length; i++) {
+      var value = asText(values[i]).trim();
+      if (!value) continue;
+
+      if (!full && dateValueHasDateAndTime(value)) full = value;
+      if (!date) date = extractDatePart(value);
+      if (!time) time = extractTimePart(value);
+    }
+
+    if (date && time) return date + " " + time;
+    return full || "";
+  }
+
+  function dateValueHasDateAndTime(value) {
+    return !!(extractDatePart(value) && extractTimePart(value));
+  }
+
+  function extractDatePart(value) {
+    var text = asText(value);
+    var iso = text.match(/\b\d{4}-\d{1,2}-\d{1,2}\b/);
+    if (iso) return iso[0];
+    var uk = text.match(/\b\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4}\b/);
+    if (uk) return uk[0];
+    var named = text.match(/\b\d{1,2}\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{2,4}\b/i);
+    if (named) return compactText(named[0]);
+    var namedUs = text.match(/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{2,4}\b/i);
+    return namedUs ? compactText(namedUs[0]) : "";
+  }
+
+  function extractTimePart(value) {
+    var text = asText(value);
+    var match = text.match(/\b([01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d)?(?:\s*[ap]m)?\b/i) ||
+      text.match(/\b(1[0-2]|0?[1-9])\s*[ap]m\b/i);
+    return match ? compactText(match[0]) : "";
+  }
+
   function readProjectInfoControlField($info, labelLookup) {
     var value = "";
 
@@ -1741,6 +1975,32 @@
 
     bits.push($field.closest("td,th,.field-row,.form-row,.row,.ui-helper-clearfix,li").find("label,b,strong,span").first().text());
     return normaliseComparable(bits.join(" "));
+  }
+
+  function getElementTextWithControlMeta($element) {
+    var bits = [
+      $element.text(),
+      $element.attr("id"),
+      $element.attr("name"),
+      $element.attr("title"),
+      $element.attr("aria-label")
+    ];
+
+    $element.find("input,textarea,select,[title],[aria-label],[data-label],[data-field],[data-name]").each(function () {
+      var $field = $(this);
+      bits.push(
+        $field.attr("id"),
+        $field.attr("name"),
+        $field.attr("title"),
+        $field.attr("aria-label"),
+        $field.attr("placeholder"),
+        $field.attr("data-label"),
+        $field.attr("data-name"),
+        $field.attr("data-field")
+      );
+    });
+
+    return bits.join(" ");
   }
 
   function matchesProjectInfoLabel(text, labelLookup) {
@@ -2055,7 +2315,45 @@
       ".wpj-chip{border-radius:3px;min-height:19px;padding:2px 6px;font-size:11px;}",
       ".wpj-issues{position:static;}",
       ".wpj-issue-list{padding:8px;}",
-      ".wpj-empty{margin:8px;border-color:#c7c7c7;border-radius:3px;background:#f7f7f7;color:#555;}"
+      ".wpj-empty{margin:8px;border-color:#c7c7c7;border-radius:3px;background:#f7f7f7;color:#555;}",
+      ".wpj-shell{padding:6px;background:#fff;}",
+      ".wpj-header,.wpj-wrapper,.wpj-toolbar,.wpj-timeline,.wpj-departments,.wpj-issues{margin-bottom:6px;}",
+      ".wpj-header-main{padding:6px 8px;}",
+      ".wpj-header-stats{grid-template-columns:150px minmax(220px,1fr);}",
+      ".wpj-stat{padding:5px 8px;}",
+      ".wpj-score-row{gap:6px;}",
+      ".wpj-score-row strong{font-size:16px;}",
+      ".wpj-wrapper-grid{grid-template-columns:185px 185px minmax(260px,1fr);gap:6px;padding:6px;}",
+      ".wpj-wrapper-card,.wpj-fixed-card{min-height:0;padding:7px 8px;}",
+      ".wpj-wrapper-card strong{font-size:14px;margin-bottom:2px;}",
+      ".wpj-wrapper-card small,.wpj-fixed-date small,.wpj-department small{font-size:11px;}",
+      ".wpj-fixed-date{padding:4px 0;}",
+      ".wpj-fixed-date strong{font-size:12px;}",
+      ".wpj-fixed-date span{font-size:12px;margin:1px 0;}",
+      ".wpj-toolbar{padding:5px 8px;}",
+      ".wpj-toolbar .wpj-section-title h3{font-size:14px;}",
+      ".wpj-main-grid{grid-template-columns:minmax(0,1fr) 330px;gap:6px;}",
+      ".wpj-group-title{padding:5px 8px;}",
+      ".wpj-card-row{display:block;padding:0;}",
+      ".wpj-milestone{display:grid;grid-template-columns:minmax(180px,1.35fr) minmax(150px,.8fr) minmax(120px,.65fr);gap:6px 10px;align-items:center;margin:0;border-width:0 0 1px 4px;border-radius:0;padding:6px 8px;}",
+      ".wpj-milestone:last-child{border-bottom:0;}",
+      ".wpj-milestone-head{margin:0;align-items:center;}",
+      ".wpj-milestone h5{font-size:12px;margin:0 0 1px;}",
+      ".wpj-milestone-head span{font-size:11px;}",
+      ".wpj-datetime{display:block;margin:0;}",
+      ".wpj-datetime span{display:inline;margin-right:6px;}",
+      ".wpj-datetime strong{display:inline;font-size:12px;}",
+      ".wpj-card-footer{justify-content:flex-end;margin:0;font-size:11px;}",
+      ".wpj-card-footer strong{margin-left:6px;}",
+      ".wpj-details{grid-column:1/-1;margin-top:2px;padding-top:4px;}",
+      ".wpj-details dl{margin-top:4px;grid-template-columns:80px minmax(0,1fr);font-size:11px;}",
+      ".wpj-department-grid{grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:6px;padding:6px;}",
+      ".wpj-department{padding:6px 8px;}",
+      ".wpj-issue-list{gap:6px;padding:6px;}",
+      ".wpj-issue{padding:6px 8px;}",
+      ".wpj-issue strong{font-size:12px;margin-bottom:1px;}",
+      ".wpj-issue p{font-size:11px;}",
+      "@media(max-width:980px){.wpj-wrapper-grid,.wpj-main-grid{grid-template-columns:1fr;}.wpj-milestone{grid-template-columns:1fr;}.wpj-card-footer{justify-content:flex-start;}}"
     ].join("\n");
 
     $("<style></style>", { id: CFG.stylesId, text: css }).appendTo("head");
