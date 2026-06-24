@@ -26,13 +26,15 @@
   ];
 
   var CFG = {
-    version: "2026-06-24.2",
+    version: "2026-06-24.3",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
     defaultButtonLabel: asText(EXTERNAL_CONFIG.buttonLabel) || "Journey",
     defaultButtonTitle: asText(EXTERNAL_CONFIG.buttonTitle) || "Open project journey",
     maintainRecoveryMs: asNumber(EXTERNAL_CONFIG.maintainRecoveryMs, 5000),
+    minPanelHeight: asNumber(EXTERNAL_CONFIG.minPanelHeight, 360),
+    bottomPadding: asNumber(EXTERNAL_CONFIG.bottomPadding, 12),
     mockWhenEmpty: EXTERNAL_CONFIG.mockWhenEmpty !== false
   };
 
@@ -43,7 +45,8 @@
     lastHost: null,
     showCriticalOnly: false,
     overrideData: null,
-    lastAnalysis: null
+    lastAnalysis: null,
+    lastPanelMaxHeight: ""
   };
 
   bootstrap();
@@ -56,8 +59,9 @@
       scheduleMaintainProjectJourney(0, {});
     }, CFG.maintainRecoveryMs);
 
-    $(window).on("load.wiseProjectJourney focus.wiseProjectJourney hashchange.wiseProjectJourney", function () {
+    $(window).on("load.wiseProjectJourney focus.wiseProjectJourney resize.wiseProjectJourney hashchange.wiseProjectJourney", function () {
       scheduleMaintainProjectJourney(60, { forceScan: true });
+      applyJourneyPanelSizing($("#" + CFG.panelId));
     });
     $(document).on("ajaxComplete.wiseProjectJourney", function () {
       scheduleMaintainProjectJourney(80, { forceScan: true });
@@ -88,6 +92,7 @@
     var $host = findProjectTabsHost();
     if (!$host.length) {
       state.lastHost = null;
+      state.lastPanelMaxHeight = "";
       removeJourneyTab();
       return;
     }
@@ -345,6 +350,7 @@
 
     $panel.html(buildJourneyHtml(data, analysis));
     bindJourneyPanelEvents();
+    applyJourneyPanelSizing($panel);
   }
 
   function showJourneyPanel($host) {
@@ -366,6 +372,7 @@
       .attr("aria-hidden", "false")
       .removeAttr("hidden");
 
+    applyJourneyPanelSizing($panel);
     setJourneyTabVisualState($host);
   }
 
@@ -376,6 +383,26 @@
       .removeClass("is-wise-journey-active")
       .attr("aria-selected", "false")
       .attr("aria-expanded", "false");
+  }
+
+  function applyJourneyPanelSizing($panel) {
+    if (!$panel || !$panel.length) return;
+
+    var el = $panel.get(0);
+    var rect = el && el.getBoundingClientRect ? el.getBoundingClientRect() : null;
+    var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 700;
+    var top = rect && isFinite(rect.top) ? Math.max(0, rect.top) : 0;
+    var maxHeight = Math.max(CFG.minPanelHeight, Math.floor(viewportHeight - top - CFG.bottomPadding));
+    var heightKey = String(maxHeight);
+
+    if (state.lastPanelMaxHeight === heightKey && $panel.css("overflow-y") === "auto") return;
+    state.lastPanelMaxHeight = heightKey;
+
+    $panel.css({
+      maxHeight: maxHeight + "px",
+      overflowY: "auto",
+      overflowX: "hidden"
+    });
   }
 
   function setJourneyTabVisualState($host) {
@@ -470,37 +497,62 @@
       ])
     };
 
+    var systemDates = getProjectSystemDates(projectWindow);
     var wiseEventStart = firstNonEmpty([
-      firstObjectValue(projectWindow, ["WISE_EVENT_START", "wise_event_start", "wiseEventStart", "SALESFORCE_START", "salesforce_start", "EVENT_START", "event_start", "START", "start", "PROJECT_START", "project_start"]),
-      readProjectInfoField(["wise event start", "salesforce start", "event start", "start date", "project start", "project/onsite start"])
+      systemDates.startDateTime,
+      firstObjectValue(projectWindow, ["WISE_EVENT_START", "wise_event_start", "wiseEventStart", "SALESFORCE_START", "salesforce_start", "EVENT_START", "event_start", "PROJECT_START", "project_start"])
     ]);
     var wiseEventEnd = firstNonEmpty([
-      firstObjectValue(projectWindow, ["WISE_EVENT_END", "wise_event_end", "wiseEventEnd", "SALESFORCE_END", "salesforce_end", "EVENT_END", "event_end", "END", "end", "PROJECT_END", "project_end"]),
-      readProjectInfoField(["wise event end", "salesforce end", "event end", "end date", "project end", "project/onsite end"])
+      systemDates.projectEndDateTime,
+      firstObjectValue(projectWindow, ["WISE_EVENT_END", "wise_event_end", "wiseEventEnd", "SALESFORCE_END", "salesforce_end", "EVENT_END", "event_end", "PROJECT_END", "project_end"])
     ]);
 
     return {
       project: project,
       wiseEventStart: wiseEventStart,
       wiseEventEnd: wiseEventEnd,
+      projectSystemDates: systemDates,
       hireHopFixedDates: [
         {
-          label: "HireHop Project Start",
-          friendlyLabel: "Wise Event Start",
+          label: "Start Date Time",
+          friendlyLabel: "Project/Onsite Start",
           dateTime: wiseEventStart,
-          note: "Project-level fixed field. Treat as the Salesforce event wrapper, not operational kit timing."
+          note: "Wise responsibility/activity starts on site."
         },
         {
-          label: "HireHop Project End",
-          friendlyLabel: "Wise Event End",
+          label: "Project End Date Time",
+          friendlyLabel: "Project/Onsite End",
           dateTime: wiseEventEnd,
-          note: "Project-level fixed field. Treat as the Salesforce event wrapper, not operational kit timing."
+          note: "Wise responsibility/activity ends on site."
         }
       ],
       jobKitBookingStart: "",
       jobKitBookingEnd: "",
       milestones: buildDefaultMilestones(wiseEventStart, wiseEventEnd),
       isMock: false
+    };
+  }
+
+  function getProjectSystemDates(projectWindow) {
+    projectWindow = projectWindow && typeof projectWindow === "object" ? projectWindow : {};
+
+    return {
+      outgoingDateTime: firstNonEmpty([
+        firstObjectValue(projectWindow, ["OUTGOING_DATE_TIME", "outgoing_date_time", "outgoingDateTime", "OUTGOING", "outgoing", "OUT_DATE_TIME", "out_date_time"]),
+        readProjectInfoField(["outgoing date time", "outgoing datetime", "outgoing time"])
+      ]),
+      startDateTime: firstNonEmpty([
+        firstObjectValue(projectWindow, ["START_DATE_TIME", "start_date_time", "startDateTime", "START_DATETIME", "start_datetime", "START", "start", "PROJECT_START_DATE_TIME", "project_start_date_time"]),
+        readProjectInfoField(["start date time", "start datetime", "project/onsite start", "project onsite start", "wise event start", "salesforce start", "event start", "project start"])
+      ]),
+      projectEndDateTime: firstNonEmpty([
+        firstObjectValue(projectWindow, ["PROJECT_END_DATE_TIME", "project_end_date_time", "projectEndDateTime", "END_DATE_TIME", "end_date_time", "endDateTime", "PROJECT_END", "project_end", "END", "end"]),
+        readProjectInfoField(["project end date time", "project end datetime", "project/onsite end", "project onsite end", "wise event end", "salesforce end", "event end", "project end"])
+      ]),
+      returnDateTime: firstNonEmpty([
+        firstObjectValue(projectWindow, ["RETURN_DATE_TIME", "return_date_time", "returnDateTime", "RETURN_DATETIME", "return_datetime", "RETURN", "return"]),
+        readProjectInfoField(["return date time", "return datetime", "return time"])
+      ])
     };
   }
 
@@ -652,8 +704,9 @@
   function normaliseJourneyData(raw, isMock) {
     raw = raw || {};
     var project = raw.project && typeof raw.project === "object" ? raw.project : {};
-    var wiseEventStart = firstNonEmpty([raw.wiseEventStart, project.wiseEventStart, raw.eventStart, raw.start]);
-    var wiseEventEnd = firstNonEmpty([raw.wiseEventEnd, project.wiseEventEnd, raw.eventEnd, raw.end]);
+    var systemDates = normaliseProjectSystemDates(raw.projectSystemDates || raw.systemDates || raw);
+    var wiseEventStart = firstNonEmpty([raw.wiseEventStart, project.wiseEventStart, systemDates.startDateTime, raw.eventStart, raw.start]);
+    var wiseEventEnd = firstNonEmpty([raw.wiseEventEnd, project.wiseEventEnd, systemDates.projectEndDateTime, raw.eventEnd, raw.end]);
     var milestones = normaliseMilestones(raw.milestones || raw.journeyMilestones || [], wiseEventStart, wiseEventEnd);
 
     return {
@@ -666,7 +719,8 @@
       },
       wiseEventStart: asText(wiseEventStart),
       wiseEventEnd: asText(wiseEventEnd),
-      hireHopFixedDates: normaliseFixedDates(raw.hireHopFixedDates || raw.fixedDates || [], wiseEventStart, wiseEventEnd),
+      projectSystemDates: systemDates,
+      hireHopFixedDates: normaliseFixedDates(raw.hireHopFixedDates || raw.fixedDates || [], wiseEventStart, wiseEventEnd, systemDates),
       jobKitBookingStart: asText(raw.jobKitBookingStart || raw.kitBookingStart || ""),
       jobKitBookingEnd: asText(raw.jobKitBookingEnd || raw.kitBookingEnd || ""),
       milestones: milestones.length ? milestones : buildDefaultMilestones(wiseEventStart, wiseEventEnd),
@@ -674,7 +728,18 @@
     };
   }
 
-  function normaliseFixedDates(fixedDates, wiseEventStart, wiseEventEnd) {
+  function normaliseProjectSystemDates(value) {
+    value = value && typeof value === "object" ? value : {};
+
+    return {
+      outgoingDateTime: asText(value.outgoingDateTime || value.outgoing || value.outgoingDate || ""),
+      startDateTime: asText(value.startDateTime || value.startDate || value.projectStartDateTime || ""),
+      projectEndDateTime: asText(value.projectEndDateTime || value.projectEnd || value.endDateTime || value.endDate || ""),
+      returnDateTime: asText(value.returnDateTime || value.return || value.returnDate || "")
+    };
+  }
+
+  function normaliseFixedDates(fixedDates, wiseEventStart, wiseEventEnd, systemDates) {
     var list = normaliseArray(fixedDates);
     var out = [];
 
@@ -691,16 +756,16 @@
 
     if (!out.length) {
       out.push({
-        label: "HireHop Project Start",
-        friendlyLabel: "Wise Event Start",
-        dateTime: wiseEventStart,
-        note: "Use as the Salesforce event wrapper start."
+        label: "Start Date Time",
+        friendlyLabel: "Project/Onsite Start",
+        dateTime: systemDates && systemDates.startDateTime ? systemDates.startDateTime : wiseEventStart,
+        note: "Wise responsibility/activity starts on site."
       });
       out.push({
-        label: "HireHop Project End",
-        friendlyLabel: "Wise Event End",
-        dateTime: wiseEventEnd,
-        note: "Use as the Salesforce event wrapper end."
+        label: "Project End Date Time",
+        friendlyLabel: "Project/Onsite End",
+        dateTime: systemDates && systemDates.projectEndDateTime ? systemDates.projectEndDateTime : wiseEventEnd,
+        note: "Wise responsibility/activity ends on site."
       });
     }
 
@@ -975,7 +1040,7 @@
     if (data.isMock) meta.push("Mock data");
 
     return '' +
-      '<section class="wpj-header">' +
+      '<section class="wpj-header hirehop_panel ui-corner-all font_scale">' +
         '<div class="wpj-header-main">' +
           '<div class="wpj-kicker">Project Journey</div>' +
           '<h2>' + esc(data.project.name || "Untitled project") + '</h2>' +
@@ -1012,24 +1077,24 @@
     }
 
     return '' +
-      '<section class="wpj-wrapper">' +
+      '<section class="wpj-wrapper hirehop_panel ui-corner-all font_scale">' +
         '<div class="wpj-section-title">' +
           '<h3>Wise Event Wrapper</h3>' +
-          '<span>Salesforce-derived onsite window</span>' +
+          '<span>Project system dates</span>' +
         '</div>' +
         '<div class="wpj-wrapper-grid">' +
           '<div class="wpj-wrapper-card">' +
-            '<span>Start</span>' +
+            '<span>Project/Onsite Start</span>' +
             '<strong>' + esc(formatDateTime(data.wiseEventStart) || "Not set") + '</strong>' +
             '<small>First moment Wise is expected to be active on site</small>' +
           '</div>' +
           '<div class="wpj-wrapper-card">' +
-            '<span>End</span>' +
+            '<span>Project/Onsite End</span>' +
             '<strong>' + esc(formatDateTime(data.wiseEventEnd) || "Not set") + '</strong>' +
             '<small>Final moment Wise is expected to be active on site</small>' +
           '</div>' +
           '<div class="wpj-fixed-card">' +
-            '<span>Required project wrapper fields</span>' +
+            '<span>Source fields</span>' +
             fixedHtml +
           '</div>' +
         '</div>' +
@@ -1038,7 +1103,7 @@
 
   function buildJourneyToolbar() {
     return '' +
-      '<section class="wpj-toolbar" aria-label="Journey view controls">' +
+      '<section class="wpj-toolbar hirehop_panel ui-corner-all font_scale" aria-label="Journey view controls">' +
         '<div class="wpj-section-title">' +
           '<h3>Operational Journey</h3>' +
           '<span>Milestones checked against the wrapper</span>' +
@@ -1055,7 +1120,7 @@
 
   function buildTimeline(milestones, criticalOnly) {
     var groups = groupMilestones(milestones);
-    var html = '<section class="wpj-timeline" aria-label="Journey timeline">';
+    var html = '<section class="wpj-timeline hirehop_panel ui-corner-all font_scale" aria-label="Journey timeline">';
 
     if (!milestones.length) {
       html += '<div class="wpj-empty">No ' + (criticalOnly ? "critical " : "") + 'milestones to show.</div>';
@@ -1117,7 +1182,7 @@
 
   function buildIssuesPanel(issues) {
     var html = '' +
-      '<section class="wpj-issues">' +
+      '<section class="wpj-issues hirehop_panel ui-corner-all font_scale">' +
         '<div class="wpj-section-title">' +
           '<h3>Issues & Exceptions</h3>' +
           '<span>' + issues.length + ' active</span>' +
@@ -1144,7 +1209,7 @@
 
   function buildDepartmentReadiness(rows) {
     var html = '' +
-      '<section class="wpj-departments">' +
+      '<section class="wpj-departments hirehop_panel ui-corner-all font_scale">' +
         '<div class="wpj-section-title">' +
           '<h3>Readiness By Department</h3>' +
           '<span>Weighted by owned milestones</span>' +
@@ -1226,7 +1291,8 @@
 
   function hasMeaningfulProjectData(data) {
     if (!data || typeof data !== "object") return false;
-    return !!(data.wiseEventStart || data.wiseEventEnd || data.jobKitBookingStart || data.jobKitBookingEnd);
+    return !!(data.wiseEventStart || data.wiseEventEnd || data.jobKitBookingStart || data.jobKitBookingEnd ||
+      (data.projectSystemDates && (data.projectSystemDates.startDateTime || data.projectSystemDates.projectEndDateTime)));
   }
 
   function getMockJourneyData() {
@@ -1238,20 +1304,26 @@
         clientName: "Acme Events",
         venue: "Roundhouse"
       },
+      projectSystemDates: {
+        outgoingDateTime: "2026-07-14T05:00:00",
+        startDateTime: "2026-07-14T08:00:00",
+        projectEndDateTime: "2026-07-15T02:00:00",
+        returnDateTime: "2026-07-15T10:00:00"
+      },
       wiseEventStart: "2026-07-14T08:00:00",
       wiseEventEnd: "2026-07-15T02:00:00",
       hireHopFixedDates: [
         {
-          label: "HireHop Project Start",
-          friendlyLabel: "Wise Event Start",
+          label: "Start Date Time",
+          friendlyLabel: "Project/Onsite Start",
           dateTime: "2026-07-14T08:00:00",
-          note: "Interpreted as the Salesforce event wrapper start at project level."
+          note: "Wise responsibility/activity starts on site."
         },
         {
-          label: "Project/Onsite End",
-          friendlyLabel: "Wise Event End",
+          label: "Project End Date Time",
+          friendlyLabel: "Project/Onsite End",
           dateTime: "2026-07-15T02:00:00",
-          note: "Interpreted as Salesforce event wrapper end at project level."
+          note: "Wise responsibility/activity ends on site."
         }
       ],
       jobKitBookingStart: "",
@@ -1540,25 +1612,73 @@
       labelLookup[normaliseComparable(labels[i])] = true;
     }
 
-    var value = "";
+    var value = readProjectInfoControlField($info, labelLookup);
+    if (value) return value;
+
     $info.find("tr").each(function () {
       if (value) return false;
       var $row = $(this);
       var text = normaliseComparable($row.text());
-      var matched = false;
-      for (var key in labelLookup) {
-        if (Object.prototype.hasOwnProperty.call(labelLookup, key) && text.indexOf(key) !== -1) {
-          matched = true;
-          break;
-        }
-      }
-      if (!matched) return;
+      if (!matchesProjectInfoLabel(text, labelLookup)) return;
 
       value = readValueFromRow($row);
       return false;
     });
 
     return value;
+  }
+
+  function readProjectInfoControlField($info, labelLookup) {
+    var value = "";
+
+    $info.find("input,textarea,select").each(function () {
+      if (value) return false;
+      var $field = $(this);
+      if (!asText($field.val()).trim()) return;
+
+      var text = getProjectInfoControlText($field);
+      if (!matchesProjectInfoLabel(text, labelLookup)) return;
+
+      value = asText($field.val()).trim();
+      return false;
+    });
+
+    return value;
+  }
+
+  function getProjectInfoControlText($field) {
+    var bits = [
+      $field.attr("id"),
+      $field.attr("name"),
+      $field.attr("title"),
+      $field.attr("aria-label"),
+      $field.attr("placeholder"),
+      $field.attr("data-label"),
+      $field.attr("data-name"),
+      $field.attr("data-field")
+    ];
+
+    var id = $field.attr("id");
+    if (id) {
+      try {
+        bits.push($('label[for="' + cssAttr(id) + '"]').first().text());
+      } catch (err) {}
+    }
+
+    bits.push($field.closest("td,th,.field-row,.form-row,.row,.ui-helper-clearfix,li").find("label,b,strong,span").first().text());
+    return normaliseComparable(bits.join(" "));
+  }
+
+  function matchesProjectInfoLabel(text, labelLookup) {
+    text = normaliseComparable(text);
+    if (!text) return false;
+
+    for (var key in labelLookup) {
+      if (!Object.prototype.hasOwnProperty.call(labelLookup, key) || !key) continue;
+      if (text === key || text.indexOf(key) !== -1) return true;
+    }
+
+    return false;
   }
 
   function readValueFromRow($row) {
@@ -1821,7 +1941,47 @@
       ".wpj-issue-warning{border-left-color:#8a95a3;}",
       ".wpj-empty{border:1px dashed #cbd3db;border-radius:8px;background:#fbfcfd;color:#52606d;padding:14px;text-align:center;font-size:13px;}",
       "@media(max-width:980px){.wpj-header,.wpj-toolbar{display:block;}.wpj-header-stats{grid-template-columns:1fr;margin-top:12px;}.wpj-actions{justify-content:flex-start;margin-top:10px;}.wpj-main-grid{grid-template-columns:1fr;}.wpj-issues{position:static;}.wpj-wrapper-grid{grid-template-columns:1fr;}}",
-      "@media(max-width:620px){.wpj-shell{padding:10px 8px 14px;}.wpj-header h2{font-size:18px;}.wpj-card-row,.wpj-department-grid{grid-template-columns:1fr;}.wpj-segmented{display:flex;width:100%;}.wpj-segmented button{flex:1 1 0;padding-left:6px;padding-right:6px;}.wpj-refresh{width:100%;}.wpj-datetime{grid-template-columns:1fr;gap:2px;}.wpj-details dl{grid-template-columns:1fr;}}"
+      "@media(max-width:620px){.wpj-shell{padding:10px 8px 14px;}.wpj-header h2{font-size:18px;}.wpj-card-row,.wpj-department-grid{grid-template-columns:1fr;}.wpj-segmented{display:flex;width:100%;}.wpj-segmented button{flex:1 1 0;padding-left:6px;padding-right:6px;}.wpj-refresh{width:100%;}.wpj-datetime{grid-template-columns:1fr;gap:2px;}.wpj-details dl{grid-template-columns:1fr;}}",
+      ".wise-project-journey-panel{box-sizing:border-box;background:#fff!important;color:inherit;scrollbar-gutter:stable;}",
+      ".wpj-shell{padding:8px 8px 12px;font-family:inherit;color:inherit;background:#fff;}",
+      ".wpj-header,.wpj-wrapper,.wpj-toolbar,.wpj-timeline,.wpj-departments,.wpj-issues{border:1px solid #a1a1a1;background:#fff;border-radius:4px;margin-bottom:8px;box-shadow:none;}",
+      ".wpj-header{padding:0;display:block;}",
+      ".wpj-header-main{padding:7px 8px;background:#f0f0f0;border-bottom:1px solid #c7c7c7;min-width:0;}",
+      ".wpj-kicker{font-size:11px;color:#333;text-transform:none;margin-bottom:2px;font-weight:bold;}",
+      ".wpj-header h2{font-size:1.2em;line-height:1.25;margin:0;color:#222;font-weight:bold;}",
+      ".wpj-meta{font-size:11px;color:#555;margin-top:3px;}",
+      ".wpj-header-stats{display:grid;grid-template-columns:180px minmax(220px,1fr);gap:0;border-top:0;}",
+      ".wpj-stat{border:0;border-right:1px solid #d0d0d0;border-radius:0;background:#fff;padding:7px 8px;}",
+      ".wpj-stat:last-child{border-right:0;}",
+      ".wpj-stat-label,.wpj-wrapper-card span,.wpj-fixed-card>span,.wpj-datetime span{color:#333;text-transform:none;font-size:11px;letter-spacing:0;font-weight:bold;}",
+      ".wpj-score-row strong{font-size:18px;}",
+      ".wpj-progress{height:7px;border-radius:0;background:#e1e1e1;border:1px solid #c7c7c7;margin-top:6px;}",
+      ".wpj-progress span{border-radius:0;}",
+      ".wpj-wrapper,.wpj-timeline,.wpj-departments,.wpj-issues{padding:0;}",
+      ".wpj-section-title,.wpj-group-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;padding:6px 8px;background:#f0f0f0;border-bottom:1px solid #c7c7c7;}",
+      ".wpj-section-title h3,.wpj-group-title h4{font-size:1.05em;color:#222;font-weight:bold;}",
+      ".wpj-section-title span,.wpj-group-title span{font-size:11px;color:#555;}",
+      ".wpj-wrapper-grid,.wpj-card-row,.wpj-department-grid{padding:8px;}",
+      ".wpj-wrapper-card,.wpj-fixed-card,.wpj-milestone,.wpj-department,.wpj-issue{border:1px solid #d0d0d0;border-radius:3px;background:#fff;box-shadow:none;}",
+      ".wpj-wrapper-card strong,.wpj-fixed-date span{color:#222;}",
+      ".wpj-toolbar{padding:6px 8px;}",
+      ".wpj-toolbar .wpj-section-title{padding:0;background:transparent;border-bottom:0;}",
+      ".wpj-segmented{border:1px solid #a1a1a1;border-radius:4px;background:#fff;}",
+      ".wpj-segmented button,.wpj-refresh{font:inherit;font-size:12px;border:0;background:#f5f5f5;color:#222;padding:5px 8px;}",
+      ".wpj-segmented button+button{border-left:1px solid #a1a1a1;}",
+      ".wpj-segmented button.is-active{background:#1f75cf;color:#fff;}",
+      ".wpj-refresh{border:1px solid #a1a1a1;border-radius:4px;}",
+      ".wpj-main-grid{grid-template-columns:minmax(0,1fr) 300px;gap:8px;}",
+      ".wpj-group{margin:0;border-bottom:1px solid #dedede;}",
+      ".wpj-group:last-child{border-bottom:0;}",
+      ".wpj-group-title{border-bottom:1px solid #dedede;background:#f7f7f7;}",
+      ".wpj-milestone{border-left-width:4px;}",
+      ".wpj-milestone h5{font-size:13px;color:#222;}",
+      ".wpj-details summary{color:#1f75cf;}",
+      ".wpj-chip{border-radius:3px;min-height:19px;padding:2px 6px;font-size:11px;}",
+      ".wpj-issues{position:static;}",
+      ".wpj-issue-list{padding:8px;}",
+      ".wpj-empty{margin:8px;border-color:#c7c7c7;border-radius:3px;background:#f7f7f7;color:#555;}"
     ].join("\n");
 
     $("<style></style>", { id: CFG.stylesId, text: css }).appendTo("head");
@@ -1979,6 +2139,10 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
+  }
+
+  function cssAttr(value) {
+    return asText(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   }
 
   function log() {

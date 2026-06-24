@@ -10,7 +10,7 @@
     : {};
 
   var CFG = {
-    version: "2026-06-24.1",
+    version: "2026-06-24.2",
     stylesId: "wise-project-jobs-qol-styles",
     buttonId: "wise-project-jobs-compact-btn",
     summaryId: "wise-project-jobs-compact-summary",
@@ -332,14 +332,18 @@
   function isProjectLevelKitBookingText(value) {
     var text = compactText(value).toLowerCase().replace(/[_-]+/g, " ");
     if (!text) return false;
-    return /\bkit\s+booking\s+(start|end|from|to|starts|ends)\b/.test(text) ||
+    return /\boutgoing\s+(date\s*)?time\b/.test(text) ||
+      /\breturn\s+(date\s*)?time\b/.test(text) ||
+      /\bkit\s+booking\s+(start|end|from|to|starts|ends)\b/.test(text) ||
       /\b(start|end|from|to)\s+(?:of\s+)?kit\s+booking\b/.test(text) ||
       /\bkit\s+book(?:ing)?\s+(start|end)\b/.test(text);
   }
 
   function containsProjectWrapperDateText($element) {
     var text = getElementSearchText($element);
-    return /\b(project|onsite|on site|wise event|event wrapper|salesforce)\b.*\b(start|end|from|to)\b/.test(text) ||
+    return /\bstart\s+date\s+time\b/.test(text) ||
+      /\bproject\s+end\s+date\s+time\b/.test(text) ||
+      /\b(project|onsite|on site|wise event|event wrapper|salesforce)\b.*\b(start|end|from|to)\b/.test(text) ||
       /\b(start|end|from|to)\b.*\b(project|onsite|on site|wise event|event wrapper|salesforce)\b/.test(text);
   }
 
