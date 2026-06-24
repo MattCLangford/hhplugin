@@ -185,7 +185,7 @@
   };
 
   var CFG = {
-    version: "2026-06-24.8",
+    version: "2026-06-24.9",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -729,11 +729,14 @@
         cleanDocumentTitle()
       ]),
       clientName: firstNonEmpty([
-        firstObjectValue(projectWindow, ["CLIENT_NAME", "client_name", "CLIENT", "client", "CUSTOMER", "customer", "CONTACT", "contact"]),
-        readProjectInfoField(["client", "customer", "account", "contact"])
+        firstObjectValue(projectWindow, ["CLIENT_NAME", "client_name", "COMPANY_NAME", "company_name"]),
+        readProjectCustomField(projectWindow, ["Client", "client", "Customer", "customer", "Account", "account", "Company", "company"]),
+        readProjectInfoField(["client", "customer", "account"])
       ]),
       venue: firstNonEmpty([
-        firstObjectValue(projectWindow, ["VENUE", "venue", "LOCATION", "location", "SITE", "site", "VENUE_NAME", "venue_name"]),
+        firstObjectValue(projectWindow, ["VENUE", "venue", "VENUE_NAME", "venue_name"]),
+        readProjectCustomField(projectWindow, ["Venue", "venue", "Location", "location", "Site", "site"]),
+        firstObjectValue(projectWindow, ["DELIVER_TO", "deliver_to", "LOCATION", "location", "SITE", "site"]),
         readProjectInfoField(["venue", "location", "site"])
       ])
     };
@@ -873,6 +876,23 @@
       if (object[key] != null && object[key] !== "") return asText(object[key]).trim();
     }
 
+    return "";
+  }
+
+  function readProjectCustomField(projectWindow, keys) {
+    if (!projectWindow || typeof projectWindow !== "object") return "";
+    var cf = projectWindow.CUSTOM_FIELDS || projectWindow.custom_fields || projectWindow.fields || {};
+    if (!cf || typeof cf !== "object") return "";
+    for (var i = 0; i < keys.length; i++) {
+      var nk = normaliseFieldKey(keys[i]);
+      for (var k in cf) {
+        if (!Object.prototype.hasOwnProperty.call(cf, k)) continue;
+        if (normaliseFieldKey(k) !== nk) continue;
+        var entry = cf[k];
+        var val = (entry && typeof entry === "object") ? asText(entry.value).trim() : asText(entry).trim();
+        if (val && val !== "0") return val;
+      }
+    }
     return "";
   }
 
@@ -1774,28 +1794,33 @@
 
     for (var d = 0; d < departments.length; d++) {
       var department = departments[d];
-      var selected = [];
+      var dNorm = normaliseComparable(department);
+      // All milestones for display
+      var allForDept = [];
+      for (var a = 0; a < milestones.length; a++) {
+        if (normaliseComparable(milestones[a].owner) === dNorm) allForDept.push(milestones[a]);
+      }
+      // Scored milestones for score calculation
+      var scored = [];
       for (var i = 0; i < scoredMilestones.length; i++) {
-        if (normaliseComparable(scoredMilestones[i].owner) === normaliseComparable(department)) {
-          selected.push(scoredMilestones[i]);
-        }
+        if (normaliseComparable(scoredMilestones[i].owner) === dNorm) scored.push(scoredMilestones[i]);
       }
 
-      var base = selected.length ? averageStatusScore(selected) : 0;
+      var base = scored.length ? averageStatusScore(scored) : 0;
       var penalty = 0;
       for (var j = 0; j < issues.length; j++) {
         var issueMilestone = findMilestoneById(milestones, issues[j].milestoneId);
-        if (issueMilestone && normaliseComparable(issueMilestone.owner) === normaliseComparable(department)) {
+        if (issueMilestone && normaliseComparable(issueMilestone.owner) === dNorm) {
           penalty += getIssuePenalty(issues[j]) * 0.55;
         }
       }
 
       out.push({
         department: department,
-        score: selected.length ? clamp(Math.round(base - penalty), 0, 100) : 0,
-        total: selected.length,
-        complete: countMilestonesByStatus(selected, "Complete"),
-        milestones: selected
+        score: scored.length ? clamp(Math.round(base - penalty), 0, 100) : 0,
+        total: allForDept.length,
+        complete: countMilestonesByStatus(allForDept, "Complete"),
+        milestones: allForDept
       });
     }
 
@@ -1889,8 +1914,18 @@
       var mv = metaRaw[mi];
       if (!mv) continue;
       var mvNorm = normaliseComparable(mv);
+      if (!mvNorm) continue;
       if (seen[mvNorm]) continue;
-      if (mvNorm && mvNorm !== projectNameNorm) { seen[mvNorm] = true; meta.push(mv); }
+      if (mvNorm === projectNameNorm) continue;
+      // Skip items whose words are all already contained in the project name
+      var mvWords = mvNorm.split(" ");
+      var allInName = true;
+      for (var wi = 0; wi < mvWords.length; wi++) {
+        if (mvWords[wi] && projectNameNorm.indexOf(mvWords[wi]) === -1) { allInName = false; break; }
+      }
+      if (allInName) continue;
+      seen[mvNorm] = true;
+      meta.push(mv);
     }
 
     return '<div class="wpj-hdr">' +
@@ -1913,17 +1948,20 @@
   function buildEventWrapper(data) {
     var hasStart = !!data.wiseEventStart;
     var hasEnd = !!data.wiseEventEnd;
+    var sameDay = hasStart && hasEnd && data.wiseEventStart === data.wiseEventEnd;
+    var endLabel = sameDay ? "Single day — set end date in HireHop if multi-day" : "Final moment Wise is active on site";
+    var endWarn = !hasEnd ? "Set the project end date in HireHop" : null;
     return '<div class="wpj-win">' +
       '<div class="wpj-win-card' + (hasStart ? '' : ' wpj-win-card--unset') + '">' +
-        '<div class="wpj-win-label">On Site From</div>' +
+        '<div class="wpj-win-label">Site Open</div>' +
         '<div class="wpj-win-value">' + esc(formatDateTime(data.wiseEventStart) || "Not yet set") + '</div>' +
-        '<div class="wpj-win-sub' + (hasStart ? '' : ' wpj-win-sub--warn') + '">' + esc(hasStart ? "First moment Wise is active on site" : "Set the project start date in HireHop") + '</div>' +
+        '<div class="wpj-win-sub' + (hasStart ? '' : ' wpj-win-sub--warn') + '">' + esc(hasStart ? "Earliest on-site presence (START_DATE)" : "Set the project start date in HireHop") + '</div>' +
       '</div>' +
       '<div class="wpj-win-arrow">→</div>' +
-      '<div class="wpj-win-card' + (hasEnd ? '' : ' wpj-win-card--unset') + '">' +
-        '<div class="wpj-win-label">On Site Until</div>' +
+      '<div class="wpj-win-card' + (hasEnd && !sameDay ? '' : ' wpj-win-card--unset') + '">' +
+        '<div class="wpj-win-label">Site Close</div>' +
         '<div class="wpj-win-value">' + esc(formatDateTime(data.wiseEventEnd) || "Not yet set") + '</div>' +
-        '<div class="wpj-win-sub' + (hasEnd ? '' : ' wpj-win-sub--warn') + '">' + esc(hasEnd ? "Final moment Wise is active on site" : "Set the project end date in HireHop") + '</div>' +
+        '<div class="wpj-win-sub' + (hasEnd && !sameDay ? '' : ' wpj-win-sub--warn') + '">' + esc(endWarn || endLabel) + '</div>' +
       '</div>' +
     '</div>';
   }
@@ -1996,8 +2034,12 @@
       if (allD[k] > latest) latest = allD[k];
     }
 
-    var startDate = new Date(earliest); startDate.setDate(startDate.getDate() - 1); startDate.setHours(0,0,0,0);
-    var endDate = new Date(latest); endDate.setDate(endDate.getDate() + 1); endDate.setHours(0,0,0,0);
+    // Ensure minimum visible span (at least 14 days so single-day projects have context)
+    var spanDays = Math.round((latest - earliest) / 86400000);
+    var padStart = spanDays < 14 ? Math.max(1, Math.ceil((14 - spanDays) / 2)) : 1;
+    var padEnd = spanDays < 14 ? Math.max(1, 14 - spanDays - padStart + 1) : 1;
+    var startDate = new Date(earliest); startDate.setDate(startDate.getDate() - padStart); startDate.setHours(0,0,0,0);
+    var endDate = new Date(latest); endDate.setDate(endDate.getDate() + padEnd); endDate.setHours(0,0,0,0);
 
     var days = [];
     var cur = new Date(startDate);
@@ -2181,10 +2223,11 @@
       var hasWork = row.total > 0;
       var milestones = row.milestones || [];
 
+      var pctLabel = row.total === 0 ? "—" : (row.score > 0 || row.complete > 0 ? score + "%" : "Pending");
       html += '<details class="wpj-dcol" open>' +
         '<summary class="wpj-dcol-hdr">' +
           '<div class="wpj-dcol-name">' + esc(row.department) + '</div>' +
-          '<div class="wpj-dcol-pct ' + (hasWork ? scoreClass : "wpj-score-none") + '">' + (hasWork ? score + "%" : "—") + '</div>' +
+          '<div class="wpj-dcol-pct ' + (row.total > 0 ? scoreClass : "wpj-score-none") + '">' + esc(pctLabel) + '</div>' +
           '<div class="wpj-dcol-bar"><div class="wpj-dcol-fill ' + scoreClass + '" style="width:' + score + '%"></div></div>' +
         '</summary>';
 
