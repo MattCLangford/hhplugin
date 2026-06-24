@@ -177,7 +177,7 @@
   };
 
   var CFG = {
-    version: "2026-06-24.6",
+    version: "2026-06-24.7",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -197,7 +197,8 @@
     showCriticalOnly: false,
     overrideData: null,
     lastAnalysis: null,
-    lastPanelMaxHeight: ""
+    lastPanelMaxHeight: "",
+    cachedJobRows: null
   };
 
   bootstrap();
@@ -214,7 +215,8 @@
       scheduleMaintainProjectJourney(60, { forceScan: true });
       applyJourneyPanelSizing($("#" + CFG.panelId));
     });
-    $(document).on("ajaxComplete.wiseProjectJourney", function () {
+    $(document).on("ajaxComplete.wiseProjectJourney", function (event, xhr) {
+      tryCacheJobsFromResponse(xhr);
       scheduleMaintainProjectJourney(80, { forceScan: true });
     });
   }
@@ -734,6 +736,23 @@
       firstObjectValue(projectWindow, ["WISE_EVENT_END", "wise_event_end", "wiseEventEnd", "SALESFORCE_END", "salesforce_end", "EVENT_END", "event_end", "PROJECT_END", "project_end"])
     ]);
 
+    // If the DOM only yielded a time (e.g. "09:00") without a date, combine it with
+    // the date part from the corresponding job system date so the wrapper is usable.
+    if (wiseEventStart && !parseDate(wiseEventStart)) {
+      var startTime = extractTimePart(wiseEventStart);
+      if (startTime && jobDates.onsiteStart) {
+        var startDatePart = extractDatePart(jobDates.onsiteStart);
+        if (startDatePart) wiseEventStart = startDatePart + " " + startTime;
+      }
+    }
+    if (wiseEventEnd && !parseDate(wiseEventEnd)) {
+      var endTime = extractTimePart(wiseEventEnd);
+      if (endTime && jobDates.onsiteEnd) {
+        var endDatePart = extractDatePart(jobDates.onsiteEnd);
+        if (endDatePart) wiseEventEnd = endDatePart + " " + endTime;
+      }
+    }
+
     return {
       project: project,
       wiseEventStart: wiseEventStart,
@@ -887,7 +906,25 @@
     }
 
     if (typeof container === "object") {
-      return readMappedObjectValue(container, aliases);
+      // HireHop CUSTOM_FIELDS: keyed object where values may be {type, value, format} objects
+      // or plain strings. Build a normalised alias lookup to match keys like "~Load", "Tip" etc.
+      var aliasSet = {};
+      for (var a = 0; a < aliases.length; a++) {
+        aliasSet[normaliseFieldKey(aliases[a])] = true;
+      }
+      for (var k in container) {
+        if (!Object.prototype.hasOwnProperty.call(container, k)) continue;
+        if (!aliasSet[normaliseFieldKey(k)]) continue;
+        var val = container[k];
+        if (val && typeof val === "object") {
+          var extracted = firstNonEmpty([val.value, val.dateTime, val.datetime, val.date, val.text]);
+          if (extracted) return asText(extracted).trim();
+        }
+        if (val != null && val !== "" && typeof val !== "object") {
+          return asText(val).trim();
+        }
+      }
+      return "";
     }
 
     return "";
@@ -928,9 +965,37 @@
     if (value && out.indexOf(value) === -1) out.push(value);
   }
 
+  function tryCacheJobsFromResponse(xhr) {
+    if (!xhr || !xhr.responseText || xhr.responseText.length > 2000000) return;
+    var data;
+    try { data = JSON.parse(xhr.responseText); } catch (e) { return; }
+    if (!data) return;
+
+    var rows = [];
+    appendObjectRows(rows, data);
+    if (!rows.length) return;
+
+    // Accept this response as job data if at least one row has HireHop job system fields
+    var looksLikeJobs = false;
+    for (var i = 0; i < Math.min(rows.length, 5); i++) {
+      var r = rows[i];
+      if (r && (r.JOB_DATE || r.OUT_DATE || r.CUSTOM_FIELDS || r["~Load"] || r["~WisePrep"] || r["~Tip"])) {
+        looksLikeJobs = true;
+        break;
+      }
+    }
+    if (!looksLikeJobs) return;
+
+    // Keep the richest set so multiple loads don't overwrite a bigger cache with a smaller one
+    if (!state.cachedJobRows || rows.length >= state.cachedJobRows.length) {
+      state.cachedJobRows = rows;
+    }
+  }
+
   function getProjectJobRows() {
     var rows = [];
     appendObjectRows(rows, window.WiseProjectJourneyJobs);
+    appendObjectRows(rows, state.cachedJobRows);
     appendObjectRows(rows, window.projectJobs);
     appendObjectRows(rows, window.project_jobs);
     appendObjectRows(rows, window.jobs);
@@ -1082,7 +1147,7 @@
       {
         id: "pre-production",
         group: "Pre-Production",
-        name: "Pre-prod Sign off/meeting",
+        name: "Pre-Production Sign-Off",
         plannedDateTime: jobDates.preProd,
         actualDateTime: "",
         owner: "Project Management",
@@ -1093,12 +1158,12 @@
         timingType: "offsite-prep",
         dependencies: [],
         targetDaysBeforeStart: FIELD_MAP.jobOperational.preProd.targetDaysBeforeStart,
-        notes: "Mapped from " + FIELD_MAP.jobOperational.preProd.logicalName + "; target is at least 21 days before Project/Onsite Start."
+        notes: "Final sign-off before production begins. Scope of work confirmed for team allocation and delegation. Target: at least 21 days before site."
       },
       {
         id: "supplier-engaged",
         group: "Supplier / Kit Prep",
-        name: "Supplier engaged",
+        name: "Suppliers Confirmed",
         plannedDateTime: jobDates.supplier,
         actualDateTime: "",
         owner: "Suppliers",
@@ -1109,12 +1174,12 @@
         timingType: "offsite-prep",
         dependencies: ["pre-production"],
         targetDaysBeforeStart: FIELD_MAP.jobOperational.supplier.targetDaysBeforeStart,
-        notes: "Mapped from " + FIELD_MAP.jobOperational.supplier.logicalName + "; target is at least 3 weeks before Project/Onsite Start."
+        notes: "Project made visible to suppliers and key partnerships confirmed. Target: at least 3 weeks before site."
       },
       {
         id: "wise-prep-start",
         group: "Supplier / Kit Prep",
-        name: "Wise prep start",
+        name: "Wise Preparation Begins",
         plannedDateTime: jobDates.wisePrep,
         actualDateTime: "",
         owner: "Project Management",
@@ -1124,12 +1189,12 @@
         optional: true,
         timingType: "offsite-prep",
         dependencies: ["supplier-engaged"],
-        notes: "Mapped from " + FIELD_MAP.jobOperational.wisePrep.logicalName + "."
+        notes: "First Wise prep activity for this job — kit check, team brief, logistics planning."
       },
       {
         id: "kit-booking-start",
         group: "Supplier / Kit Prep",
-        name: "Kit Booking Start",
+        name: "Equipment Out",
         plannedDateTime: jobDates.kitBookingStart,
         actualDateTime: "",
         owner: "Kit / Warehouse",
@@ -1139,12 +1204,12 @@
         optional: !hasJobSource,
         timingType: "offsite-prep",
         dependencies: ["wise-prep-start"],
-        notes: "Earliest " + FIELD_MAP.jobSystem.kitBookingStart.logicalName + " across project jobs."
+        notes: "First day of chargeable kit time. The earliest equipment-out date across all jobs on this project."
       },
       {
         id: "vehicle-load",
         group: "Load / Transport",
-        name: "Vehicle Load",
+        name: "Vehicles Loaded",
         plannedDateTime: jobDates.load,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1154,12 +1219,12 @@
         optional: true,
         timingType: "offsite-prep",
         dependencies: ["kit-booking-start"],
-        notes: "Mapped from " + FIELD_MAP.jobOperational.load.logicalName + "."
+        notes: "Planned load time for assigned vehicles. Must allow enough time to load, travel and arrive on site before the build starts."
       },
       {
         id: "vehicle-onsite-install",
         group: "Site Arrival",
-        name: "Vehicle Onsite - Install",
+        name: "Vehicles Arrive (Build)",
         plannedDateTime: jobDates.vehicleInstall,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1169,12 +1234,12 @@
         optional: true,
         timingType: "onsite",
         dependencies: ["vehicle-load"],
-        notes: "Mapped from " + FIELD_MAP.jobOperational.vehicleInstall.logicalName + "; otherwise use " + FIELD_MAP.jobSystem.onsiteStart.logicalName + " where vehicle is the earliest resource."
+        notes: "Vehicle assigned to this job arrives on site ahead of the build. Falls back to the job start time if the vehicle is the earliest planned resource."
       },
       {
         id: "job-onsite-start",
         group: "Site Arrival",
-        name: "Job onsite start",
+        name: "Crew On Site",
         plannedDateTime: jobDates.onsiteStart || projectStart,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1184,12 +1249,12 @@
         optional: !hasJobSource && !!projectStart,
         timingType: "onsite",
         dependencies: ["vehicle-onsite-install"],
-        notes: jobDates.onsiteStart ? "Earliest " + FIELD_MAP.jobSystem.onsiteStart.logicalName + " across project jobs." : "Using Project/Onsite Start until job-level onsite starts are available."
+        notes: jobDates.onsiteStart ? "Earliest on-site start across all jobs on this project." : "Using the project on-site start date until individual job start times are available."
       },
       {
         id: "install-start",
         group: "Build",
-        name: "Install start",
+        name: "Build Begins",
         plannedDateTime: projectOperationalDates.installStart,
         actualDateTime: "",
         owner: "Production",
@@ -1199,12 +1264,12 @@
         optional: true,
         timingType: "onsite",
         dependencies: ["job-onsite-start"],
-        notes: "Mapped from " + FIELD_MAP.projectOperational.installStart.logicalName + "; job onsite starts should be on or after this time."
+        notes: "Earliest install activity on the project. All crew and vehicles should be on site at or before this time."
       },
       {
         id: "show-start",
         group: "Show",
-        name: "Show start",
+        name: "Show Starts",
         plannedDateTime: projectOperationalDates.showStart,
         actualDateTime: "",
         owner: "Technical",
@@ -1214,12 +1279,12 @@
         optional: true,
         timingType: "onsite",
         dependencies: ["install-start"],
-        notes: "Mapped from " + FIELD_MAP.projectOperational.showStart.logicalName + "."
+        notes: "The event begins — guests enter. All build activities should be complete before this point."
       },
       {
         id: "show-end",
         group: "Show",
-        name: "Show end",
+        name: "Show Ends",
         plannedDateTime: projectOperationalDates.showEnd,
         actualDateTime: "",
         owner: "Technical",
@@ -1229,12 +1294,12 @@
         optional: true,
         timingType: "onsite",
         dependencies: ["show-start"],
-        notes: "Mapped from " + FIELD_MAP.projectOperational.showEnd.logicalName + "."
+        notes: "The event fully ends and guests leave for the final time. Derig can begin after this point."
       },
       {
         id: "derig-start",
         group: "Derig",
-        name: "Derig start",
+        name: "Derig Begins",
         plannedDateTime: projectOperationalDates.derigStart,
         actualDateTime: "",
         owner: "Production",
@@ -1244,12 +1309,12 @@
         optional: true,
         timingType: "onsite",
         dependencies: ["show-end"],
-        notes: "Mapped from " + FIELD_MAP.projectOperational.derigStart.logicalName + "."
+        notes: "Earliest derig activity on the project. Should be after the show ends."
       },
       {
         id: "vehicle-onsite-derig",
         group: "Derig",
-        name: "Vehicle Onsite - Derig",
+        name: "Vehicles Arrive (Derig)",
         plannedDateTime: jobDates.vehicleDerig,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1259,12 +1324,12 @@
         optional: true,
         timingType: "onsite",
         dependencies: ["derig-start"],
-        notes: "Mapped from " + FIELD_MAP.jobOperational.vehicleDerig.logicalName + "; otherwise use " + FIELD_MAP.jobSystem.onsiteEnd.logicalName + " where vehicle is the latest resource."
+        notes: "Vehicle assigned to this job arrives on site for collection. Falls back to the job end time if the vehicle is the latest planned resource."
       },
       {
         id: "site-clear",
         group: "Site Clear",
-        name: "Site clear",
+        name: "Site Clear",
         plannedDateTime: jobDates.onsiteEnd || projectEnd,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1274,12 +1339,12 @@
         optional: !hasJobSource && !!projectEnd,
         timingType: "onsite",
         dependencies: ["vehicle-onsite-derig"],
-        notes: jobDates.onsiteEnd ? "Latest " + FIELD_MAP.jobSystem.onsiteEnd.logicalName + " across project jobs." : "Using Project/Onsite End until job-level clear times are available."
+        notes: jobDates.onsiteEnd ? "Latest clear-of-site time across all jobs on this project." : "Using the project end date until individual job clear times are available."
       },
       {
         id: "kit-booking-end",
         group: "Site Clear",
-        name: "Kit Booking End",
+        name: "Equipment Returns",
         plannedDateTime: jobDates.kitBookingEnd,
         actualDateTime: "",
         owner: "Kit / Warehouse",
@@ -1289,12 +1354,12 @@
         optional: !hasJobSource,
         timingType: "offsite",
         dependencies: ["site-clear"],
-        notes: "Latest " + FIELD_MAP.jobSystem.kitBookingEnd.logicalName + " across project jobs."
+        notes: "Last day of chargeable kit time. The latest equipment-return date across all jobs on this project."
       },
       {
         id: "vehicle-tip",
         group: "Site Clear",
-        name: "Vehicle Tip",
+        name: "Vehicles Return",
         plannedDateTime: jobDates.vehicleTip,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1304,7 +1369,7 @@
         optional: true,
         timingType: "offsite",
         dependencies: ["kit-booking-end"],
-        notes: "Mapped from " + FIELD_MAP.jobOperational.vehicleTip.logicalName + "."
+        notes: "Vehicles arrive back at the supplier depot for tip / off-load."
       }
     ];
   }
@@ -1498,13 +1563,13 @@
     var wrapperEnd = parseDate(data.wiseEventEnd);
 
     if (!wrapperStart) {
-      issues.push(createIssue("Blocked", "Project/Onsite Start is missing", "Start Date Time is required before operational dates can be trusted.", "event-wrapper", true));
+      issues.push(createIssue("Blocked", "Event start date not set", "Set the project start date in HireHop so milestones can be validated against the event window.", "event-wrapper", true));
     }
     if (!wrapperEnd) {
-      issues.push(createIssue("Blocked", "Project/Onsite End is missing", "Project End Date Time is required before operational dates can be trusted.", "event-wrapper", true));
+      issues.push(createIssue("Blocked", "Event end date not set", "Set the project end date in HireHop to enable full journey checks.", "event-wrapper", true));
     }
     if (wrapperStart && wrapperEnd && wrapperStart.getTime() > wrapperEnd.getTime()) {
-      issues.push(createIssue("Blocked", "Project/Onsite End is before Project/Onsite Start", "Check the HireHop project system dates before planning operational milestones.", "event-wrapper", true));
+      issues.push(createIssue("Blocked", "End date is before the start date", "Check the project start and end dates in HireHop — the end appears to be earlier than the start.", "event-wrapper", true));
     }
 
     for (var i = 0; i < milestones.length; i++) {
@@ -1512,29 +1577,29 @@
       var planned = parseDate(milestone.plannedDateTime);
 
       if (!milestone.plannedDateTime && !milestone.optional) {
-        issues.push(createIssue(milestone.criticalPath ? "Blocked" : "Missing Data", milestone.name + " has no planned datetime", "Add a planned date/time so the milestone can be checked against the wrapper.", milestone.id, milestone.criticalPath));
+        issues.push(createIssue(milestone.criticalPath ? "Blocked" : "Missing Data", milestone.name + " has no date set", "Add a date for this milestone so it can be validated against the event window.", milestone.id, milestone.criticalPath));
       }
 
       if (!milestone.owner) {
-        issues.push(createIssue("Missing Data", milestone.name + " has no owner department", "Set the owner so the readiness score can show who needs to act.", milestone.id, milestone.criticalPath));
+        issues.push(createIssue("Missing Data", milestone.name + " has no assigned department", "Assign a department so this milestone appears in the readiness view.", milestone.id, milestone.criticalPath));
       }
 
       if (planned && wrapperStart && isOperationalOnsite(milestone) && planned.getTime() < wrapperStart.getTime()) {
-        issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " is before Project/Onsite Start", "Onsite operational work sits outside the HireHop project wrapper.", milestone.id, milestone.criticalPath));
+        issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " falls before the event window opens", "This on-site activity is planned before the project start date in HireHop.", milestone.id, milestone.criticalPath));
       }
 
       if (planned && wrapperEnd && isOperationalOnsite(milestone) && planned.getTime() > wrapperEnd.getTime()) {
-        issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " is after Project/Onsite End", "Onsite operational work extends beyond the HireHop project wrapper.", milestone.id, milestone.criticalPath));
+        issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " falls after the event window closes", "This on-site activity is planned beyond the project end date in HireHop.", milestone.id, milestone.criticalPath));
       }
 
       if (isSupplierMilestone(milestone) && !milestone.plannedDateTime && !milestone.optional) {
-        issues.push(createIssue("At Risk", "Supplier timing missing", milestone.name + " needs a confirmed supplier timing before the journey is ready.", milestone.id, milestone.criticalPath));
+        issues.push(createIssue("At Risk", "Supplier timing not confirmed", milestone.name + " needs a confirmed date before the journey is ready.", milestone.id, milestone.criticalPath));
       }
 
       if (planned && wrapperStart && milestone.targetDaysBeforeStart) {
         var target = new Date(wrapperStart.getTime() - (milestone.targetDaysBeforeStart * 24 * 60 * 60 * 1000));
         if (planned.getTime() > target.getTime()) {
-          issues.push(createIssue("At Risk", milestone.name + " is inside the target lead time", "Target is at least " + milestone.targetDaysBeforeStart + " days before Project/Onsite Start.", milestone.id, milestone.criticalPath));
+          issues.push(createIssue("At Risk", milestone.name + " is too close to the event", "Target is at least " + milestone.targetDaysBeforeStart + " days before the on-site date.", milestone.id, milestone.criticalPath));
         }
       }
 
@@ -1558,7 +1623,7 @@
     }
 
     if (hasJobJourneySource(data.jobDates) && (!data.jobKitBookingStart || !data.jobKitBookingEnd)) {
-      issues.push(createIssue("Missing Data", "Job operational kit timing is missing", "Map job-level prep, return and supplier timings so they are not confused with project wrapper dates.", "kit-booking", true));
+      issues.push(createIssue("Missing Data", "Kit out or return dates missing from jobs", "Set equipment-out and return dates on each job so kit timing can be tracked separately from the on-site window.", "kit-booking", true));
     }
 
     addRelationshipIssues(issues, byId, wrapperEnd);
@@ -1611,16 +1676,16 @@
     var siteClear = byId["site-clear"] || byId["site_clear"];
 
     if (onsiteStart && installStart && compareMilestoneTimes(onsiteStart, installStart) > 0) {
-      issues.push(createIssue("At Risk", "Job onsite start is after install start", "Job onsite activity should begin before the first install activity.", onsiteStart.id, true));
+      issues.push(createIssue("At Risk", "Crew arrives after build starts", "The first crew on-site time is later than the build start — check job and install dates.", onsiteStart.id, true));
     }
 
     if (derigStart && showEnd && compareMilestoneTimes(derigStart, showEnd) < 0) {
-      issues.push(createIssue("At Risk", "Derig starts before show ends", "Check show end and derig start sequencing.", derigStart.id, true));
+      issues.push(createIssue("At Risk", "Derig begins before the show ends", "The derig start overlaps with the show end — check show and derig timing.", derigStart.id, true));
     }
 
     var siteClearDate = siteClear ? parseDate(siteClear.plannedDateTime) : null;
     if (siteClearDate && wrapperEnd && siteClearDate.getTime() > wrapperEnd.getTime()) {
-      issues.push(createIssue("At Risk", "Site clear is after Project/Onsite End", "The operational clear time extends beyond the HireHop project wrapper.", siteClear.id, true));
+      issues.push(createIssue("At Risk", "Site clear is after the event window closes", "The planned clear time extends beyond the project end date in HireHop.", siteClear.id, true));
     }
   }
 
@@ -1742,17 +1807,17 @@
     return '' +
       '<section class="wpj-header hirehop_panel ui-corner-all font_scale">' +
         '<div class="wpj-header-main">' +
-          '<div class="wpj-kicker">Project Journey</div>' +
+          '<div class="wpj-kicker">Event Journey</div>' +
           '<h2>' + esc(data.project.name || "Untitled project") + '</h2>' +
           '<div class="wpj-meta">' + esc(meta.length ? meta.join(" | ") : "Current HireHop project") + '</div>' +
         '</div>' +
         '<div class="wpj-header-stats">' +
           '<div class="wpj-stat">' +
-            '<span class="wpj-stat-label">Journey Status</span>' +
+            '<span class="wpj-stat-label">Status</span>' +
             buildStatusChip(analysis.status) +
           '</div>' +
           '<div class="wpj-stat wpj-score-stat">' +
-            '<span class="wpj-stat-label">Event Readiness</span>' +
+            '<span class="wpj-stat-label">Readiness</span>' +
             '<div class="wpj-score-row">' +
               '<strong class="' + scoreClass + '">' + score + '%</strong>' +
               '<span>' + esc(analysis.readiness.complete + " of " + analysis.readiness.total + " milestones complete") + '</span>' +
@@ -1764,38 +1829,25 @@
   }
 
   function buildEventWrapper(data) {
-    var fixed = data.hireHopFixedDates || [];
-    var fixedHtml = "";
-
-    for (var i = 0; i < fixed.length; i++) {
-      fixedHtml += '' +
-        '<div class="wpj-fixed-date">' +
-          '<strong>' + esc(fixed[i].friendlyLabel || fixed[i].label || "Project date") + '</strong>' +
-          '<span>' + esc(formatDateTime(fixed[i].dateTime) || "Not set") + '</span>' +
-          '<small>' + esc(fixed[i].label || "") + (fixed[i].note ? " - " + esc(fixed[i].note) : "") + '</small>' +
-        '</div>';
-    }
+    var startMissing = !data.wiseEventStart;
+    var endMissing = !data.wiseEventEnd;
 
     return '' +
       '<section class="wpj-wrapper hirehop_panel ui-corner-all font_scale">' +
         '<div class="wpj-section-title">' +
-          '<h3>Wise Event Wrapper</h3>' +
-          '<span>Project system dates</span>' +
+          '<h3>Event Window</h3>' +
+          '<span>The on-site period for this project</span>' +
         '</div>' +
         '<div class="wpj-wrapper-grid">' +
-          '<div class="wpj-wrapper-card">' +
-            '<span>Project/Onsite Start</span>' +
+          '<div class="wpj-wrapper-card' + (startMissing ? ' wpj-wrapper-card--missing' : '') + '">' +
+            '<span>On Site From</span>' +
             '<strong>' + esc(formatDateTime(data.wiseEventStart) || "Not set") + '</strong>' +
-            '<small>First moment Wise is expected to be active on site</small>' +
+            '<small>' + (startMissing ? 'Set the project start date in HireHop to unlock journey checks' : 'First moment Wise is active on site') + '</small>' +
           '</div>' +
-          '<div class="wpj-wrapper-card">' +
-            '<span>Project/Onsite End</span>' +
+          '<div class="wpj-wrapper-card' + (endMissing ? ' wpj-wrapper-card--missing' : '') + '">' +
+            '<span>On Site Until</span>' +
             '<strong>' + esc(formatDateTime(data.wiseEventEnd) || "Not set") + '</strong>' +
-            '<small>Final moment Wise is expected to be active on site</small>' +
-          '</div>' +
-          '<div class="wpj-fixed-card">' +
-            '<span>Source fields</span>' +
-            fixedHtml +
+            '<small>' + (endMissing ? 'Set the project end date in HireHop to enable full journey checks' : 'Final moment Wise is active on site') + '</small>' +
           '</div>' +
         '</div>' +
       '</section>';
@@ -1805,8 +1857,8 @@
     return '' +
       '<section class="wpj-toolbar hirehop_panel ui-corner-all font_scale" aria-label="Journey view controls">' +
         '<div class="wpj-section-title">' +
-          '<h3>Operational Journey</h3>' +
-          '<span>Milestones checked against the wrapper</span>' +
+          '<h3>Milestones</h3>' +
+          '<span>Checked against the event window</span>' +
         '</div>' +
         '<div class="wpj-actions">' +
           '<div class="wpj-segmented" role="group" aria-label="Milestone filter">' +
@@ -1862,7 +1914,7 @@
         '</div>' +
         '<div class="wpj-datetime">' +
           '<span>Planned</span>' +
-          '<strong>' + esc(formatDateTime(milestone.plannedDateTime) || "Missing") + '</strong>' +
+          '<strong>' + esc(formatDateTime(milestone.plannedDateTime) || "Not yet scheduled") + '</strong>' +
         '</div>' +
         (milestone.actualDateTime ? '<div class="wpj-datetime"><span>Actual</span><strong>' + esc(formatDateTime(milestone.actualDateTime)) + '</strong></div>' : '') +
         '<div class="wpj-card-footer">' +
@@ -1884,7 +1936,7 @@
     var html = '' +
       '<section class="wpj-issues hirehop_panel ui-corner-all font_scale">' +
         '<div class="wpj-section-title">' +
-          '<h3>Issues & Exceptions</h3>' +
+          '<h3>Issues</h3>' +
           '<span>' + issues.length + ' active</span>' +
         '</div>';
 
@@ -2716,8 +2768,9 @@
       ".wpj-section-title{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;}",
       ".wpj-section-title h3,.wpj-group-title h4{margin:0;font-size:16px;line-height:1.25;color:#20242a;}",
       ".wpj-section-title span,.wpj-group-title span{font-size:12px;color:#52606d;}",
-      ".wpj-wrapper-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;}",
-      ".wpj-wrapper-card,.wpj-fixed-card{border:1px solid #d7e4ea;border-radius:8px;background:#fff;padding:10px;min-height:92px;}",
+      ".wpj-wrapper-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}",
+      ".wpj-wrapper-card{border:1px solid #d7e4ea;border-radius:8px;background:#fff;padding:10px;min-height:92px;}",
+      ".wpj-wrapper-card--missing{border-color:#f2b8b5;background:#fff9f9;}",
       ".wpj-wrapper-card span,.wpj-fixed-card>span{display:block;font-size:11px;font-weight:bold;text-transform:uppercase;color:#52606d;margin-bottom:6px;letter-spacing:0;}",
       ".wpj-wrapper-card strong{display:block;font-size:16px;line-height:1.25;color:#1d5f7c;margin-bottom:5px;}",
       ".wpj-wrapper-card small,.wpj-fixed-date small,.wpj-department small{display:block;font-size:11px;line-height:1.35;color:#63707c;}",
@@ -2835,7 +2888,7 @@
       ".wpj-stat{padding:5px 8px;}",
       ".wpj-score-row{gap:6px;}",
       ".wpj-score-row strong{font-size:16px;}",
-      ".wpj-wrapper-grid{grid-template-columns:185px 185px minmax(260px,1fr);gap:6px;padding:6px;}",
+      ".wpj-wrapper-grid{grid-template-columns:1fr 1fr;gap:6px;padding:6px;}",
       ".wpj-wrapper-card,.wpj-fixed-card{min-height:0;padding:7px 8px;}",
       ".wpj-wrapper-card strong{font-size:14px;margin-bottom:2px;}",
       ".wpj-wrapper-card small,.wpj-fixed-date small,.wpj-department small{font-size:11px;}",
