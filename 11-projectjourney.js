@@ -185,7 +185,7 @@
   };
 
   var CFG = {
-    version: "2026-06-25.2",
+    version: "2026-06-25.3",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -1142,11 +1142,32 @@
     appendObjectRows(rows, window.project && window.project.JOBS);
     appendJqGridRows(rows);
     appendDomGridRows(rows);
-    var deduplicated = dedupeObjectRows(rows);
-    var out = [];
-    for (var i = 0; i < deduplicated.length; i++) {
-      if (!isFileRecord(deduplicated[i])) out.push(deduplicated[i]);
+
+    // Merge by extracted job ID so DOM-scraped and API-fetched versions of the same
+    // job collapse into one enriched row (richer/earlier data is the base that incoming merges into)
+    var byId = {};
+    var order = [];
+    var unidentified = [];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (!r || typeof r !== "object") continue;
+      if (isFileRecord(r)) continue;
+      if (!hasObjectTextValue(r)) continue;
+      var jid = extractJobId(r);
+      if (jid) {
+        if (byId[jid]) {
+          byId[jid] = mergeJobRow(byId[jid], r);
+        } else {
+          byId[jid] = r;
+          order.push(jid);
+        }
+      } else {
+        unidentified.push(r);
+      }
     }
+    var out = [];
+    for (var oi = 0; oi < order.length; oi++) out.push(byId[order[oi]]);
+    for (var ui = 0; ui < unidentified.length; ui++) out.push(unidentified[ui]);
     return out;
   }
 
@@ -1938,10 +1959,10 @@
 
   function maybePreloadJobData() {
     var $grid = $("#jobs_grid,#project_jobs_grid,table[id*='jobs'][id*='grid']").first();
-    if (!$grid.length || typeof $grid.jqGrid !== "function") return;
+    var hasJqGrid = $grid.length && typeof $grid.jqGrid === "function";
 
-    // Step 1: load grid list (basic job fields) if we have nothing yet
-    if (!state.cachedJobRows || !state.cachedJobRows.length) {
+    // If jqGrid is present and we have no cached rows yet, try fetching from its URL
+    if (hasJqGrid && (!state.cachedJobRows || !state.cachedJobRows.length)) {
       var url;
       try { url = $grid.jqGrid("getGridParam", "url"); } catch (e) {}
       if (url) {
@@ -1949,7 +1970,7 @@
           url: url, method: "GET", dataType: "json",
           success: function (data) {
             tryCacheJobsFromResponse({ responseText: JSON.stringify(data) });
-            maybePreloadJobDetails(); // Step 2 after grid loads
+            maybePreloadJobDetails();
             if (state.cachedJobRows && state.cachedJobRows.length) {
               scheduleMaintainProjectJourney(50, { forceScan: true });
             }
@@ -1959,15 +1980,20 @@
       }
     }
 
+    // Always attempt detail preload — will fall back to DOM rows if cache is empty
     maybePreloadJobDetails();
   }
 
   function maybePreloadJobDetails() {
-    if (!state.cachedJobRows || !state.cachedJobRows.length) return;
-    // Find jobs that have no CUSTOM_FIELDS (or empty ones) and have a valid ID
+    // Use cached rows if available; fall back to DOM-scraped rows for job IDs
+    var sourceRows = (state.cachedJobRows && state.cachedJobRows.length)
+      ? state.cachedJobRows
+      : (function () { var r = []; appendJqGridRows(r); appendDomGridRows(r); return r; }());
+
+    if (!sourceRows.length) return;
     var toFetch = [];
-    for (var i = 0; i < state.cachedJobRows.length; i++) {
-      var row = state.cachedJobRows[i];
+    for (var i = 0; i < sourceRows.length; i++) {
+      var row = sourceRows[i];
       var cf = row.CUSTOM_FIELDS;
       var hasRichData = cf && typeof cf === "object" && !$.isArray(cf) && Object.keys(cf).length > 0;
       if (!hasRichData) {
@@ -1976,7 +2002,6 @@
       }
     }
     if (!toFetch.length) return;
-    // Limit to first 5 to avoid hammering the API
     toFetch = toFetch.slice(0, 5);
     for (var j = 0; j < toFetch.length; j++) {
       (function (jobId) {
