@@ -183,7 +183,7 @@
   };
 
   var CFG = {
-    version: "2026-06-25.6",
+    version: "2026-06-25.7",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -3434,11 +3434,13 @@
       var year = Number(match[3]);
       if (year < 100) year += 2000;
       var parsed = new Date(year, Number(match[2]) - 1, Number(match[1]), Number(match[4] || 0), Number(match[5] || 0), Number(match[6] || 0));
+      window.console && console.log("[WPJ parseDate] regex path | input:", text, "| d="+match[1]+" m="+match[2]+" y="+match[3]+" | result:", parsed);
       if (!isNaN(parsed.getTime())) return parsed;
     }
 
     // ISO 8601 and other unambiguous formats safe to pass to Date constructor
     var direct = new Date(text);
+    window.console && console.log("[WPJ parseDate] new Date path | input:", text, "| result:", direct);
     if (!isNaN(direct.getTime())) return direct;
 
     return null;
