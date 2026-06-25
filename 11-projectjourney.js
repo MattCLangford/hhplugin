@@ -185,7 +185,7 @@
   };
 
   var CFG = {
-    version: "2026-06-25.3",
+    version: "2026-06-25.4",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -1165,9 +1165,10 @@
         unidentified.push(r);
       }
     }
+    // Unidentified rows (no extractable job ID) are excluded — they are typically
+    // jqGrid frozen-column table fragments and would otherwise appear as phantom job rows
     var out = [];
     for (var oi = 0; oi < order.length; oi++) out.push(byId[order[oi]]);
-    for (var ui = 0; ui < unidentified.length; ui++) out.push(unidentified[ui]);
     return out;
   }
 
