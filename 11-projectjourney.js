@@ -18,11 +18,9 @@
   };
   var DEPARTMENTS = [
     "Project Management",
-    "Production",
     "Technical",
-    "Crew & Logistics",
-    "Suppliers",
-    "Kit / Warehouse"
+    "Production",
+    "Suppliers"
   ];
   var FIELD_MAP = {
     projectSystem: {
@@ -185,7 +183,7 @@
   };
 
   var CFG = {
-    version: "2026-06-25.4",
+    version: "2026-06-25.5",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -1300,6 +1298,12 @@
     ];
   }
 
+  function milestoneStatus(dateTime) {
+    if (!dateTime) return "Missing";
+    var d = parseDate(dateTime);
+    return (d && d < new Date()) ? "Complete" : "Not Started";
+  }
+
   function buildDefaultMilestones(wiseEventStart, wiseEventEnd, systemDates, projectOperationalDates, jobDates) {
     systemDates = normaliseProjectSystemDates(systemDates || {});
     projectOperationalDates = normaliseProjectOperationalDates(projectOperationalDates || {});
@@ -1315,8 +1319,8 @@
         name: "Pre-Prod Sign Off/Meeting",
         plannedDateTime: jobDates.preProd,
         actualDateTime: "",
-        owner: "Project Management",
-        status: jobDates.preProd ? "Not Started" : "Missing",
+        owner: "Production",
+        status: milestoneStatus(jobDates.preProd),
         riskLevel: jobDates.preProd ? "None" : "Missing",
         criticalPath: false,
         optional: true,
@@ -1331,8 +1335,8 @@
         name: "Supplier Engaged",
         plannedDateTime: jobDates.supplier,
         actualDateTime: "",
-        owner: "Suppliers",
-        status: jobDates.supplier ? "Not Started" : "Missing",
+        owner: "Technical",
+        status: milestoneStatus(jobDates.supplier),
         riskLevel: jobDates.supplier ? "None" : "Missing",
         criticalPath: false,
         optional: true,
@@ -1347,8 +1351,8 @@
         name: "Wise Prep Start",
         plannedDateTime: jobDates.wisePrep,
         actualDateTime: "",
-        owner: "Project Management",
-        status: jobDates.wisePrep ? "Not Started" : "Missing",
+        owner: "Technical",
+        status: milestoneStatus(jobDates.wisePrep),
         riskLevel: jobDates.wisePrep ? "None" : "Missing",
         criticalPath: false,
         optional: true,
@@ -1362,8 +1366,8 @@
         name: "Kit Booking Start",
         plannedDateTime: jobDates.kitBookingStart,
         actualDateTime: "",
-        owner: "Kit / Warehouse",
-        status: jobDates.kitBookingStart ? "Not Started" : "Missing",
+        owner: "Suppliers",
+        status: milestoneStatus(jobDates.kitBookingStart),
         riskLevel: jobDates.kitBookingStart ? "None" : "Missing",
         criticalPath: true,
         optional: !hasJobSource,
@@ -1377,8 +1381,8 @@
         name: "Vehicle Load",
         plannedDateTime: jobDates.load,
         actualDateTime: "",
-        owner: "Crew & Logistics",
-        status: jobDates.load ? "Not Started" : "Missing",
+        owner: "Suppliers",
+        status: milestoneStatus(jobDates.load),
         riskLevel: jobDates.load ? "None" : "Missing",
         criticalPath: false,
         optional: true,
@@ -1392,29 +1396,29 @@
         name: "Vehicle Onsite - Install",
         plannedDateTime: jobDates.vehicleInstall,
         actualDateTime: "",
-        owner: "Crew & Logistics",
-        status: jobDates.vehicleInstall ? "Not Started" : "Missing",
+        owner: "Technical",
+        status: milestoneStatus(jobDates.vehicleInstall),
         riskLevel: jobDates.vehicleInstall ? "None" : "Missing",
         criticalPath: false,
         optional: true,
         timingType: "onsite",
         dependencies: ["vehicle-load"],
-        notes: "Vehicle assigned to this job arrives on site ahead of the build. Falls back to the job start time if the vehicle is the earliest planned resource."
+        notes: "Vehicle assigned to this job arrives on site ahead of the build."
       },
       {
         id: "job-onsite-start",
         group: "Site Arrival",
-        name: "Crew Call",
+        name: "Onsite Start",
         plannedDateTime: jobDates.onsiteStart || projectStart,
         actualDateTime: "",
-        owner: "Crew & Logistics",
-        status: (jobDates.onsiteStart || projectStart) ? "Not Started" : "Missing",
+        owner: "Technical",
+        status: milestoneStatus(jobDates.onsiteStart || projectStart),
         riskLevel: (jobDates.onsiteStart || projectStart) ? "None" : "Missing",
         criticalPath: true,
         optional: !hasJobSource && !!projectStart,
         timingType: "onsite",
         dependencies: ["vehicle-onsite-install"],
-        notes: jobDates.onsiteStart ? "Earliest on-site start across all jobs on this project." : "Using the project on-site start date until individual job start times are available."
+        notes: jobDates.onsiteStart ? "Earliest on-site start across all jobs on this project — first resource (crew or vehicle) onsite." : "Using the project on-site start date until individual job start times are available."
       },
       {
         id: "install-start",
@@ -1423,7 +1427,7 @@
         plannedDateTime: projectOperationalDates.installStart,
         actualDateTime: "",
         owner: "Production",
-        status: projectOperationalDates.installStart ? "Not Started" : "Missing",
+        status: milestoneStatus(projectOperationalDates.installStart),
         riskLevel: projectOperationalDates.installStart ? "None" : "Missing",
         criticalPath: false,
         optional: true,
@@ -1437,8 +1441,8 @@
         name: "Show Start",
         plannedDateTime: projectOperationalDates.showStart,
         actualDateTime: "",
-        owner: "Technical",
-        status: projectOperationalDates.showStart ? "Not Started" : "Missing",
+        owner: "Project Management",
+        status: milestoneStatus(projectOperationalDates.showStart),
         riskLevel: projectOperationalDates.showStart ? "None" : "Missing",
         criticalPath: false,
         optional: true,
@@ -1452,8 +1456,8 @@
         name: "Show End",
         plannedDateTime: projectOperationalDates.showEnd,
         actualDateTime: "",
-        owner: "Technical",
-        status: projectOperationalDates.showEnd ? "Not Started" : "Missing",
+        owner: "Project Management",
+        status: milestoneStatus(projectOperationalDates.showEnd),
         riskLevel: projectOperationalDates.showEnd ? "None" : "Missing",
         criticalPath: false,
         optional: true,
@@ -1468,7 +1472,7 @@
         plannedDateTime: projectOperationalDates.derigStart,
         actualDateTime: "",
         owner: "Production",
-        status: projectOperationalDates.derigStart ? "Not Started" : "Missing",
+        status: milestoneStatus(projectOperationalDates.derigStart),
         riskLevel: projectOperationalDates.derigStart ? "None" : "Missing",
         criticalPath: false,
         optional: true,
@@ -1482,14 +1486,14 @@
         name: "Vehicle Onsite - Derig",
         plannedDateTime: jobDates.vehicleDerig,
         actualDateTime: "",
-        owner: "Crew & Logistics",
-        status: jobDates.vehicleDerig ? "Not Started" : "Missing",
+        owner: "Technical",
+        status: milestoneStatus(jobDates.vehicleDerig),
         riskLevel: jobDates.vehicleDerig ? "None" : "Missing",
         criticalPath: false,
         optional: true,
         timingType: "onsite",
         dependencies: ["derig-start"],
-        notes: "Vehicle assigned to this job arrives on site for collection. Falls back to the job end time if the vehicle is the latest planned resource."
+        notes: "Vehicle assigned to this job arrives on site for collection."
       },
       {
         id: "site-clear",
@@ -1497,8 +1501,8 @@
         name: "Site Clear",
         plannedDateTime: jobDates.onsiteEnd || projectEnd,
         actualDateTime: "",
-        owner: "Crew & Logistics",
-        status: (jobDates.onsiteEnd || projectEnd) ? "Not Started" : "Missing",
+        owner: "Technical",
+        status: milestoneStatus(jobDates.onsiteEnd || projectEnd),
         riskLevel: (jobDates.onsiteEnd || projectEnd) ? "None" : "Missing",
         criticalPath: true,
         optional: !hasJobSource && !!projectEnd,
@@ -1512,8 +1516,8 @@
         name: "Kit Booking End",
         plannedDateTime: jobDates.kitBookingEnd,
         actualDateTime: "",
-        owner: "Kit / Warehouse",
-        status: jobDates.kitBookingEnd ? "Not Started" : "Missing",
+        owner: "Suppliers",
+        status: milestoneStatus(jobDates.kitBookingEnd),
         riskLevel: jobDates.kitBookingEnd ? "None" : "Missing",
         criticalPath: true,
         optional: !hasJobSource,
@@ -1527,8 +1531,8 @@
         name: "Vehicle Tip",
         plannedDateTime: jobDates.vehicleTip,
         actualDateTime: "",
-        owner: "Crew & Logistics",
-        status: jobDates.vehicleTip ? "Not Started" : "Missing",
+        owner: "Suppliers",
+        status: milestoneStatus(jobDates.vehicleTip),
         riskLevel: jobDates.vehicleTip ? "None" : "Missing",
         criticalPath: false,
         optional: true,
@@ -2155,7 +2159,7 @@
       { name: "Kit Booking Start",       map: FIELD_MAP.jobSystem.kitBookingStart,    fieldKey: "OUT_DATE",        critical: true  },
       { name: "Wise Prep Start",          map: FIELD_MAP.jobOperational.wisePrep,      fieldKey: "_WisePrep",       critical: false },
       { name: "Vehicle Load",             map: FIELD_MAP.jobOperational.load,          fieldKey: "_Load",           critical: false },
-      { name: "Crew Call",                map: FIELD_MAP.jobSystem.onsiteStart,        fieldKey: "JOB_DATE",        critical: true  },
+      { name: "Onsite Start",              map: FIELD_MAP.jobSystem.onsiteStart,        fieldKey: "JOB_DATE",        critical: true  },
       { name: "Vehicle Onsite - Install", map: FIELD_MAP.jobOperational.vehicleInstall,fieldKey: "_VehicleInstall", critical: false },
       { name: "Vehicle Onsite - Derig",   map: FIELD_MAP.jobOperational.vehicleDerig,  fieldKey: "_VehicleDerig",   critical: false },
       { name: "Site Clear",               map: FIELD_MAP.jobSystem.onsiteEnd,          fieldKey: "JOB_END",         critical: true  },
