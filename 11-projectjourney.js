@@ -183,7 +183,7 @@
   };
 
   var CFG = {
-    version: "2026-06-25.5",
+    version: "2026-06-25.6",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -3428,16 +3428,18 @@
     var text = asText(value).trim();
     if (!text) return null;
 
-    var direct = new Date(text);
-    if (!isNaN(direct.getTime())) return direct;
-
-    var match = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:\s+(\d{1,2}):(\d{2}))?/);
+    // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY — must run before new Date() which assumes MM/DD
+    var match = text.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:[T\s]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/);
     if (match) {
       var year = Number(match[3]);
       if (year < 100) year += 2000;
-      var parsed = new Date(year, Number(match[2]) - 1, Number(match[1]), Number(match[4] || 0), Number(match[5] || 0));
+      var parsed = new Date(year, Number(match[2]) - 1, Number(match[1]), Number(match[4] || 0), Number(match[5] || 0), Number(match[6] || 0));
       if (!isNaN(parsed.getTime())) return parsed;
     }
+
+    // ISO 8601 and other unambiguous formats safe to pass to Date constructor
+    var direct = new Date(text);
+    if (!isNaN(direct.getTime())) return direct;
 
     return null;
   }
