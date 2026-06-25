@@ -185,7 +185,7 @@
   };
 
   var CFG = {
-    version: "2026-06-25.1",
+    version: "2026-06-25.2",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -1981,7 +1981,7 @@
     for (var j = 0; j < toFetch.length; j++) {
       (function (jobId) {
         $.ajax({
-          url: "api/job_data.php?id=" + encodeURIComponent(jobId),
+          url: "api/job_data.php?job=" + encodeURIComponent(jobId),
           method: "GET", dataType: "json",
           success: function (data) {
             if (!data || typeof data !== "object") return;
@@ -2089,6 +2089,8 @@
   function buildTimeline(milestones, criticalOnly, issuesByMilestone, data) {
     issuesByMilestone = issuesByMilestone || {};
     data = data || {};
+    var pad = (data.projectOperationalDates && typeof data.projectOperationalDates === "object")
+      ? data.projectOperationalDates : {};
 
     var bars = '<div class="wpj-flow-bar">' +
       '<div class="wpj-segmented">' +
@@ -2098,98 +2100,104 @@
       '<button type="button" class="wpj-refresh-btn" data-wise-project-journey-refresh>⟳ Refresh</button>' +
     '</div>';
 
-    if (!milestones.length) {
-      return '<div class="wpj-flow">' + bars + '<div class="wpj-empty-state">No milestones to show.</div></div>';
-    }
-
-    var scheduledEvents = [];
-    var unscheduled = [];
-
-    if (data.wiseEventStart && parseDate(data.wiseEventStart)) {
-      scheduledEvents.push({
-        name: "Onsite Start",
-        dateTime: data.wiseEventStart,
-        pointType: "wrapper-start",
-        status: "Not Started",
-        criticalPath: true,
-        issues: 0
-      });
-    }
-
-    for (var i = 0; i < milestones.length; i++) {
-      var ms = milestones[i];
-      var dateVal = ms.actualDateTime || ms.plannedDateTime;
-      if (dateVal && parseDate(dateVal)) {
-        scheduledEvents.push({
-          name: ms.name,
-          dateTime: dateVal,
-          pointType: "milestone",
-          status: ms.status,
-          criticalPath: !!ms.criticalPath,
-          issues: (issuesByMilestone[ms.id] || []).length
-        });
-      } else {
-        unscheduled.push(ms);
+    // ---- Project row events ----
+    var projectEventDefs = [
+      { name: "Onsite Start",  dateTime: data.wiseEventStart,  fieldKey: "START_DATE",        pointType: "wrapper-start", critical: true  },
+      { name: "Install Start", dateTime: pad.installStart,      fieldKey: "_Install",          pointType: "project",       critical: true  },
+      { name: "Show Start",    dateTime: pad.showStart,         fieldKey: "_ShowStart",        pointType: "project",       critical: true  },
+      { name: "Show End",      dateTime: pad.showEnd,           fieldKey: "_ShowEnd",          pointType: "project",       critical: true  },
+      { name: "Derig Start",   dateTime: pad.derigStart,        fieldKey: "_Derig",            pointType: "project",       critical: true  },
+      { name: "Onsite End",    dateTime: data.wiseEventEnd,     fieldKey: "END_DATE",          pointType: "wrapper-end",   critical: true  }
+    ];
+    var projectEvents = [];
+    for (var pi = 0; pi < projectEventDefs.length; pi++) {
+      var pdef = projectEventDefs[pi];
+      if (pdef.dateTime && parseDate(pdef.dateTime) && (!criticalOnly || pdef.critical)) {
+        projectEvents.push(pdef);
       }
     }
 
-    if (data.wiseEventEnd && parseDate(data.wiseEventEnd)) {
-      scheduledEvents.push({
-        name: "Onsite End",
-        dateTime: data.wiseEventEnd,
-        pointType: "wrapper-end",
-        status: "Not Started",
-        criticalPath: true,
-        issues: 0
-      });
+    // ---- Per-job rows ----
+    var rawJobRows = getProjectJobRows();
+    var activeJobRows = [];
+    for (var ri = 0; ri < rawJobRows.length; ri++) {
+      if (isActiveJob(rawJobRows[ri])) activeJobRows.push(rawJobRows[ri]);
     }
 
-    if (!scheduledEvents.length) {
+    var JOB_COLORS = ["#0369a1", "#7c3aed", "#0891b2", "#b45309", "#4a6fa5", "#15803d"];
+    var jobEventMaps = [
+      { name: "Kit Booking Start",       map: FIELD_MAP.jobSystem.kitBookingStart,    fieldKey: "OUT_DATE",        critical: true  },
+      { name: "Wise Prep Start",          map: FIELD_MAP.jobOperational.wisePrep,      fieldKey: "_WisePrep",       critical: false },
+      { name: "Vehicle Load",             map: FIELD_MAP.jobOperational.load,          fieldKey: "_Load",           critical: false },
+      { name: "Crew Call",                map: FIELD_MAP.jobSystem.onsiteStart,        fieldKey: "JOB_DATE",        critical: true  },
+      { name: "Vehicle Onsite - Install", map: FIELD_MAP.jobOperational.vehicleInstall,fieldKey: "_VehicleInstall", critical: false },
+      { name: "Vehicle Onsite - Derig",   map: FIELD_MAP.jobOperational.vehicleDerig,  fieldKey: "_VehicleDerig",   critical: false },
+      { name: "Site Clear",               map: FIELD_MAP.jobSystem.onsiteEnd,          fieldKey: "JOB_END",         critical: true  },
+      { name: "Kit Booking End",          map: FIELD_MAP.jobSystem.kitBookingEnd,      fieldKey: "RETURN_DATE",     critical: true  },
+      { name: "Vehicle Tip",              map: FIELD_MAP.jobOperational.vehicleTip,    fieldKey: "_Tip",            critical: false }
+    ];
+
+    var jobGroups = [];
+    for (var ji = 0; ji < activeJobRows.length; ji++) {
+      var jobRow = activeJobRows[ji];
+      var jobId = extractJobId(jobRow) || String(ji + 1);
+      var jEvents = [];
+      for (var di = 0; di < jobEventMaps.length; di++) {
+        var jdef = jobEventMaps[di];
+        if (criticalOnly && !jdef.critical) continue;
+        var jdt = readMappedDateTimeFromObject(jobRow, jdef.map);
+        if (jdt && parseDate(jdt)) {
+          jEvents.push({ name: jdef.name, dateTime: jdt, fieldKey: jdef.fieldKey, pointType: "job", critical: jdef.critical });
+        }
+      }
+      jobGroups.push({ jobId: jobId, events: jEvents, color: JOB_COLORS[ji % JOB_COLORS.length] });
+    }
+
+    // ---- Global time range across all rows ----
+    var allMs = [];
+    for (var pei = 0; pei < projectEvents.length; pei++) {
+      var pd = parseDate(projectEvents[pei].dateTime);
+      if (pd) allMs.push(pd.getTime());
+    }
+    for (var jgi = 0; jgi < jobGroups.length; jgi++) {
+      for (var jei = 0; jei < jobGroups[jgi].events.length; jei++) {
+        var jed = parseDate(jobGroups[jgi].events[jei].dateTime);
+        if (jed) allMs.push(jed.getTime());
+      }
+    }
+
+    if (!allMs.length) {
       return '<div class="wpj-flow">' + bars +
         '<div class="wpj-empty-state">No scheduled dates yet — milestones will appear once dates are set.</div></div>';
     }
 
-    scheduledEvents.sort(function (a, b) {
-      return parseDate(a.dateTime).getTime() - parseDate(b.dateTime).getTime();
-    });
+    var globalMin = Math.min.apply(null, allMs);
+    var globalMax = Math.max.apply(null, allMs);
+    var totalSpan = Math.max(globalMax - globalMin, 3600000); // at least 1 hr span
 
-    var minMs = parseDate(scheduledEvents[0].dateTime).getTime();
-    var maxMs = parseDate(scheduledEvents[scheduledEvents.length - 1].dateTime).getTime();
-    var totalSpan = Math.max(maxMs - minMs, 1);
+    function toLPct(ms) {
+      return (4 + (ms - globalMin) / totalSpan * 92).toFixed(1);
+    }
 
-    var html = '<div class="wpj-flow">' + bars + '<div class="wpj-tl-scroll"><div class="wpj-tl-inner"><div class="wpj-tl-rail"></div>';
+    var html = '<div class="wpj-flow">' + bars + '<div class="wpj-tl-scroll"><div class="wpj-tl-grid">';
 
-    for (var e = 0; e < scheduledEvents.length; e++) {
-      var ev = scheduledEvents[e];
-      var sCls = cssClass(normaliseStatus(ev.status));
-      var dotCls = ev.pointType === "wrapper-start" ? "wpj-tl-dot--ws" :
-                   ev.pointType === "wrapper-end" ? "wpj-tl-dot--we" :
-                   "wpj-tl-dot--" + sCls;
-      var ptCls = "wpj-tl-point" +
-                  (ev.pointType === "wrapper-start" ? " wpj-tl-point--ws" :
-                   ev.pointType === "wrapper-end" ? " wpj-tl-point--we" : "") +
-                  (ev.criticalPath ? " wpj-tl-point--critical" : "");
-      var above = e % 2 === 0;
-      var issueTag = ev.issues ? ' <span class="wpj-tl-issue">' + ev.issues + '!</span>' : '';
-      var labelHtml = '<div class="wpj-tl-ename">' + esc(ev.name) + issueTag + '</div>' +
-                      '<div class="wpj-tl-edate">' + esc(formatDateTime(ev.dateTime)) + '</div>';
-
-      html += '<div class="' + ptCls + '">' +
-        '<div class="wpj-tl-above">' + (above ? labelHtml : '') + '</div>' +
-        '<div class="wpj-tl-dot ' + dotCls + '"></div>' +
-        '<div class="wpj-tl-below">' + (!above ? labelHtml : '') + '</div>' +
-      '</div>';
-
-      if (e < scheduledEvents.length - 1) {
-        var nextMs = parseDate(scheduledEvents[e + 1].dateTime).getTime();
-        var gapRatio = (nextMs - parseDate(ev.dateTime).getTime()) / totalSpan;
-        var flexGrow = Math.max(0.3, gapRatio * 20);
-        html += '<div class="wpj-tl-gap" style="flex-grow:' + flexGrow.toFixed(2) + '"></div>';
-      }
+    if (projectEvents.length) {
+      html += renderTlRow("Project", projectEvents, toLPct, "wpj-tl-row--project", null);
+    }
+    for (var jri = 0; jri < jobGroups.length; jri++) {
+      var jg = jobGroups[jri];
+      html += renderTlRow('#' + jg.jobId, jg.events, toLPct, "wpj-tl-row--job", jg.color);
     }
 
     html += '</div></div>';
 
+    // Milestones from analysis with no scheduled date
+    var unscheduled = [];
+    for (var umi = 0; umi < milestones.length; umi++) {
+      if (!milestones[umi].plannedDateTime && !milestones[umi].actualDateTime) {
+        unscheduled.push(milestones[umi]);
+      }
+    }
     if (unscheduled.length) {
       html += '<details class="wpj-gantt-unsched"><summary>Not yet scheduled — ' + unscheduled.length + ' milestone' + (unscheduled.length > 1 ? "s" : "") + '</summary><div class="wpj-gantt-unsched-body">';
       for (var ui = 0; ui < unscheduled.length; ui++) {
@@ -2200,6 +2208,58 @@
     }
 
     html += '</div>';
+    return html;
+  }
+
+  function renderTlRow(label, events, toLPct, rowCls, accentColor) {
+    var sorted = events.slice().sort(function (a, b) {
+      return parseDate(a.dateTime).getTime() - parseDate(b.dateTime).getTime();
+    });
+
+    var hdrStyle = accentColor ? ' style="color:' + accentColor + ';border-right-color:' + accentColor + '"' : '';
+    var lineStyle = accentColor ? ' style="background:' + accentColor + ';opacity:0.3"' : '';
+
+    var html = '<div class="wpj-tl-row ' + (rowCls || '') + '">' +
+      '<div class="wpj-tl-row-hdr"' + hdrStyle + '>' + esc(label) + '</div>' +
+      '<div class="wpj-tl-row-body">' +
+      '<div class="wpj-tl-body-line"' + lineStyle + '></div>';
+
+    for (var i = 0; i < sorted.length; i++) {
+      var ev = sorted[i];
+      var d = parseDate(ev.dateTime);
+      var lp = toLPct(d.getTime());
+      var above = i % 2 === 0;
+
+      var evtCls = "wpj-tl-evt";
+      if (ev.pointType === "wrapper-start") evtCls += " wpj-tl-evt--ws";
+      else if (ev.pointType === "wrapper-end") evtCls += " wpj-tl-evt--we";
+
+      var dotCls = "wpj-tl-dot ";
+      var dotStyle = "";
+      if (ev.pointType === "wrapper-start") {
+        dotCls += "wpj-tl-dot--ws";
+      } else if (ev.pointType === "wrapper-end") {
+        dotCls += "wpj-tl-dot--we";
+      } else if (accentColor) {
+        dotCls += "wpj-tl-dot--job";
+        dotStyle = "background:" + accentColor + ";";
+      } else {
+        dotCls += "wpj-tl-dot--project";
+      }
+
+      var lContent =
+        '<div class="wpj-tl-ename">' + esc(ev.name) + '</div>' +
+        '<div class="wpj-tl-edate">' + esc(formatDateTime(ev.dateTime)) + '</div>' +
+        '<div class="wpj-tl-fkey">' + esc(ev.fieldKey) + '</div>';
+
+      html += '<div class="' + evtCls + '" style="left:' + lp + '%">' +
+        '<div class="wpj-tl-above">' + (above ? lContent : '') + '</div>' +
+        '<div class="' + dotCls + '" style="' + dotStyle + '"></div>' +
+        '<div class="wpj-tl-below">' + (!above ? lContent : '') + '</div>' +
+      '</div>';
+    }
+
+    html += '</div></div>';
     return html;
   }
 
@@ -2216,7 +2276,7 @@
       var milestones = row.milestones || [];
 
       var pctLabel = row.total === 0 ? "—" : (row.score > 0 || row.complete > 0 ? score + "%" : "Pending");
-      html += '<details class="wpj-dcol" open>' +
+      html += '<details class="wpj-dcol">' +
         '<summary class="wpj-dcol-hdr">' +
           '<div class="wpj-dcol-name">' + esc(row.department) + '</div>' +
           '<div class="wpj-dcol-pct ' + (row.total > 0 ? scoreClass : "wpj-score-none") + '">' + esc(pctLabel) + '</div>' +
@@ -3195,27 +3255,28 @@
       ".wpj-segmented button.is-active{background:#0f172a;color:#fff;}",
       ".wpj-refresh-btn{border:1px solid #e2e8ef;border-radius:6px;background:#fff;color:#64748b;font:inherit;font-size:11px;font-weight:700;padding:5px 11px;cursor:pointer;}",
       /* ---- Event timeline ---- */
-      ".wpj-tl-scroll{overflow-x:auto;padding:8px 16px 16px;}",
-      ".wpj-tl-inner{display:flex;align-items:stretch;min-height:160px;position:relative;}",
-      ".wpj-tl-rail{position:absolute;top:50%;left:0;right:0;height:2px;background:#e2e8ef;transform:translateY(-50%);z-index:0;}",
-      ".wpj-tl-point{display:flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:90px;position:relative;z-index:1;}",
-      ".wpj-tl-above{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:8px;text-align:center;}",
-      ".wpj-tl-below{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px;text-align:center;}",
-      ".wpj-tl-dot{width:12px;height:12px;border-radius:50%;border:2px solid #fff;flex-shrink:0;position:relative;z-index:2;}",
-      ".wpj-tl-gap{flex-shrink:0;min-width:12px;}",
-      ".wpj-tl-ename{font-size:11px;font-weight:700;color:#1e293b;line-height:1.3;max-width:130px;}",
-      ".wpj-tl-edate{font-size:10px;color:#94a3b8;margin-top:2px;white-space:nowrap;}",
+      ".wpj-tl-scroll{overflow-x:auto;padding:0 0 8px;}",
+      ".wpj-tl-grid{min-width:600px;}",
+      ".wpj-tl-row{display:flex;align-items:stretch;border-bottom:1px solid #f1f5f9;min-height:110px;}",
+      ".wpj-tl-row--project{background:#fafbff;border-bottom:2px solid #e2e8ef;min-height:120px;}",
+      ".wpj-tl-row-hdr{width:72px;min-width:72px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;padding:0 10px 0 8px;border-right:1px solid #e2e8ef;font-size:10px;font-weight:800;color:#64748b;text-align:right;word-break:break-all;line-height:1.3;}",
+      ".wpj-tl-row--project .wpj-tl-row-hdr{color:#374151;font-size:11px;}",
+      ".wpj-tl-row-body{flex:1;position:relative;overflow:hidden;}",
+      ".wpj-tl-body-line{position:absolute;top:50%;left:0;right:0;height:2px;background:#e2e8ef;transform:translateY(-50%);z-index:0;}",
+      ".wpj-tl-evt{position:absolute;top:0;bottom:0;width:90px;display:flex;flex-direction:column;align-items:center;transform:translateX(-50%);z-index:1;}",
+      ".wpj-tl-above{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:7px;text-align:center;width:90px;}",
+      ".wpj-tl-below{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:7px;text-align:center;width:90px;}",
+      ".wpj-tl-dot{width:11px;height:11px;border-radius:50%;border:2px solid #fff;flex-shrink:0;position:relative;z-index:2;}",
+      ".wpj-tl-ename{font-size:10px;font-weight:700;color:#1e293b;line-height:1.3;}",
+      ".wpj-tl-edate{font-size:9px;color:#94a3b8;margin-top:1px;white-space:nowrap;}",
+      ".wpj-tl-fkey{font-size:8px;color:#cbd5e1;font-family:monospace;margin-top:2px;white-space:nowrap;}",
       ".wpj-tl-issue{font-size:9px;font-weight:700;background:#fee2e2;color:#dc2626;padding:1px 4px;border-radius:3px;margin-left:3px;vertical-align:middle;}",
-      ".wpj-tl-dot--complete{background:#22c55e;}",
-      ".wpj-tl-dot--in-progress{background:#3b82f6;}",
-      ".wpj-tl-dot--at-risk{background:#f59e0b;}",
-      ".wpj-tl-dot--blocked,.wpj-tl-dot--missing{background:#ef4444;}",
-      ".wpj-tl-dot--not-started{background:#cbd5e1;}",
-      ".wpj-tl-dot--ws{background:#f97316;width:14px;height:14px;}",
-      ".wpj-tl-dot--we{background:#38bdf8;width:14px;height:14px;}",
-      ".wpj-tl-point--ws .wpj-tl-ename{color:#c2410c;font-weight:800;}",
-      ".wpj-tl-point--we .wpj-tl-ename{color:#0284c7;font-weight:800;}",
-      ".wpj-tl-point--critical .wpj-tl-dot{box-shadow:0 0 0 3px rgba(0,0,0,.1);}",
+      ".wpj-tl-dot--ws{background:#f97316;width:13px;height:13px;}",
+      ".wpj-tl-dot--we{background:#38bdf8;width:13px;height:13px;}",
+      ".wpj-tl-dot--project{background:#6366f1;}",
+      ".wpj-tl-dot--job{background:#64748b;}",
+      ".wpj-tl-evt--ws .wpj-tl-ename{color:#c2410c;font-weight:800;}",
+      ".wpj-tl-evt--we .wpj-tl-ename{color:#0284c7;font-weight:800;}",
       /* ---- Unscheduled list ---- */
       ".wpj-gantt-unsched{border-top:1px solid #e2e8ef;margin-top:1px;}",
       ".wpj-gantt-unsched>summary{padding:7px 14px;background:#f8fafc;cursor:pointer;list-style:none;font-size:11px;font-weight:700;color:#64748b;display:block;}",
@@ -3271,7 +3332,7 @@
       ".wpj-diag-pre{margin:0;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8ef;border-radius:4px;font-size:10px;line-height:1.5;color:#1e293b;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;}",
       ".wpj-diag-note{font-size:11px;color:#94a3b8;font-style:italic;}",
       /* ---- Responsive ---- */
-      "@media(max-width:860px){.wpj-hdr{flex-direction:column;align-items:flex-start;}.wpj-tl-point{min-width:70px;}.wpj-tl-edate{display:none;}}",
+      "@media(max-width:860px){.wpj-hdr{flex-direction:column;align-items:flex-start;}.wpj-tl-row-hdr{width:52px;min-width:52px;font-size:9px;padding:0 6px;}.wpj-tl-edate,.wpj-tl-fkey{display:none;}.wpj-tl-ename{font-size:9px;}}",
       "@media(max-width:480px){.wpj-shell{padding:5px;}.wpj-segmented button{padding:4px 7px;}}"
     ].join("\n");
 
