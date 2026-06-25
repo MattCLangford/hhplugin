@@ -185,7 +185,7 @@
   };
 
   var CFG = {
-    version: "2026-06-24.10",
+    version: "2026-06-25.1",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -1290,7 +1290,7 @@
       {
         id: "pre-production",
         group: "Pre-Production",
-        name: "Pre-Production Sign-Off",
+        name: "Pre-Prod Sign Off/Meeting",
         plannedDateTime: jobDates.preProd,
         actualDateTime: "",
         owner: "Project Management",
@@ -1306,7 +1306,7 @@
       {
         id: "supplier-engaged",
         group: "Supplier / Kit Prep",
-        name: "Suppliers Confirmed",
+        name: "Supplier Engaged",
         plannedDateTime: jobDates.supplier,
         actualDateTime: "",
         owner: "Suppliers",
@@ -1322,7 +1322,7 @@
       {
         id: "wise-prep-start",
         group: "Supplier / Kit Prep",
-        name: "Wise Preparation Begins",
+        name: "Wise Prep Start",
         plannedDateTime: jobDates.wisePrep,
         actualDateTime: "",
         owner: "Project Management",
@@ -1337,7 +1337,7 @@
       {
         id: "kit-booking-start",
         group: "Supplier / Kit Prep",
-        name: "Equipment Out",
+        name: "Kit Booking Start",
         plannedDateTime: jobDates.kitBookingStart,
         actualDateTime: "",
         owner: "Kit / Warehouse",
@@ -1352,7 +1352,7 @@
       {
         id: "vehicle-load",
         group: "Load / Transport",
-        name: "Vehicles Loaded",
+        name: "Vehicle Load",
         plannedDateTime: jobDates.load,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1367,7 +1367,7 @@
       {
         id: "vehicle-onsite-install",
         group: "Site Arrival",
-        name: "Vehicles Arrive (Build)",
+        name: "Vehicle Onsite - Install",
         plannedDateTime: jobDates.vehicleInstall,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1382,7 +1382,7 @@
       {
         id: "job-onsite-start",
         group: "Site Arrival",
-        name: "Crew On Site",
+        name: "Crew Call",
         plannedDateTime: jobDates.onsiteStart || projectStart,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1396,8 +1396,8 @@
       },
       {
         id: "install-start",
-        group: "Build",
-        name: "Build Begins",
+        group: "Install",
+        name: "Install Start",
         plannedDateTime: projectOperationalDates.installStart,
         actualDateTime: "",
         owner: "Production",
@@ -1412,7 +1412,7 @@
       {
         id: "show-start",
         group: "Show",
-        name: "Show Starts",
+        name: "Show Start",
         plannedDateTime: projectOperationalDates.showStart,
         actualDateTime: "",
         owner: "Technical",
@@ -1427,7 +1427,7 @@
       {
         id: "show-end",
         group: "Show",
-        name: "Show Ends",
+        name: "Show End",
         plannedDateTime: projectOperationalDates.showEnd,
         actualDateTime: "",
         owner: "Technical",
@@ -1442,7 +1442,7 @@
       {
         id: "derig-start",
         group: "Derig",
-        name: "Derig Begins",
+        name: "Derig Start",
         plannedDateTime: projectOperationalDates.derigStart,
         actualDateTime: "",
         owner: "Production",
@@ -1457,7 +1457,7 @@
       {
         id: "vehicle-onsite-derig",
         group: "Derig",
-        name: "Vehicles Arrive (Derig)",
+        name: "Vehicle Onsite - Derig",
         plannedDateTime: jobDates.vehicleDerig,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -1487,7 +1487,7 @@
       {
         id: "kit-booking-end",
         group: "Site Clear",
-        name: "Equipment Returns",
+        name: "Kit Booking End",
         plannedDateTime: jobDates.kitBookingEnd,
         actualDateTime: "",
         owner: "Kit / Warehouse",
@@ -1502,7 +1502,7 @@
       {
         id: "vehicle-tip",
         group: "Site Clear",
-        name: "Vehicles Return",
+        name: "Vehicle Tip",
         plannedDateTime: jobDates.vehicleTip,
         actualDateTime: "",
         owner: "Crew & Logistics",
@@ -2001,7 +2001,6 @@
 
     return '<div class="wpj-shell">' +
       buildHeaderSummary(data, analysis) +
-      buildEventWrapper(data) +
       buildIssuesPanel(analysis.issues) +
       buildDepartmentReadiness(analysis.departmentReadiness) +
       buildTimeline(visibleMilestones, state.showCriticalOnly, issuesByMilestone, data) +
@@ -2055,26 +2054,6 @@
     '</div>';
   }
 
-  function buildEventWrapper(data) {
-    var hasStart = !!data.wiseEventStart;
-    var hasEnd = !!data.wiseEventEnd;
-    var sameDay = hasStart && hasEnd && data.wiseEventStart === data.wiseEventEnd;
-    var endLabel = sameDay ? "Single day — set end date in HireHop if multi-day" : "Final moment Wise is active on site";
-    var endWarn = !hasEnd ? "Set the project end date in HireHop" : null;
-    return '<div class="wpj-win">' +
-      '<div class="wpj-win-card' + (hasStart ? '' : ' wpj-win-card--unset') + '">' +
-        '<div class="wpj-win-label">Site Open</div>' +
-        '<div class="wpj-win-value">' + esc(formatDateTime(data.wiseEventStart) || "Not yet set") + '</div>' +
-        '<div class="wpj-win-sub' + (hasStart ? '' : ' wpj-win-sub--warn') + '">' + esc(hasStart ? "Earliest on-site presence (START_DATE)" : "Set the project start date in HireHop") + '</div>' +
-      '</div>' +
-      '<div class="wpj-win-arrow">→</div>' +
-      '<div class="wpj-win-card' + (hasEnd && !sameDay ? '' : ' wpj-win-card--unset') + '">' +
-        '<div class="wpj-win-label">Site Close</div>' +
-        '<div class="wpj-win-value">' + esc(formatDateTime(data.wiseEventEnd) || "Not yet set") + '</div>' +
-        '<div class="wpj-win-sub' + (hasEnd && !sameDay ? '' : ' wpj-win-sub--warn') + '">' + esc(endWarn || endLabel) + '</div>' +
-      '</div>' +
-    '</div>';
-  }
 
   function buildIssuesPanel(issues) {
     if (!issues.length) return '';
@@ -2123,178 +2102,98 @@
       return '<div class="wpj-flow">' + bars + '<div class="wpj-empty-state">No milestones to show.</div></div>';
     }
 
-    // Collect all parseable dates to determine range
-    var allD = [];
-    function pushDate(v) { var d = parseDate(v); if (d) { d.setHours(0,0,0,0); allD.push(d); } }
-    for (var i = 0; i < milestones.length; i++) {
-      pushDate(milestones[i].plannedDateTime);
-      pushDate(milestones[i].actualDateTime);
-    }
-    pushDate(data.wiseEventStart);
-    pushDate(data.wiseEventEnd);
-
-    if (!allD.length) {
-      return '<div class="wpj-flow">' + bars +
-        '<div class="wpj-empty-state">No scheduled dates yet — milestones will appear on a timeline once dates are set.</div></div>';
-    }
-
-    var earliest = allD[0], latest = allD[0];
-    for (var k = 1; k < allD.length; k++) {
-      if (allD[k] < earliest) earliest = allD[k];
-      if (allD[k] > latest) latest = allD[k];
-    }
-
-    // Ensure minimum visible span (at least 14 days so single-day projects have context)
-    var spanDays = Math.round((latest - earliest) / 86400000);
-    var padStart = spanDays < 14 ? Math.max(1, Math.ceil((14 - spanDays) / 2)) : 1;
-    var padEnd = spanDays < 14 ? Math.max(1, 14 - spanDays - padStart + 1) : 1;
-    var startDate = new Date(earliest); startDate.setDate(startDate.getDate() - padStart); startDate.setHours(0,0,0,0);
-    var endDate = new Date(latest); endDate.setDate(endDate.getDate() + padEnd); endDate.setHours(0,0,0,0);
-
-    var days = [];
-    var cur = new Date(startDate);
-    while (cur <= endDate) { days.push(new Date(cur)); cur.setDate(cur.getDate() + 1); }
-
-    var today = new Date(); today.setHours(0,0,0,0);
-    var DAY_N = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-    var MON_N = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
-    function dIdx(v) {
-      var d = parseDate(v); if (!d) return -1;
-      d.setHours(0,0,0,0);
-      return Math.round((d - startDate) / 86400000);
-    }
-    function isToday(d) { return d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth() && d.getDate() === today.getDate(); }
-    function isWknd(d) { return d.getDay() === 0 || d.getDay() === 6; }
-
-    var esIdx = dIdx(data.wiseEventStart);
-    var eeIdx = dIdx(data.wiseEventEnd);
-    function isSite(i) { return esIdx >= 0 && eeIdx >= 0 && i >= esIdx && i <= eeIdx; }
-
-    function cells(markerIdx, mCls) {
-      var h = "";
-      for (var ci = 0; ci < days.length; ci++) {
-        var cls = "wpj-gc";
-        if (isToday(days[ci])) cls += " wpj-gc--today";
-        if (isWknd(days[ci])) cls += " wpj-gc--wknd";
-        if (isSite(ci)) cls += " wpj-gc--site";
-        if (ci === esIdx) cls += " wpj-gc--ses";
-        if (ci === eeIdx) cls += " wpj-gc--see";
-        h += '<div class="' + cls + '">';
-        if (ci === markerIdx) h += '<span class="wpj-gm wpj-gm--' + (mCls || "not-started") + '">◆</span>';
-        h += '</div>';
-      }
-      return h;
-    }
-
-    // Month groups for header
-    var months = [];
-    for (var di = 0; di < days.length; di++) {
-      var mk = days[di].getFullYear() + "-" + days[di].getMonth();
-      if (!months.length || months[months.length-1].key !== mk) {
-        months.push({ key: mk, label: MON_N[days[di].getMonth()] + " " + days[di].getFullYear(), count: 0 });
-      }
-      months[months.length-1].count++;
-    }
-
-    var onsitePhases = { "Site Arrival": true, "Build": true, "Show": true, "Derig": true, "Site Clear": true };
-    var phaseColors = {
-      "Pre-Production": "#7c3aed", "Supplier / Kit Prep": "#0369a1",
-      "Load / Transport": "#0891b2", "Site Arrival": "#c2410c",
-      "Build": "#ea580c", "Show": "#dc2626", "Derig": "#b45309", "Site Clear": "#4a6fa5"
-    };
-
-    var html = '<div class="wpj-flow">' + bars + '<div class="wpj-gantt-outer"><div class="wpj-gantt-inner">';
-
-    // Sticky header
-    html += '<div class="wpj-gantt-hrow">' +
-      '<div class="wpj-glcol wpj-glcol--hdr"></div>' +
-      '<div class="wpj-grcol wpj-grcol--hdr">' +
-        '<div class="wpj-gantt-months">';
-    for (var mg = 0; mg < months.length; mg++) {
-      html += '<div class="wpj-gantt-month" style="width:calc(' + months[mg].count + '*var(--wpj-col-w))">' + esc(months[mg].label) + '</div>';
-    }
-    html += '</div><div class="wpj-gantt-dayhdr">';
-    for (var dh = 0; dh < days.length; dh++) {
-      var cls = "wpj-gdc";
-      if (isToday(days[dh])) cls += " wpj-gdc--today";
-      if (isWknd(days[dh])) cls += " wpj-gdc--wknd";
-      if (isSite(dh)) cls += " wpj-gdc--site";
-      if (dh === esIdx) cls += " wpj-gdc--ses";
-      if (dh === eeIdx) cls += " wpj-gdc--see";
-      html += '<div class="' + cls + '"><div class="wpj-gd-num">' + days[dh].getDate() + '</div><div class="wpj-gd-name">' + DAY_N[days[dh].getDay()] + '</div></div>';
-    }
-    html += '</div></div></div>';
-
-    // Body
-    html += '<div class="wpj-gantt-body">';
-    var groups = groupMilestones(milestones);
-    var ssAdded = false, seAdded = false;
+    var scheduledEvents = [];
     var unscheduled = [];
 
-    function siteRow(label, labelCls, dateStr, markerIdx, arrowChar, arrowCls) {
-      var r = '<div class="wpj-gantt-srow' + (labelCls === "wpj-sdiv-label--end" ? " wpj-gantt-srow--end" : "") + '">' +
-        '<div class="wpj-glcol wpj-glcol--sdiv">' +
-          '<span class="wpj-sdiv-label ' + labelCls + '">' + esc(label) + '</span>' +
-          '<span class="wpj-sdiv-date">' + esc(dateStr) + '</span>' +
-        '</div><div class="wpj-grcol">';
-      for (var si = 0; si < days.length; si++) {
-        var sc = "wpj-gc wpj-gc--sdrow" + (isSite(si) ? " wpj-gc--site" : "") + (si === markerIdx ? arrowCls : "");
-        r += '<div class="' + sc + '">' + (si === markerIdx ? '<span class="wpj-sdiv-arr ' + arrowCls + '">' + arrowChar + '</span>' : '') + '</div>';
-      }
-      return r + '</div></div>';
+    if (data.wiseEventStart && parseDate(data.wiseEventStart)) {
+      scheduledEvents.push({
+        name: "Onsite Start",
+        dateTime: data.wiseEventStart,
+        pointType: "wrapper-start",
+        status: "Not Started",
+        criticalPath: true,
+        issues: 0
+      });
     }
 
-    for (var gi = 0; gi < groups.length; gi++) {
-      var group = groups[gi];
-      var isOnsite = !!onsitePhases[group.group];
-      var dotColor = phaseColors[group.group] || "#64748b";
-
-      if (isOnsite && !ssAdded) {
-        ssAdded = true;
-        html += siteRow("On Site Begins", "", formatDateTime(data.wiseEventStart) || "TBC", esIdx, "▼", " wpj-gc--ses");
+    for (var i = 0; i < milestones.length; i++) {
+      var ms = milestones[i];
+      var dateVal = ms.actualDateTime || ms.plannedDateTime;
+      if (dateVal && parseDate(dateVal)) {
+        scheduledEvents.push({
+          name: ms.name,
+          dateTime: dateVal,
+          pointType: "milestone",
+          status: ms.status,
+          criticalPath: !!ms.criticalPath,
+          issues: (issuesByMilestone[ms.id] || []).length
+        });
+      } else {
+        unscheduled.push(ms);
       }
-      if (group.group === "Site Clear" && !seAdded) {
-        seAdded = true;
-        html += siteRow("On Site Ends", "wpj-sdiv-label--end", formatDateTime(data.wiseEventEnd) || "TBC", eeIdx, "▲", " wpj-gc--see");
-      }
+    }
 
-      // Phase header row
-      html += '<div class="wpj-gantt-prow' + (isOnsite ? " wpj-gantt-prow--onsite" : "") + '">' +
-        '<div class="wpj-glcol wpj-glcol--ph">' +
-          '<span class="wpj-ph-dot" style="background:' + dotColor + '"></span>' +
-          '<span class="wpj-ph-name">' + esc(group.group) + '</span>' +
-        '</div>' +
-        '<div class="wpj-grcol">' + cells(-1, null) + '</div>' +
+    if (data.wiseEventEnd && parseDate(data.wiseEventEnd)) {
+      scheduledEvents.push({
+        name: "Onsite End",
+        dateTime: data.wiseEventEnd,
+        pointType: "wrapper-end",
+        status: "Not Started",
+        criticalPath: true,
+        issues: 0
+      });
+    }
+
+    if (!scheduledEvents.length) {
+      return '<div class="wpj-flow">' + bars +
+        '<div class="wpj-empty-state">No scheduled dates yet — milestones will appear once dates are set.</div></div>';
+    }
+
+    scheduledEvents.sort(function (a, b) {
+      return parseDate(a.dateTime).getTime() - parseDate(b.dateTime).getTime();
+    });
+
+    var minMs = parseDate(scheduledEvents[0].dateTime).getTime();
+    var maxMs = parseDate(scheduledEvents[scheduledEvents.length - 1].dateTime).getTime();
+    var totalSpan = Math.max(maxMs - minMs, 1);
+
+    var html = '<div class="wpj-flow">' + bars + '<div class="wpj-tl-scroll"><div class="wpj-tl-inner"><div class="wpj-tl-rail"></div>';
+
+    for (var e = 0; e < scheduledEvents.length; e++) {
+      var ev = scheduledEvents[e];
+      var sCls = cssClass(normaliseStatus(ev.status));
+      var dotCls = ev.pointType === "wrapper-start" ? "wpj-tl-dot--ws" :
+                   ev.pointType === "wrapper-end" ? "wpj-tl-dot--we" :
+                   "wpj-tl-dot--" + sCls;
+      var ptCls = "wpj-tl-point" +
+                  (ev.pointType === "wrapper-start" ? " wpj-tl-point--ws" :
+                   ev.pointType === "wrapper-end" ? " wpj-tl-point--we" : "") +
+                  (ev.criticalPath ? " wpj-tl-point--critical" : "");
+      var above = e % 2 === 0;
+      var issueTag = ev.issues ? ' <span class="wpj-tl-issue">' + ev.issues + '!</span>' : '';
+      var labelHtml = '<div class="wpj-tl-ename">' + esc(ev.name) + issueTag + '</div>' +
+                      '<div class="wpj-tl-edate">' + esc(formatDateTime(ev.dateTime)) + '</div>';
+
+      html += '<div class="' + ptCls + '">' +
+        '<div class="wpj-tl-above">' + (above ? labelHtml : '') + '</div>' +
+        '<div class="wpj-tl-dot ' + dotCls + '"></div>' +
+        '<div class="wpj-tl-below">' + (!above ? labelHtml : '') + '</div>' +
       '</div>';
 
-      for (var mi = 0; mi < group.items.length; mi++) {
-        var ms = group.items[mi];
-        var status = normaliseStatus(ms.status);
-        var sCls = cssClass(status);
-        var dateVal = ms.actualDateTime || ms.plannedDateTime;
-        var idx = dIdx(dateVal);
-        var msIssues = issuesByMilestone[ms.id] || [];
-        var issueTag = msIssues.length ? ' <span class="wpj-gi-hint">' + msIssues.length + '!</span>' : '';
-
-        if (idx < 0) { unscheduled.push(ms); continue; }
-
-        html += '<div class="wpj-gantt-mrow wpj-gantt-mrow--' + sCls + (isOnsite ? " wpj-gantt-mrow--onsite" : "") + '">' +
-          '<div class="wpj-glcol wpj-glcol--ms">' +
-            '<div class="wpj-gi-name">' + esc(ms.name) + (ms.criticalPath ? '<span class="wpj-crit-pin"> ★</span>' : '') + issueTag + '</div>' +
-            '<div class="wpj-gi-sub">' + esc(formatDateTime(dateVal) || "") + ' ' + buildStatusChip(status) + '</div>' +
-          '</div>' +
-          '<div class="wpj-grcol">' + cells(idx, sCls) + '</div>' +
-        '</div>';
+      if (e < scheduledEvents.length - 1) {
+        var nextMs = parseDate(scheduledEvents[e + 1].dateTime).getTime();
+        var gapRatio = (nextMs - parseDate(ev.dateTime).getTime()) / totalSpan;
+        var flexGrow = Math.max(0.3, gapRatio * 20);
+        html += '<div class="wpj-tl-gap" style="flex-grow:' + flexGrow.toFixed(2) + '"></div>';
       }
     }
 
-    html += '</div></div></div>';
+    html += '</div></div>';
 
     if (unscheduled.length) {
       html += '<details class="wpj-gantt-unsched"><summary>Not yet scheduled — ' + unscheduled.length + ' milestone' + (unscheduled.length > 1 ? "s" : "") + '</summary><div class="wpj-gantt-unsched-body">';
       for (var ui = 0; ui < unscheduled.length; ui++) {
-        html += '<div class="wpj-gantt-unsched-row"><span class="wpj-gi-name">' + esc(unscheduled[ui].name) + '</span>' +
+        html += '<div class="wpj-gantt-unsched-row"><span class="wpj-tl-ename">' + esc(unscheduled[ui].name) + '</span>' +
           buildStatusChip(normaliseStatus(unscheduled[ui].status)) + '</div>';
       }
       html += '</div></details>';
@@ -2302,23 +2201,6 @@
 
     html += '</div>';
     return html;
-  }
-
-  function buildSiteDivider(label, dateTime, isEnd) {
-    return '<span class="wpj-sdiv-label' + (isEnd ? " wpj-sdiv-label--end" : "") + '">' + esc(label) + '</span>';
-  }
-
-  function buildMilestonePin(milestone, rowIssues) {
-    return buildMilestoneCard(milestone, rowIssues);
-  }
-
-  function buildMilestoneCard(milestone, rowIssues) {
-    rowIssues = rowIssues || [];
-    var status = normaliseStatus(milestone.status);
-    var dateDisplay = milestone.actualDateTime ? formatDateTime(milestone.actualDateTime) :
-                      milestone.plannedDateTime ? formatDateTime(milestone.plannedDateTime) : null;
-    return '<div class="wpj-gi-name">' + esc(milestone.name) + '</div>' +
-      '<div class="wpj-gi-sub">' + esc(dateDisplay || "Not scheduled") + ' ' + buildStatusChip(status) + '</div>';
   }
 
   function buildDepartmentReadiness(rows) {
@@ -2679,8 +2561,8 @@
         },
         {
           id: "build-start",
-          group: "Build",
-          name: "Build start",
+          group: "Install",
+          name: "Install start",
           plannedDateTime: "2026-07-14T08:30:00",
           actualDateTime: "",
           owner: "Production",
@@ -3286,16 +3168,6 @@
       ".wpj-readiness-fill.wpj-score-mid{background:#f59e0b;}",
       ".wpj-readiness-fill.wpj-score-bad{background:#ef4444;}",
       ".wpj-readiness-label{font-size:10px;color:#94a3b8;}",
-      /* ---- Event window ---- */
-      ".wpj-win{display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch;background:#fff;border:1px solid #e2e8ef;border-radius:8px;margin-bottom:8px;overflow:hidden;}",
-      ".wpj-win-card{padding:14px 18px;}",
-      ".wpj-win-card--unset{background:#fef2f2;}",
-      ".wpj-win-arrow{display:flex;align-items:center;justify-content:center;padding:0 18px;color:#cbd5e1;font-size:20px;border-left:1px solid #f1f5f9;border-right:1px solid #f1f5f9;}",
-      ".wpj-win-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:700;color:#94a3b8;margin-bottom:7px;}",
-      ".wpj-win-value{font-size:16px;font-weight:700;color:#0f172a;line-height:1.25;margin-bottom:5px;}",
-      ".wpj-win-card--unset .wpj-win-value{color:#dc2626;font-size:14px;font-weight:600;}",
-      ".wpj-win-sub{font-size:11px;color:#94a3b8;}",
-      ".wpj-win-sub--warn{color:#dc2626;}",
       /* ---- Issues bar ---- */
       ".wpj-alerts{margin-bottom:8px;border-radius:8px;overflow:hidden;border:1px solid #fca5a5;}",
       ".wpj-alerts--risk{border-color:#fcd34d;}",
@@ -3322,94 +3194,34 @@
       ".wpj-segmented button+button{border-left:1px solid #e2e8ef;}",
       ".wpj-segmented button.is-active{background:#0f172a;color:#fff;}",
       ".wpj-refresh-btn{border:1px solid #e2e8ef;border-radius:6px;background:#fff;color:#64748b;font:inherit;font-size:11px;font-weight:700;padding:5px 11px;cursor:pointer;}",
-      /* ---- Phase groups ---- */
-      ".wpj-phase{border-top:1px solid #f1f5f9;}",
-      ".wpj-phase:first-of-type{border-top:0;}",
-      ".wpj-phase--onsite{background:#fffbf4;}",
-      ".wpj-phase-hdr{display:flex;align-items:center;gap:8px;padding:7px 14px;background:#f8fafc;border-bottom:1px solid #f1f5f9;}",
-      ".wpj-phase--onsite .wpj-phase-hdr{background:#fff7ed;border-bottom-color:#fed7aa;}",
-      ".wpj-phase-dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto;}",
-      ".wpj-phase-name{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;flex:1 1 0;}",
-      ".wpj-phase-count{font-size:10px;color:#94a3b8;background:#f1f5f9;padding:1px 7px;border-radius:9px;font-weight:600;}",
-      ".wpj-phase--onsite .wpj-phase-count{background:#fed7aa;color:#9a3412;}",
-      /* ---- Site dividers ---- */
-      /* ---- Gantt chart ---- */
-      ":root{--wpj-col-w:40px;--wpj-lcol-w:220px;}",
-      ".wpj-gantt-outer{overflow-x:auto;background:#fff;border:1px solid #e2e8ef;border-radius:8px;}",
-      ".wpj-gantt-inner{display:inline-block;min-width:100%;}",
-      ".wpj-gantt-hrow,.wpj-gantt-prow,.wpj-gantt-mrow,.wpj-gantt-srow{display:flex;align-items:stretch;}",
-      /* Left sticky col */
-      ".wpj-glcol{position:sticky;left:0;z-index:3;width:var(--wpj-lcol-w);min-width:var(--wpj-lcol-w);flex-shrink:0;background:#fff;border-right:1px solid #e2e8ef;}",
-      ".wpj-glcol--hdr{background:#f8fafc;border-bottom:1px solid #e2e8ef;}",
-      ".wpj-grcol{display:flex;flex:1;}",
-      ".wpj-grcol--hdr{display:flex;flex-direction:column;}",
-      /* Month row */
-      ".wpj-gantt-months{display:flex;border-bottom:1px solid #e2e8ef;}",
-      ".wpj-gantt-month{display:flex;align-items:center;padding:0 8px;height:22px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;background:#f8fafc;border-right:1px solid #e2e8ef;white-space:nowrap;overflow:hidden;}",
-      /* Day header cells */
-      ".wpj-gantt-dayhdr{display:flex;}",
-      ".wpj-gdc{width:var(--wpj-col-w);min-width:var(--wpj-col-w);flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3px 0;border-right:1px solid #f1f5f9;background:#f8fafc;}",
-      ".wpj-gdc--wknd{background:#f0f4f8;}",
-      ".wpj-gdc--today{background:#dbeafe;}",
-      ".wpj-gdc--site{background:#fff7ed;}",
-      ".wpj-gdc--ses{background:#fed7aa;border-left:2px solid #f97316;}",
-      ".wpj-gdc--see{background:#bae6fd;border-right:2px solid #38bdf8;}",
-      ".wpj-gd-num{font-size:11px;font-weight:700;color:#374151;line-height:1;}",
-      ".wpj-gdc--today .wpj-gd-num{color:#1d4ed8;}",
-      ".wpj-gd-name{font-size:9px;color:#94a3b8;text-transform:uppercase;}",
-      /* Grid cells */
-      ".wpj-gc{width:var(--wpj-col-w);min-width:var(--wpj-col-w);flex-shrink:0;display:flex;align-items:center;justify-content:center;border-right:1px solid #f8fafc;border-bottom:1px solid #f8fafc;}",
-      ".wpj-gc--wknd{background:rgba(0,0,0,.015);}",
-      ".wpj-gc--today{background:rgba(29,78,216,.05);}",
-      ".wpj-gc--site{background:rgba(249,115,22,.05);}",
-      ".wpj-gc--ses{border-left:2px solid #f97316;}",
-      ".wpj-gc--see{border-right:2px solid #38bdf8;}",
-      /* Markers */
-      ".wpj-gm{font-size:15px;line-height:1;}",
-      ".wpj-gm--complete{color:#22c55e;}",
-      ".wpj-gm--in-progress{color:#3b82f6;}",
-      ".wpj-gm--at-risk{color:#f59e0b;}",
-      ".wpj-gm--blocked,.wpj-gm--missing{color:#ef4444;}",
-      ".wpj-gm--not-started{color:#cbd5e1;}",
-      /* Phase header rows */
-      ".wpj-gantt-prow{background:#f8fafc;border-bottom:1px solid #f1f5f9;min-height:28px;}",
-      ".wpj-gantt-prow--onsite{background:#fff7ed;}",
-      ".wpj-glcol--ph{display:flex;align-items:center;gap:6px;padding:5px 10px;background:#f8fafc;}",
-      ".wpj-gantt-prow--onsite .wpj-glcol--ph{background:#fff7ed;}",
-      ".wpj-ph-dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}",
-      ".wpj-ph-name{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;}",
-      /* Milestone rows */
-      ".wpj-gantt-mrow{border-bottom:1px solid #f8fafc;min-height:46px;}",
-      ".wpj-gantt-mrow--onsite{background:#fffbf4;}",
-      ".wpj-gantt-mrow--onsite .wpj-glcol--ms{background:#fffbf4;}",
-      ".wpj-glcol--ms{display:flex;flex-direction:column;justify-content:center;padding:8px 10px 8px 12px;border-left:3px solid transparent;}",
-      ".wpj-gantt-mrow--complete .wpj-glcol--ms{border-left-color:#22c55e;}",
-      ".wpj-gantt-mrow--in-progress .wpj-glcol--ms{border-left-color:#3b82f6;}",
-      ".wpj-gantt-mrow--at-risk .wpj-glcol--ms{border-left-color:#f59e0b;}",
-      ".wpj-gantt-mrow--blocked .wpj-glcol--ms,.wpj-gantt-mrow--missing .wpj-glcol--ms{border-left-color:#ef4444;}",
-      ".wpj-gi-name{font-size:12px;font-weight:600;color:#1e293b;line-height:1.3;}",
-      ".wpj-gi-sub{font-size:10px;color:#94a3b8;margin-top:2px;display:flex;gap:5px;align-items:center;flex-wrap:wrap;}",
-      ".wpj-gi-hint{font-size:9px;font-weight:700;background:#fee2e2;color:#dc2626;padding:1px 5px;border-radius:3px;}",
-      ".wpj-crit-pin{color:#f59e0b;font-size:10px;}",
-      /* Site divider rows */
-      ".wpj-gantt-srow{background:#fff7ed;border-top:2px solid #f97316;border-bottom:2px solid #f97316;min-height:34px;}",
-      ".wpj-gantt-srow--end{background:#f0f9ff;border-top-color:#38bdf8;border-bottom-color:#38bdf8;}",
-      ".wpj-glcol--sdiv{display:flex;flex-direction:column;justify-content:center;padding:5px 10px 5px 12px;background:#fff7ed;}",
-      ".wpj-gantt-srow--end .wpj-glcol--sdiv{background:#f0f9ff;}",
-      ".wpj-sdiv-label{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:1px;color:#ea580c;}",
-      ".wpj-sdiv-label--end{color:#0284c7;}",
-      ".wpj-sdiv-date{font-size:11px;font-weight:700;color:#1e293b;}",
-      ".wpj-sdiv-arr{font-size:12px;color:#f97316;line-height:1;}",
-      ".wpj-gc--ses .wpj-sdiv-arr{color:#f97316;}",
-      ".wpj-gc--see .wpj-sdiv-arr{color:#0284c7;}",
-      ".wpj-gc--sdrow{border-bottom:0;}",
-      /* Unscheduled section */
+      /* ---- Event timeline ---- */
+      ".wpj-tl-scroll{overflow-x:auto;padding:8px 16px 16px;}",
+      ".wpj-tl-inner{display:flex;align-items:stretch;min-height:160px;position:relative;}",
+      ".wpj-tl-rail{position:absolute;top:50%;left:0;right:0;height:2px;background:#e2e8ef;transform:translateY(-50%);z-index:0;}",
+      ".wpj-tl-point{display:flex;flex-direction:column;align-items:center;flex-shrink:0;min-width:90px;position:relative;z-index:1;}",
+      ".wpj-tl-above{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:8px;text-align:center;}",
+      ".wpj-tl-below{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:8px;text-align:center;}",
+      ".wpj-tl-dot{width:12px;height:12px;border-radius:50%;border:2px solid #fff;flex-shrink:0;position:relative;z-index:2;}",
+      ".wpj-tl-gap{flex-shrink:0;min-width:12px;}",
+      ".wpj-tl-ename{font-size:11px;font-weight:700;color:#1e293b;line-height:1.3;max-width:130px;}",
+      ".wpj-tl-edate{font-size:10px;color:#94a3b8;margin-top:2px;white-space:nowrap;}",
+      ".wpj-tl-issue{font-size:9px;font-weight:700;background:#fee2e2;color:#dc2626;padding:1px 4px;border-radius:3px;margin-left:3px;vertical-align:middle;}",
+      ".wpj-tl-dot--complete{background:#22c55e;}",
+      ".wpj-tl-dot--in-progress{background:#3b82f6;}",
+      ".wpj-tl-dot--at-risk{background:#f59e0b;}",
+      ".wpj-tl-dot--blocked,.wpj-tl-dot--missing{background:#ef4444;}",
+      ".wpj-tl-dot--not-started{background:#cbd5e1;}",
+      ".wpj-tl-dot--ws{background:#f97316;width:14px;height:14px;}",
+      ".wpj-tl-dot--we{background:#38bdf8;width:14px;height:14px;}",
+      ".wpj-tl-point--ws .wpj-tl-ename{color:#c2410c;font-weight:800;}",
+      ".wpj-tl-point--we .wpj-tl-ename{color:#0284c7;font-weight:800;}",
+      ".wpj-tl-point--critical .wpj-tl-dot{box-shadow:0 0 0 3px rgba(0,0,0,.1);}",
+      /* ---- Unscheduled list ---- */
       ".wpj-gantt-unsched{border-top:1px solid #e2e8ef;margin-top:1px;}",
       ".wpj-gantt-unsched>summary{padding:7px 14px;background:#f8fafc;cursor:pointer;list-style:none;font-size:11px;font-weight:700;color:#64748b;display:block;}",
       ".wpj-gantt-unsched>summary::-webkit-details-marker{display:none;}",
       ".wpj-gantt-unsched-body{padding:2px 0;}",
       ".wpj-gantt-unsched-row{display:flex;align-items:center;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #f8fafc;}",
-      ".wpj-crit{color:#f59e0b;font-size:11px;}",
       /* ---- Status chips ---- */
       ".wpj-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;}",
       ".wpj-chip-complete{background:#dcfce7;color:#15803d;}",
@@ -3459,7 +3271,7 @@
       ".wpj-diag-pre{margin:0;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8ef;border-radius:4px;font-size:10px;line-height:1.5;color:#1e293b;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;}",
       ".wpj-diag-note{font-size:11px;color:#94a3b8;font-style:italic;}",
       /* ---- Responsive ---- */
-      "@media(max-width:860px){.wpj-hdr{flex-direction:column;align-items:flex-start;}.wpj-win{grid-template-columns:1fr;}.wpj-win-arrow{display:none;}.wpj-mrow{grid-template-columns:4px 1fr;}.wpj-mrow-right,.wpj-mrow-chip{display:none;}}",
+      "@media(max-width:860px){.wpj-hdr{flex-direction:column;align-items:flex-start;}.wpj-tl-point{min-width:70px;}.wpj-tl-edate{display:none;}}",
       "@media(max-width:480px){.wpj-shell{padding:5px;}.wpj-segmented button{padding:4px 7px;}}"
     ].join("\n");
 
