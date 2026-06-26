@@ -183,7 +183,7 @@
   };
 
   var CFG = {
-    version: "2026-06-26.4",
+    version: "2026-06-26.5",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -1040,11 +1040,12 @@
   }
 
   function getJobRowColor(jobRow, jobId) {
-    // 1. Try AJAX data — HireHop stores job colour as "COLOUR" (British spelling)
+    // 1. Try AJAX data — HireHop stores job colour as "COLOUR" (British spelling),
+    //    returned as a bare hex string without "#", e.g. "7F73FF"
     var fields = ["COLOUR", "COLOR", "colour", "color", "JOB_COLOUR", "JOB_COLOR"];
     for (var fi = 0; fi < fields.length; fi++) {
-      var val = asText(jobRow[fields[fi]]).trim();
-      if (val && /^#[0-9a-f]{3,6}$/i.test(val)) return val;
+      var val = asText(jobRow[fields[fi]]).trim().replace(/^#/, "");
+      if (/^[0-9a-f]{6}$/i.test(val) || /^[0-9a-f]{3}$/i.test(val)) return "#" + val;
     }
     // 2. Try DOM row background-color (jqGrid rows use job ID as <tr id>)
     if (jobId) {
