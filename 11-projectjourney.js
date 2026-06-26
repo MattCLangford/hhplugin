@@ -183,7 +183,7 @@
   };
 
   var CFG = {
-    version: "2026-06-26.3",
+    version: "2026-06-26.4",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -1037,6 +1037,31 @@
       if (Object.prototype.hasOwnProperty.call(r, k) && k.charAt(0) === "~") return true;
     }
     return false;
+  }
+
+  function getJobRowColor(jobRow, jobId) {
+    // 1. Try AJAX data — HireHop stores job colour as "COLOUR" (British spelling)
+    var fields = ["COLOUR", "COLOR", "colour", "color", "JOB_COLOUR", "JOB_COLOR"];
+    for (var fi = 0; fi < fields.length; fi++) {
+      var val = asText(jobRow[fields[fi]]).trim();
+      if (val && /^#[0-9a-f]{3,6}$/i.test(val)) return val;
+    }
+    // 2. Try DOM row background-color (jqGrid rows use job ID as <tr id>)
+    if (jobId) {
+      var $tr = $("#jobs_grid tr#" + jobId + ",#project_jobs_grid tr#" + jobId).first();
+      if (!$tr.length) $tr = $("tr#" + jobId).first();
+      if ($tr.length) {
+        var bg = $tr.css("background-color") || "";
+        var m = bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (m && !(m[1] === "255" && m[2] === "255" && m[3] === "255") && bg.indexOf("0, 0, 0, 0") === -1) {
+          return "#" +
+            ("0" + parseInt(m[1], 10).toString(16)).slice(-2) +
+            ("0" + parseInt(m[2], 10).toString(16)).slice(-2) +
+            ("0" + parseInt(m[3], 10).toString(16)).slice(-2);
+        }
+      }
+    }
+    return null;
   }
 
   function extractJobId(row) {
@@ -2203,7 +2228,7 @@
       if (isActiveJob(rawJobRows[ri])) activeJobRows.push(rawJobRows[ri]);
     }
 
-    var JOB_COLORS = ["#0369a1", "#7c3aed", "#0891b2", "#b45309", "#4a6fa5", "#15803d"];
+    var JOB_COLORS_FALLBACK = ["#0369a1", "#7c3aed", "#0891b2", "#b45309", "#4a6fa5", "#15803d"];
     var jobEventMaps = [
       { name: "Pre-Prod Sign Off",         map: FIELD_MAP.jobOperational.preProd,       fieldKey: "_PreProd",        critical: true  },
       { name: "Supplier Engaged",         map: FIELD_MAP.jobOperational.supplier,      fieldKey: "_Supplier",       critical: true  },
@@ -2231,7 +2256,8 @@
           jEvents.push({ name: jdef.name, dateTime: jdt, fieldKey: jdef.fieldKey, pointType: "job", critical: jdef.critical });
         }
       }
-      jobGroups.push({ jobId: jobId, events: jEvents, color: JOB_COLORS[ji % JOB_COLORS.length] });
+      var jobColor = getJobRowColor(jobRow, jobId) || JOB_COLORS_FALLBACK[ji % JOB_COLORS_FALLBACK.length];
+      jobGroups.push({ jobId: jobId, events: jEvents, color: jobColor });
     }
 
     // ---- Three-zone layout: pre / onsite (scaled) / post ----
