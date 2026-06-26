@@ -1521,21 +1521,6 @@
         notes: jobDates.onsiteEnd ? "Latest clear-of-site time across all jobs on this project." : "Using the project end date until individual job clear times are available."
       },
       {
-        id: "kit-booking-end",
-        group: "Site Clear",
-        name: "Kit Booking End",
-        plannedDateTime: jobDates.kitBookingEnd,
-        actualDateTime: "",
-        owner: "Suppliers",
-        status: milestoneStatus(jobDates.kitBookingEnd),
-        riskLevel: jobDates.kitBookingEnd ? "None" : "Missing",
-        criticalPath: true,
-        optional: !hasJobSource,
-        timingType: "offsite",
-        dependencies: ["site-clear"],
-        notes: "Last day of chargeable kit time. The latest equipment-return date across all jobs on this project."
-      },
-      {
         id: "vehicle-tip",
         group: "Site Clear",
         name: "Vehicle Tip",
@@ -1547,8 +1532,23 @@
         criticalPath: false,
         optional: true,
         timingType: "offsite",
-        dependencies: ["kit-booking-end"],
+        dependencies: ["site-clear"],
         notes: "Vehicles arrive back at the supplier depot for tip / off-load."
+      },
+      {
+        id: "kit-booking-end",
+        group: "Site Clear",
+        name: "Kit Booking End",
+        plannedDateTime: jobDates.kitBookingEnd,
+        actualDateTime: "",
+        owner: "Suppliers",
+        status: milestoneStatus(jobDates.kitBookingEnd),
+        riskLevel: jobDates.kitBookingEnd ? "None" : "Missing",
+        criticalPath: true,
+        optional: !hasJobSource,
+        timingType: "offsite",
+        dependencies: ["vehicle-tip"],
+        notes: "Last day of chargeable kit time. The latest equipment-return date across all jobs on this project."
       }
     ];
   }
@@ -2334,7 +2334,7 @@
       var milestones = row.milestones || [];
 
       var pctLabel = row.total === 0 ? "—" : (row.score > 0 || row.complete > 0 ? score + "%" : "Pending");
-      html += '<details class="wpj-dcol">' +
+      html += '<details class="wpj-dcol" open>' +
         '<summary class="wpj-dcol-hdr">' +
           '<div class="wpj-dcol-name">' + esc(row.department) + '</div>' +
           '<div class="wpj-dcol-pct ' + (row.total > 0 ? scoreClass : "wpj-score-none") + '">' + esc(pctLabel) + '</div>' +
