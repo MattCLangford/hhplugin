@@ -183,7 +183,7 @@
   };
 
   var CFG = {
-    version: "2026-06-26.1",
+    version: "2026-06-26.2",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -1322,8 +1322,9 @@
         owner: "Production",
         status: milestoneStatus(jobDates.preProd),
         riskLevel: jobDates.preProd ? "None" : "Missing",
-        criticalPath: false,
-        optional: true,
+        criticalPath: true,
+        essential: true,
+        optional: !hasJobSource,
         timingType: "offsite-prep",
         dependencies: [],
         targetDaysBeforeStart: FIELD_MAP.jobOperational.preProd.targetDaysBeforeStart,
@@ -1338,8 +1339,9 @@
         owner: "Technical",
         status: milestoneStatus(jobDates.supplier),
         riskLevel: jobDates.supplier ? "None" : "Missing",
-        criticalPath: false,
-        optional: true,
+        criticalPath: true,
+        essential: true,
+        optional: !hasJobSource,
         timingType: "offsite-prep",
         dependencies: ["pre-production"],
         targetDaysBeforeStart: FIELD_MAP.jobOperational.supplier.targetDaysBeforeStart,
@@ -1399,11 +1401,13 @@
         owner: "Technical",
         status: milestoneStatus(jobDates.vehicleInstall),
         riskLevel: jobDates.vehicleInstall ? "None" : "Missing",
-        criticalPath: false,
-        optional: true,
+        criticalPath: true,
+        essential: true,
+        optional: !hasJobSource,
         timingType: "onsite",
         dependencies: ["vehicle-load"],
-        notes: "Vehicle assigned to this job arrives on site ahead of the build."
+        targetDaysBeforeStart: 7,
+        notes: "Vehicle assigned to this job arrives on site ahead of the build. Should be confirmed at least 1 week before site."
       },
       {
         id: "job-onsite-start",
@@ -1429,8 +1433,9 @@
         owner: "Production",
         status: milestoneStatus(projectOperationalDates.installStart),
         riskLevel: projectOperationalDates.installStart ? "None" : "Missing",
-        criticalPath: false,
-        optional: true,
+        criticalPath: true,
+        essential: true,
+        optional: false,
         timingType: "onsite",
         dependencies: ["job-onsite-start"],
         notes: "Earliest install activity on the project. All crew and vehicles should be on site at or before this time."
@@ -1444,8 +1449,9 @@
         owner: "Project Management",
         status: milestoneStatus(projectOperationalDates.showStart),
         riskLevel: projectOperationalDates.showStart ? "None" : "Missing",
-        criticalPath: false,
-        optional: true,
+        criticalPath: true,
+        essential: true,
+        optional: false,
         timingType: "onsite",
         dependencies: ["install-start"],
         notes: "The event begins — guests enter. All build activities should be complete before this point."
@@ -1459,8 +1465,9 @@
         owner: "Project Management",
         status: milestoneStatus(projectOperationalDates.showEnd),
         riskLevel: projectOperationalDates.showEnd ? "None" : "Missing",
-        criticalPath: false,
-        optional: true,
+        criticalPath: true,
+        essential: true,
+        optional: false,
         timingType: "onsite",
         dependencies: ["show-start"],
         notes: "The event fully ends and guests leave for the final time. Derig can begin after this point."
@@ -1474,8 +1481,9 @@
         owner: "Production",
         status: milestoneStatus(projectOperationalDates.derigStart),
         riskLevel: projectOperationalDates.derigStart ? "None" : "Missing",
-        criticalPath: false,
-        optional: true,
+        criticalPath: true,
+        essential: true,
+        optional: false,
         timingType: "onsite",
         dependencies: ["show-end"],
         notes: "Earliest derig activity on the project. Should be after the show ends."
@@ -1489,16 +1497,18 @@
         owner: "Technical",
         status: milestoneStatus(jobDates.vehicleDerig),
         riskLevel: jobDates.vehicleDerig ? "None" : "Missing",
-        criticalPath: false,
-        optional: true,
+        criticalPath: true,
+        essential: true,
+        optional: !hasJobSource,
         timingType: "onsite",
         dependencies: ["derig-start"],
-        notes: "Vehicle assigned to this job arrives on site for collection."
+        targetDaysBeforeStart: 7,
+        notes: "Vehicle assigned to this job arrives on site for collection. Should be confirmed at least 1 week before site."
       },
       {
         id: "site-clear",
         group: "Site Clear",
-        name: "Site Clear",
+        name: "Onsite End",
         plannedDateTime: jobDates.onsiteEnd || projectEnd,
         actualDateTime: "",
         owner: "Project Management",
@@ -1666,6 +1676,7 @@
         status: status,
         riskLevel: normaliseRisk(item.riskLevel || item.risk || status),
         criticalPath: item.criticalPath === true || item.critical === true,
+        essential: item.essential === true,
         optional: item.optional === true || item.required === false,
         dependencies: normaliseDependencies(item.dependencies),
         notes: asText(item.notes || item.note || ""),
@@ -1746,7 +1757,27 @@
       var planned = parseDate(milestone.plannedDateTime);
 
       if (!milestone.plannedDateTime && !milestone.optional) {
-        issues.push(createIssue(milestone.criticalPath ? "Blocked" : "Missing Data", milestone.name + " has no date set", "Add a date for this milestone so it can be validated against the event window.", milestone.id, milestone.criticalPath));
+        if (milestone.targetDaysBeforeStart && wrapperStart) {
+          var daysUntil = Math.ceil((wrapperStart.getTime() - Date.now()) / (24 * 60 * 60 * 1000));
+          if (daysUntil < milestone.targetDaysBeforeStart) {
+            var timing = daysUntil < 0
+              ? Math.abs(daysUntil) + " day" + (Math.abs(daysUntil) !== 1 ? "s" : "") + " after the event"
+              : daysUntil + " day" + (daysUntil !== 1 ? "s" : "") + " until the event";
+            issues.push(createIssue("Blocked", milestone.name + " — confirmation overdue",
+              "Should have been confirmed " + milestone.targetDaysBeforeStart + " days before site. " + timing + ".",
+              milestone.id, milestone.criticalPath));
+          } else {
+            issues.push(createIssue("Missing Data", milestone.name + " has no date set",
+              "Target: at least " + milestone.targetDaysBeforeStart + " days before the event — " +
+              daysUntil + " day" + (daysUntil !== 1 ? "s" : "") + " remaining.",
+              milestone.id, milestone.criticalPath));
+          }
+        } else {
+          issues.push(createIssue(milestone.criticalPath ? "Blocked" : "Missing Data",
+            milestone.name + " has no date set",
+            "Add a date for this milestone so it can be validated against the event window.",
+            milestone.id, milestone.criticalPath));
+        }
       }
 
       if (!milestone.owner) {
@@ -1761,13 +1792,9 @@
         issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " falls after the event window closes", "This on-site activity is planned beyond the project end date in HireHop.", milestone.id, milestone.criticalPath));
       }
 
-      if (isSupplierMilestone(milestone) && !milestone.plannedDateTime && !milestone.optional) {
-        issues.push(createIssue("At Risk", "Supplier timing not confirmed", milestone.name + " needs a confirmed date before the journey is ready.", milestone.id, milestone.criticalPath));
-      }
-
       if (planned && wrapperStart && milestone.targetDaysBeforeStart) {
-        var target = new Date(wrapperStart.getTime() - (milestone.targetDaysBeforeStart * 24 * 60 * 60 * 1000));
-        if (planned.getTime() > target.getTime()) {
+        var deadlineDate = new Date(wrapperStart.getTime() - (milestone.targetDaysBeforeStart * 24 * 60 * 60 * 1000));
+        if (planned.getTime() > deadlineDate.getTime()) {
           issues.push(createIssue("At Risk", milestone.name + " is too close to the event", "Target is at least " + milestone.targetDaysBeforeStart + " days before the on-site date.", milestone.id, milestone.criticalPath));
         }
       }
@@ -1860,12 +1887,13 @@
 
   function calculateReadiness(data, issues) {
     var milestones = getScoredMilestones(data.milestones || []);
+    var allMilestones = data.milestones || [];
     var weighted = 0;
     var possible = 0;
 
     for (var i = 0; i < milestones.length; i++) {
       var milestone = milestones[i];
-      var weight = milestone.criticalPath ? 1.6 : 1;
+      var weight = milestone.essential ? 3.0 : milestone.criticalPath ? 1.6 : 1.0;
       possible += weight;
       weighted += weight * getStatusScore(milestone.status);
     }
@@ -1878,8 +1906,8 @@
       score: score,
       baseScore: baseScore,
       penalty: penalty,
-      complete: countMilestonesByStatus(milestones, "Complete"),
-      total: milestones.length
+      complete: countMilestonesByStatus(allMilestones, "Complete"),
+      total: allMilestones.length
     };
   }
 
@@ -2162,7 +2190,7 @@
       { name: "Onsite Start",              map: FIELD_MAP.jobSystem.onsiteStart,        fieldKey: "JOB_DATE",        critical: true  },
       { name: "Vehicle Onsite - Install", map: FIELD_MAP.jobOperational.vehicleInstall,fieldKey: "_VehicleInstall", critical: false },
       { name: "Vehicle Onsite - Derig",   map: FIELD_MAP.jobOperational.vehicleDerig,  fieldKey: "_VehicleDerig",   critical: false },
-      { name: "Site Clear",               map: FIELD_MAP.jobSystem.onsiteEnd,          fieldKey: "JOB_END",         critical: true  },
+      { name: "Job clear of site",          map: FIELD_MAP.jobSystem.onsiteEnd,          fieldKey: "JOB_END",         critical: true  },
       { name: "Kit Booking End",          map: FIELD_MAP.jobSystem.kitBookingEnd,      fieldKey: "RETURN_DATE",     critical: true  },
       { name: "Vehicle Tip",              map: FIELD_MAP.jobOperational.vehicleTip,    fieldKey: "_Tip",            critical: false }
     ];
@@ -2817,7 +2845,7 @@
     var weighted = 0;
     var possible = 0;
     for (var i = 0; i < milestones.length; i++) {
-      var weight = milestones[i].criticalPath ? 1.6 : 1;
+      var weight = milestones[i].essential ? 3.0 : milestones[i].criticalPath ? 1.6 : 1.0;
       possible += weight;
       weighted += weight * getStatusScore(milestones[i].status);
     }
