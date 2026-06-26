@@ -671,6 +671,22 @@
       event.preventDefault();
       renderJourneyPanel();
     });
+
+    var zoomLevels = [1, 1.5, 2, 3, 4];
+    $panel.find("[data-wpj-zoom]").off(".wiseProjectJourney").on("click.wiseProjectJourney", function (event) {
+      event.preventDefault();
+      var $grid = $panel.find(".wpj-tl-grid");
+      var dir = $(this).attr("data-wpj-zoom");
+      var current = parseFloat($grid.attr("data-zoom") || "1") || 1;
+      var idx = zoomLevels.indexOf(current);
+      if (idx === -1) idx = 0;
+      if (dir === "in") idx = Math.min(idx + 1, zoomLevels.length - 1);
+      else idx = Math.max(idx - 1, 0);
+      var next = zoomLevels[idx];
+      $grid.attr("data-zoom", next).css("minWidth", Math.round(next * 900) + "px");
+      $panel.find("[data-wpj-zoom='in']").prop("disabled", idx === zoomLevels.length - 1);
+      $panel.find("[data-wpj-zoom='out']").prop("disabled", idx === 0);
+    });
   }
 
   function getJourneyData() {
@@ -2155,6 +2171,11 @@
         '<button type="button" class="' + (!criticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="all">All milestones</button>' +
         '<button type="button" class="' + (criticalOnly ? "is-active" : "") + '" data-wise-project-journey-toggle="critical">Critical path only</button>' +
       '</div>' +
+      '<div class="wpj-zoom-btns">' +
+        '<span class="wpj-zoom-label">Zoom</span>' +
+        '<button type="button" class="wpj-zoom-btn" data-wpj-zoom="out" title="Zoom out">−</button>' +
+        '<button type="button" class="wpj-zoom-btn" data-wpj-zoom="in" title="Zoom in">+</button>' +
+      '</div>' +
       '<button type="button" class="wpj-refresh-btn" data-wise-project-journey-refresh>⟳ Refresh</button>' +
     '</div>';
 
@@ -3319,7 +3340,12 @@
       ".wpj-refresh-btn{border:1px solid #e2e8ef;border-radius:6px;background:#fff;color:#64748b;font:inherit;font-size:11px;font-weight:700;padding:5px 11px;cursor:pointer;}",
       /* ---- Event timeline ---- */
       ".wpj-tl-scroll{overflow-x:auto;padding:0 0 8px;}",
-      ".wpj-tl-grid{min-width:600px;}",
+      ".wpj-tl-grid{min-width:900px;}",
+      ".wpj-zoom-btns{display:flex;align-items:center;gap:4px;}",
+      ".wpj-zoom-label{font-size:10px;font-weight:600;color:#64748b;margin-right:2px;}",
+      ".wpj-zoom-btn{border:1px solid #e2e8ef;border-radius:5px;background:#fff;color:#374151;font-size:14px;font-weight:700;width:26px;height:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}",
+      ".wpj-zoom-btn:hover{background:#f1f5f9;}",
+      ".wpj-zoom-btn:disabled{opacity:0.35;cursor:default;}",
       ".wpj-tl-row{display:flex;align-items:stretch;border-bottom:1px solid #f1f5f9;min-height:110px;}",
       ".wpj-tl-row--project{background:#fafbff;border-bottom:2px solid #e2e8ef;min-height:120px;}",
       ".wpj-tl-row-hdr{width:72px;min-width:72px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;padding:0 10px 0 8px;border-right:1px solid #e2e8ef;font-size:10px;font-weight:800;color:#64748b;text-align:right;word-break:break-all;line-height:1.3;}",
