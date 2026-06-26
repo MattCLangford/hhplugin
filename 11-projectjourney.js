@@ -1792,7 +1792,7 @@
         issues.push(createIssue(milestone.criticalPath ? "At Risk" : "Warning", milestone.name + " falls after the event window closes", "This on-site activity is planned beyond the project end date in HireHop.", milestone.id, milestone.criticalPath));
       }
 
-      if (planned && wrapperStart && milestone.targetDaysBeforeStart) {
+      if (planned && wrapperStart && milestone.targetDaysBeforeStart && !isOperationalOnsite(milestone)) {
         var deadlineDate = new Date(wrapperStart.getTime() - (milestone.targetDaysBeforeStart * 24 * 60 * 60 * 1000));
         if (planned.getTime() > deadlineDate.getTime()) {
           issues.push(createIssue("At Risk", milestone.name + " is too close to the event", "Target is at least " + milestone.targetDaysBeforeStart + " days before the on-site date.", milestone.id, milestone.criticalPath));
@@ -2322,9 +2322,8 @@
   }
 
   function buildDepartmentReadiness(rows) {
-    var html = '<details class="wpj-deptmatrix" open>' +
-      '<summary class="wpj-deptmatrix-bar">Department Readiness</summary>' +
-      '<div class="wpj-deptmatrix-cols">';
+    var hdrs = '';
+    var body = '';
 
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i];
@@ -2333,38 +2332,43 @@
       var milestones = row.milestones || [];
 
       var pctLabel = row.total === 0 ? "—" : (row.score > 0 || row.complete > 0 ? score + "%" : "Pending");
-      html += '<div class="wpj-dcol">' +
-        '<div class="wpj-dcol-hdr">' +
-          '<div class="wpj-dcol-name">' + esc(row.department) + '</div>' +
-          '<div class="wpj-dcol-pct ' + (row.total > 0 ? scoreClass : "wpj-score-none") + '">' + esc(pctLabel) + '</div>' +
-          '<div class="wpj-dcol-bar"><div class="wpj-dcol-fill ' + scoreClass + '" style="width:' + score + '%"></div></div>' +
-        '</div>';
 
+      hdrs += '<div class="wpj-dcol-hdr">' +
+        '<div class="wpj-dcol-name">' + esc(row.department) + '</div>' +
+        '<div class="wpj-dcol-pct ' + (row.total > 0 ? scoreClass : "wpj-score-none") + '">' + esc(pctLabel) + '</div>' +
+        '<div class="wpj-dcol-bar"><div class="wpj-dcol-fill ' + scoreClass + '" style="width:' + score + '%"></div></div>' +
+      '</div>';
+
+      body += '<div class="wpj-dcol">';
       if (milestones.length) {
-        html += '<ul class="wpj-dcol-body">';
+        body += '<ul class="wpj-dcol-body">';
         for (var m = 0; m < milestones.length; m++) {
           var ms = milestones[m];
           var status = normaliseStatus(ms.status);
           var statusCls = cssClass(status);
           var dateDisplay = ms.actualDateTime ? formatDateTime(ms.actualDateTime) :
                             ms.plannedDateTime ? formatDateTime(ms.plannedDateTime) : null;
-          html += '<li class="wpj-dcol-row wpj-dcol-row--' + statusCls + '">' +
+          body += '<li class="wpj-dcol-row wpj-dcol-row--' + statusCls + '">' +
             '<span class="wpj-dcol-mname">' + esc(ms.name) + '</span>' +
             '<span class="wpj-dcol-mdate' + (dateDisplay ? '' : ' wpj-dcol-mdate--unset') + '">' +
               esc(dateDisplay || 'Not scheduled') +
             '</span>' +
           '</li>';
         }
-        html += '</ul>';
+        body += '</ul>';
       } else {
-        html += '<div class="wpj-dcol-none">No milestones assigned</div>';
+        body += '<div class="wpj-dcol-none">No milestones assigned</div>';
       }
-
-      html += '</div>';
+      body += '</div>';
     }
 
-    html += '</div></details>';
-    return html;
+    return '<details class="wpj-deptmatrix">' +
+      '<summary class="wpj-deptmatrix-summary">' +
+        '<div class="wpj-deptmatrix-bar">Department Readiness</div>' +
+        '<div class="wpj-deptmatrix-cols">' + hdrs + '</div>' +
+      '</summary>' +
+      '<div class="wpj-deptmatrix-cols wpj-deptmatrix-body">' + body + '</div>' +
+    '</details>';
   }
 
   function buildDiagnosticPanel() {
@@ -3351,13 +3355,15 @@
       ".wpj-empty-state{padding:24px;text-align:center;color:#94a3b8;font-size:13px;}",
       /* ---- Department matrix ---- */
       ".wpj-deptmatrix{background:#fff;border:1px solid #e2e8ef;border-radius:8px;margin-bottom:8px;overflow:hidden;}",
-      ".wpj-deptmatrix>summary{list-style:none;cursor:pointer;user-select:none;}",
-      ".wpj-deptmatrix>summary::-webkit-details-marker{display:none;}",
+      ".wpj-deptmatrix-summary{list-style:none;cursor:pointer;user-select:none;display:block;}",
+      ".wpj-deptmatrix-summary::-webkit-details-marker{display:none;}",
       ".wpj-deptmatrix-bar{padding:7px 14px;background:#f8fafc;border-bottom:1px solid #e2e8ef;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.6px;color:#374151;}",
-      ".wpj-deptmatrix-cols{display:flex;overflow-x:auto;align-items:stretch;}",
+      ".wpj-deptmatrix-cols{display:flex;overflow-x:auto;}",
+      ".wpj-deptmatrix-body{border-top:1px solid #e2e8ef;}",
+      ".wpj-dcol-hdr{flex:1 0 130px;min-width:110px;border-right:1px solid #f1f5f9;padding:9px 11px;background:#f8fafc;}",
+      ".wpj-dcol-hdr:last-child{border-right:0;}",
       ".wpj-dcol{flex:1 0 130px;min-width:110px;border-right:1px solid #f1f5f9;}",
       ".wpj-dcol:last-child{border-right:0;}",
-      ".wpj-dcol-hdr{padding:9px 11px;border-bottom:1px solid #f1f5f9;background:#f8fafc;}",
       ".wpj-dcol-name{font-size:11px;font-weight:700;color:#374151;margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}",
       ".wpj-dcol-pct{font-size:18px;font-weight:800;line-height:1;margin-bottom:5px;}",
       ".wpj-dcol-bar{height:3px;border-radius:2px;background:#f1f5f9;overflow:hidden;}",
