@@ -183,7 +183,7 @@
   };
 
   var CFG = {
-    version: "2026-06-25.7",
+    version: "2026-06-26.1",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -1285,13 +1285,13 @@
     return [
       {
         label: "Start Date Time",
-        friendlyLabel: "Project/Onsite Start",
+        friendlyLabel: "Onsite Start",
         dateTime: systemDates.startDateTime || wiseEventStart,
         note: FIELD_MAP.projectSystem.startDateTime.logicalName + " via " + FIELD_MAP.projectSystem.startDateTime.upstream
       },
       {
         label: "Project End Date Time",
-        friendlyLabel: "Project/Onsite End",
+        friendlyLabel: "Onsite End",
         dateTime: systemDates.projectEndDateTime || wiseEventEnd,
         note: FIELD_MAP.projectSystem.projectEndDateTime.logicalName + " via " + FIELD_MAP.projectSystem.projectEndDateTime.upstream
       }
@@ -1411,7 +1411,7 @@
         name: "Onsite Start",
         plannedDateTime: jobDates.onsiteStart || projectStart,
         actualDateTime: "",
-        owner: "Technical",
+        owner: "Project Management",
         status: milestoneStatus(jobDates.onsiteStart || projectStart),
         riskLevel: (jobDates.onsiteStart || projectStart) ? "None" : "Missing",
         criticalPath: true,
@@ -1501,7 +1501,7 @@
         name: "Site Clear",
         plannedDateTime: jobDates.onsiteEnd || projectEnd,
         actualDateTime: "",
-        owner: "Technical",
+        owner: "Project Management",
         status: milestoneStatus(jobDates.onsiteEnd || projectEnd),
         riskLevel: (jobDates.onsiteEnd || projectEnd) ? "None" : "Missing",
         criticalPath: true,
@@ -2551,13 +2551,13 @@
       hireHopFixedDates: [
         {
           label: "Start Date Time",
-          friendlyLabel: "Project/Onsite Start",
+          friendlyLabel: "Onsite Start",
           dateTime: "2026-07-14T08:00:00",
           note: "Wise responsibility/activity starts on site."
         },
         {
           label: "Project End Date Time",
-          friendlyLabel: "Project/Onsite End",
+          friendlyLabel: "Onsite End",
           dateTime: "2026-07-15T02:00:00",
           note: "Wise responsibility/activity ends on site."
         }
