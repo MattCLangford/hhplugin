@@ -131,7 +131,7 @@
       preProd: {
         name: "Pre-prod Sign off/meeting",
         logicalName: "{{job._PreProd}}",
-        aggregate: "latest",
+        aggregate: "earliest",
         targetDaysBeforeStart: 21,
         objectKeys: ["_PreProd", "~_PreProd", "PREPROD", "preprod", "pre_prod", "preProd"],
         labels: ["pre-prod sign off/meeting", "pre-prod sign off", "pre production sign off"]
@@ -139,7 +139,7 @@
       supplier: {
         name: "Supplier engaged",
         logicalName: "{{job._Supplier}}",
-        aggregate: "latest",
+        aggregate: "earliest",
         targetDaysBeforeStart: 21,
         objectKeys: ["_Supplier", "~_Supplier", "SUPPLIER", "supplier", "supplier_engaged", "supplierEngaged"],
         labels: ["supplier engaged", "supplier visibility"]
@@ -2184,7 +2184,9 @@
 
     var JOB_COLORS = ["#0369a1", "#7c3aed", "#0891b2", "#b45309", "#4a6fa5", "#15803d"];
     var jobEventMaps = [
-      { name: "Kit Booking Start",       map: FIELD_MAP.jobSystem.kitBookingStart,    fieldKey: "OUT_DATE",        critical: true  },
+      { name: "Pre-Prod Sign Off",         map: FIELD_MAP.jobOperational.preProd,       fieldKey: "_PreProd",        critical: true  },
+      { name: "Supplier Engaged",         map: FIELD_MAP.jobOperational.supplier,      fieldKey: "_Supplier",       critical: true  },
+      { name: "Kit Booking Start",        map: FIELD_MAP.jobSystem.kitBookingStart,    fieldKey: "OUT_DATE",        critical: true  },
       { name: "Wise Prep Start",          map: FIELD_MAP.jobOperational.wisePrep,      fieldKey: "_WisePrep",       critical: false },
       { name: "Vehicle Load",             map: FIELD_MAP.jobOperational.load,          fieldKey: "_Load",           critical: false },
       { name: "Onsite Start",              map: FIELD_MAP.jobSystem.onsiteStart,        fieldKey: "JOB_DATE",        critical: true  },
