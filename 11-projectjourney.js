@@ -183,7 +183,7 @@
   };
 
   var CFG = {
-    version: "2026-06-26.5",
+    version: "2026-06-26.6",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -2071,7 +2071,8 @@
       var row = sourceRows[i];
       var cf = row.CUSTOM_FIELDS;
       var hasRichData = cf && typeof cf === "object" && !$.isArray(cf) && Object.keys(cf).length > 0;
-      if (!hasRichData) {
+      var hasColour = typeof row.COLOUR === "string" && /^[0-9a-f]{6}$/i.test(row.COLOUR.trim().replace(/^#/, ""));
+      if (!hasRichData || !hasColour) {
         var id = extractJobId(row);
         if (id && toFetch.indexOf(id) === -1) toFetch.push(id);
       }
