@@ -183,7 +183,7 @@
   };
 
   var CFG = {
-    version: "2026-06-26.2",
+    version: "2026-06-26.3",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -2234,40 +2234,65 @@
       jobGroups.push({ jobId: jobId, events: jEvents, color: JOB_COLORS[ji % JOB_COLORS.length] });
     }
 
-    // ---- Global time range across all rows ----
-    var allMs = [];
-    for (var pei = 0; pei < projectEvents.length; pei++) {
-      var pd = parseDate(projectEvents[pei].dateTime);
-      if (pd) allMs.push(pd.getTime());
-    }
-    for (var jgi = 0; jgi < jobGroups.length; jgi++) {
-      for (var jei = 0; jei < jobGroups[jgi].events.length; jei++) {
-        var jed = parseDate(jobGroups[jgi].events[jei].dateTime);
-        if (jed) allMs.push(jed.getTime());
-      }
+    // ---- Three-zone layout: pre / onsite (scaled) / post ----
+    var wrapperStart = parseDate(data.wiseEventStart);
+    var wrapperEnd = parseDate(data.wiseEventEnd);
+    var wrapperStartMs = wrapperStart ? wrapperStart.getTime() : null;
+    var wrapperEndMs = wrapperEnd ? wrapperEnd.getTime() : null;
+    var onsiteSpan = (wrapperStartMs && wrapperEndMs) ? Math.max(wrapperEndMs - wrapperStartMs, 3600000) : null;
+
+    function classifyEvent(ev) {
+      if (!wrapperStartMs || !wrapperEndMs) return "onsite";
+      var d = parseDate(ev.dateTime);
+      if (!d) return "onsite";
+      var ms = d.getTime();
+      if (ms < wrapperStartMs) return "pre";
+      if (ms > wrapperEndMs) return "post";
+      return "onsite";
     }
 
-    if (!allMs.length) {
+    function toOnsitePct(ms) {
+      if (!onsiteSpan || !wrapperStartMs) return 50;
+      return Math.min(99, Math.max(1, 5 + (ms - wrapperStartMs) / onsiteSpan * 90)).toFixed(1);
+    }
+
+    function splitAndRender(label, events, rowCls, accentColor) {
+      var preEvts = [], onsiteEvts = [], postEvts = [];
+      for (var si = 0; si < events.length; si++) {
+        var zone = classifyEvent(events[si]);
+        if (zone === "pre") preEvts.push(events[si]);
+        else if (zone === "post") postEvts.push(events[si]);
+        else onsiteEvts.push(events[si]);
+      }
+      return renderTlRowSplit(label, preEvts, onsiteEvts, postEvts, toOnsitePct, rowCls, accentColor);
+    }
+
+    var hasAnyEvents = projectEvents.length > 0;
+    if (!hasAnyEvents) {
+      for (var jgi2 = 0; jgi2 < jobGroups.length; jgi2++) {
+        if (jobGroups[jgi2].events.length > 0) { hasAnyEvents = true; break; }
+      }
+    }
+    if (!hasAnyEvents) {
       return '<div class="wpj-flow">' + bars +
         '<div class="wpj-empty-state">No scheduled dates yet — milestones will appear once dates are set.</div></div>';
     }
 
-    var globalMin = Math.min.apply(null, allMs);
-    var globalMax = Math.max.apply(null, allMs);
-    var totalSpan = Math.max(globalMax - globalMin, 3600000); // at least 1 hr span
-
-    function toLPct(ms) {
-      return (4 + (ms - globalMin) / totalSpan * 92).toFixed(1);
-    }
-
     var html = '<div class="wpj-flow">' + bars + '<div class="wpj-tl-scroll"><div class="wpj-tl-grid">';
 
+    html += '<div class="wpj-tl-zone-hdr">' +
+      '<div class="wpj-tl-zone-hdr-spc"></div>' +
+      '<div class="wpj-tl-zone-hdr-pre">Pre-event</div>' +
+      '<div class="wpj-tl-zone-hdr-mid">← Onsite window →</div>' +
+      '<div class="wpj-tl-zone-hdr-post">Post-event</div>' +
+    '</div>';
+
     if (projectEvents.length) {
-      html += renderTlRow("Project", projectEvents, toLPct, "wpj-tl-row--project", null);
+      html += splitAndRender("Project", projectEvents, "wpj-tl-row--project", null);
     }
     for (var jri = 0; jri < jobGroups.length; jri++) {
       var jg = jobGroups[jri];
-      html += renderTlRow('#' + jg.jobId, jg.events, toLPct, "wpj-tl-row--job", jg.color);
+      html += splitAndRender('#' + jg.jobId, jg.events, "wpj-tl-row--job", jg.color);
     }
 
     html += '</div></div>';
@@ -2292,54 +2317,90 @@
     return html;
   }
 
-  function renderTlRow(label, events, toLPct, rowCls, accentColor) {
-    var sorted = events.slice().sort(function (a, b) {
-      return parseDate(a.dateTime).getTime() - parseDate(b.dateTime).getTime();
-    });
-
+  function renderTlRowSplit(label, preEvents, onsiteEvents, postEvents, toOnsitePct, rowCls, accentColor) {
     var hdrStyle = accentColor ? ' style="color:' + accentColor + ';border-right-color:' + accentColor + '"' : '';
     var lineStyle = accentColor ? ' style="background:' + accentColor + ';opacity:0.3"' : '';
 
     var html = '<div class="wpj-tl-row ' + (rowCls || '') + '">' +
-      '<div class="wpj-tl-row-hdr"' + hdrStyle + '>' + esc(label) + '</div>' +
-      '<div class="wpj-tl-row-body">' +
-      '<div class="wpj-tl-body-line"' + lineStyle + '></div>';
+      '<div class="wpj-tl-row-hdr"' + hdrStyle + '>' + esc(label) + '</div>';
 
-    for (var i = 0; i < sorted.length; i++) {
-      var ev = sorted[i];
-      var d = parseDate(ev.dateTime);
-      var lp = toLPct(d.getTime());
-      var above = i % 2 === 0;
+    // Pre-event zone: listed chronologically
+    var preSorted = preEvents.slice().sort(function(a, b) {
+      return parseDate(a.dateTime).getTime() - parseDate(b.dateTime).getTime();
+    });
+    html += '<div class="wpj-tl-pre">';
+    for (var pi = 0; pi < preSorted.length; pi++) {
+      var pev = preSorted[pi];
+      var pdotCls = "wpj-tl-dot ";
+      var pdotStyle = "";
+      if (pev.pointType === "wrapper-start") pdotCls += "wpj-tl-dot--ws";
+      else if (pev.pointType === "wrapper-end") pdotCls += "wpj-tl-dot--we";
+      else if (accentColor) { pdotCls += "wpj-tl-dot--job"; pdotStyle = "background:" + accentColor + ";"; }
+      else pdotCls += "wpj-tl-dot--project";
+      html += '<div class="wpj-tl-listed-evt">' +
+        '<div class="' + pdotCls + '"' + (pdotStyle ? ' style="' + pdotStyle + '"' : '') + '></div>' +
+        '<div class="wpj-tl-linfo">' +
+          '<div class="wpj-tl-ename">' + esc(pev.name) + '</div>' +
+          '<div class="wpj-tl-edate">' + esc(formatDateTime(pev.dateTime)) + '</div>' +
+          '<div class="wpj-tl-fkey">' + esc(pev.fieldKey) + '</div>' +
+        '</div>' +
+      '</div>';
+    }
+    html += '</div>';
 
+    // Onsite zone: proportionally scaled between wrapperStart and wrapperEnd
+    var onsiteSorted = onsiteEvents.slice().sort(function(a, b) {
+      return parseDate(a.dateTime).getTime() - parseDate(b.dateTime).getTime();
+    });
+    html += '<div class="wpj-tl-onsite"><div class="wpj-tl-body-line"' + lineStyle + '></div>';
+    for (var oi = 0; oi < onsiteSorted.length; oi++) {
+      var oev = onsiteSorted[oi];
+      var od = parseDate(oev.dateTime);
+      var lp = toOnsitePct(od.getTime());
+      var above = oi % 2 === 0;
       var evtCls = "wpj-tl-evt";
-      if (ev.pointType === "wrapper-start") evtCls += " wpj-tl-evt--ws";
-      else if (ev.pointType === "wrapper-end") evtCls += " wpj-tl-evt--we";
-
-      var dotCls = "wpj-tl-dot ";
-      var dotStyle = "";
-      if (ev.pointType === "wrapper-start") {
-        dotCls += "wpj-tl-dot--ws";
-      } else if (ev.pointType === "wrapper-end") {
-        dotCls += "wpj-tl-dot--we";
-      } else if (accentColor) {
-        dotCls += "wpj-tl-dot--job";
-        dotStyle = "background:" + accentColor + ";";
-      } else {
-        dotCls += "wpj-tl-dot--project";
-      }
-
+      if (oev.pointType === "wrapper-start") evtCls += " wpj-tl-evt--ws";
+      else if (oev.pointType === "wrapper-end") evtCls += " wpj-tl-evt--we";
+      var odotCls = "wpj-tl-dot ";
+      var odotStyle = "";
+      if (oev.pointType === "wrapper-start") odotCls += "wpj-tl-dot--ws";
+      else if (oev.pointType === "wrapper-end") odotCls += "wpj-tl-dot--we";
+      else if (accentColor) { odotCls += "wpj-tl-dot--job"; odotStyle = "background:" + accentColor + ";"; }
+      else odotCls += "wpj-tl-dot--project";
       var lContent =
-        '<div class="wpj-tl-ename">' + esc(ev.name) + '</div>' +
-        '<div class="wpj-tl-edate">' + esc(formatDateTime(ev.dateTime)) + '</div>' +
-        '<div class="wpj-tl-fkey">' + esc(ev.fieldKey) + '</div>';
-
+        '<div class="wpj-tl-ename">' + esc(oev.name) + '</div>' +
+        '<div class="wpj-tl-edate">' + esc(formatDateTime(oev.dateTime)) + '</div>' +
+        '<div class="wpj-tl-fkey">' + esc(oev.fieldKey) + '</div>';
       html += '<div class="' + evtCls + '" style="left:' + lp + '%">' +
         '<div class="wpj-tl-above">' + (above ? lContent : '') + '</div>' +
-        '<div class="' + dotCls + '" style="' + dotStyle + '"></div>' +
+        '<div class="' + odotCls + '"' + (odotStyle ? ' style="' + odotStyle + '"' : '') + '></div>' +
         '<div class="wpj-tl-below">' + (!above ? lContent : '') + '</div>' +
       '</div>';
     }
+    html += '</div>';
 
+    // Post-event zone: listed chronologically
+    var postSorted = postEvents.slice().sort(function(a, b) {
+      return parseDate(a.dateTime).getTime() - parseDate(b.dateTime).getTime();
+    });
+    html += '<div class="wpj-tl-post">';
+    for (var posti = 0; posti < postSorted.length; posti++) {
+      var postev = postSorted[posti];
+      var rdotCls = "wpj-tl-dot ";
+      var rdotStyle = "";
+      if (postev.pointType === "wrapper-start") rdotCls += "wpj-tl-dot--ws";
+      else if (postev.pointType === "wrapper-end") rdotCls += "wpj-tl-dot--we";
+      else if (accentColor) { rdotCls += "wpj-tl-dot--job"; rdotStyle = "background:" + accentColor + ";"; }
+      else rdotCls += "wpj-tl-dot--project";
+      html += '<div class="wpj-tl-listed-evt">' +
+        '<div class="' + rdotCls + '"' + (rdotStyle ? ' style="' + rdotStyle + '"' : '') + '></div>' +
+        '<div class="wpj-tl-linfo">' +
+          '<div class="wpj-tl-ename">' + esc(postev.name) + '</div>' +
+          '<div class="wpj-tl-edate">' + esc(formatDateTime(postev.dateTime)) + '</div>' +
+          '<div class="wpj-tl-fkey">' + esc(postev.fieldKey) + '</div>' +
+        '</div>' +
+      '</div>';
+    }
     html += '</div></div>';
     return html;
   }
@@ -3346,11 +3407,22 @@
       ".wpj-zoom-btn{border:1px solid #e2e8ef;border-radius:5px;background:#fff;color:#374151;font-size:14px;font-weight:700;width:26px;height:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;}",
       ".wpj-zoom-btn:hover{background:#f1f5f9;}",
       ".wpj-zoom-btn:disabled{opacity:0.35;cursor:default;}",
-      ".wpj-tl-row{display:flex;align-items:stretch;border-bottom:1px solid #f1f5f9;min-height:110px;}",
-      ".wpj-tl-row--project{background:#fafbff;border-bottom:2px solid #e2e8ef;min-height:120px;}",
-      ".wpj-tl-row-hdr{width:72px;min-width:72px;flex-shrink:0;display:flex;align-items:center;justify-content:flex-end;padding:0 10px 0 8px;border-right:1px solid #e2e8ef;font-size:10px;font-weight:800;color:#64748b;text-align:right;word-break:break-all;line-height:1.3;}",
+      ".wpj-tl-zone-hdr{display:flex;background:#f8fafc;border-bottom:2px solid #e2e8ef;}",
+      ".wpj-tl-zone-hdr-spc{width:72px;min-width:72px;flex-shrink:0;border-right:1px solid #e2e8ef;}",
+      ".wpj-tl-zone-hdr-pre{width:170px;min-width:170px;flex-shrink:0;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#f97316;padding:4px 8px;border-right:2px solid rgba(249,115,22,0.35);}",
+      ".wpj-tl-zone-hdr-mid{flex:1;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#64748b;padding:4px 8px;text-align:center;}",
+      ".wpj-tl-zone-hdr-post{width:150px;min-width:150px;flex-shrink:0;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#0284c7;padding:4px 8px;border-left:2px solid rgba(56,189,248,0.35);text-align:right;}",
+      ".wpj-tl-row{display:flex;align-items:stretch;border-bottom:1px solid #f1f5f9;}",
+      ".wpj-tl-row--project{background:#fafbff;border-bottom:2px solid #e2e8ef;}",
+      ".wpj-tl-row-hdr{width:72px;min-width:72px;flex-shrink:0;display:flex;align-items:flex-start;justify-content:flex-end;padding:8px 10px 0 8px;border-right:1px solid #e2e8ef;font-size:10px;font-weight:800;color:#64748b;text-align:right;word-break:break-all;line-height:1.3;}",
       ".wpj-tl-row--project .wpj-tl-row-hdr{color:#374151;font-size:11px;}",
-      ".wpj-tl-row-body{flex:1;position:relative;overflow:hidden;}",
+      ".wpj-tl-pre{width:170px;min-width:170px;flex-shrink:0;padding:6px 8px;border-right:2px solid rgba(249,115,22,0.35);}",
+      ".wpj-tl-onsite{flex:1;position:relative;overflow:hidden;min-height:120px;}",
+      ".wpj-tl-post{width:150px;min-width:150px;flex-shrink:0;padding:6px 8px;border-left:2px solid rgba(56,189,248,0.35);}",
+      ".wpj-tl-listed-evt{display:flex;align-items:flex-start;gap:7px;padding:4px 0;border-bottom:1px solid #f8fafc;}",
+      ".wpj-tl-listed-evt:last-child{border-bottom:0;}",
+      ".wpj-tl-listed-evt .wpj-tl-dot{margin-top:2px;}",
+      ".wpj-tl-linfo{min-width:0;}",
       ".wpj-tl-body-line{position:absolute;top:50%;left:0;right:0;height:2px;background:#e2e8ef;transform:translateY(-50%);z-index:0;}",
       ".wpj-tl-evt{position:absolute;top:0;bottom:0;width:90px;display:flex;flex-direction:column;align-items:center;transform:translateX(-50%);z-index:1;}",
       ".wpj-tl-above{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:7px;text-align:center;width:90px;}",
@@ -3423,7 +3495,7 @@
       ".wpj-diag-pre{margin:0;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8ef;border-radius:4px;font-size:10px;line-height:1.5;color:#1e293b;white-space:pre-wrap;word-break:break-all;max-height:220px;overflow-y:auto;}",
       ".wpj-diag-note{font-size:11px;color:#94a3b8;font-style:italic;}",
       /* ---- Responsive ---- */
-      "@media(max-width:860px){.wpj-hdr{flex-direction:column;align-items:flex-start;}.wpj-tl-row-hdr{width:52px;min-width:52px;font-size:9px;padding:0 6px;}.wpj-tl-edate,.wpj-tl-fkey{display:none;}.wpj-tl-ename{font-size:9px;}}",
+      "@media(max-width:860px){.wpj-hdr{flex-direction:column;align-items:flex-start;}.wpj-tl-row-hdr{width:52px;min-width:52px;font-size:9px;padding:4px 4px 0;}.wpj-tl-zone-hdr-spc{width:52px;min-width:52px;}.wpj-tl-pre,.wpj-tl-zone-hdr-pre{width:120px;min-width:120px;}.wpj-tl-post,.wpj-tl-zone-hdr-post{width:110px;min-width:110px;}.wpj-tl-edate,.wpj-tl-fkey{display:none;}.wpj-tl-ename{font-size:9px;}}",
       "@media(max-width:480px){.wpj-shell{padding:5px;}.wpj-segmented button{padding:4px 7px;}}"
     ].join("\n");
 
