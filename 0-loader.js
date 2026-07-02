@@ -21,8 +21,9 @@
       captrack: { file: "7-captrack.js", version: "3.0" },
       stage: { file: "8-stagedesigner.js", version: "2.0" },
       checklist: { file: "9-jobchecklist.js", version: "1.0" },
-      projectJobs: { file: "10-projectjobs-qol.js", version: "0.8" },
-      projectJourney: { file: "11-projectjourney.js", version: "0.6" }
+      projectJobs: { file: "10-projectjobs-qol.js", version: "0.9" },
+      projectJourney: { file: "11-projectjourney.js", version: "0.6" },
+      projectGroups: { file: "12-projectgroups.js", version: "0.1" }
     }
   };
 
@@ -134,7 +135,7 @@
     if (hasSupplyingList()) loadProposalSupplyingBundle();
     if (isHomePage()) loadSequence(["hirehop", "captrack"]);
     if (hasProjectOrJobTabs()) loadSequence(["checklist", "projectJourney"]);
-    if (hasProjectJobsPage()) loadSequence(["hirehop", "projectJobs"]);
+    if (hasProjectJobsPage()) loadSequence(["hirehop", "projectJobs", "projectGroups"]);
     if (hasAutopullDialog()) loadSequence(["autopull"]);
   }
 

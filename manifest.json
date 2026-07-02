@@ -84,8 +84,8 @@
     {
       "file": "10-projectjobs-qol.js",
       "status": "lazy-project-details",
-      "cacheVersion": "0.8",
-      "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable, adds a compact project-info toggle above the jobs grid, and hides secondary project-level timing fields so project dates read as the Wise event wrapper (all depots). Also regroups the native project fields into Wise Project Details/Project Ownership/Operational Timings/Working Links panels, restricted to the Proposal Creation depot only (progressive enhancement, native save behaviour untouched).",
+      "cacheVersion": "0.9",
+      "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable, adds a compact project-info toggle above the jobs grid, and hides secondary project-level timing fields so project dates read as the Wise event wrapper.",
       "recommendedLoadOrder": 10
     },
     {
@@ -94,6 +94,13 @@
       "cacheVersion": "0.6",
       "role": "Project page Journey tab that visualises the Wise Event Wrapper from Start Date Time and Project End Date Time, operational milestones, critical path, readiness score, department readiness, and issues/exceptions with mock data plus live-data mapping hooks, using native tab activation where available.",
       "recommendedLoadOrder": 11
+    },
+    {
+      "file": "12-projectgroups.js",
+      "status": "lazy-project-details",
+      "cacheVersion": "0.1",
+      "role": "Proposal Creation depot only: groups the native #proj_info project details fields into 5 logical groups (System Details, Wise Project Details, Project Ownership, Operational Timings, Working Links) via in-place display:contents wrapping — pure DOM grouping, no styling/headings/relabeling/colour yet, native layout and save behaviour fully unaffected.",
+      "recommendedLoadOrder": 12
     }
   ],
   "referenceFiles": [
