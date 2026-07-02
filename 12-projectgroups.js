@@ -1,11 +1,11 @@
 /* ===========================================================================
  * Wise Project Field Groups
  * ---------------------------------------------------------------------------
- * Groups the native Project Details fields (in #proj_info) into 5 logical
- * groups and reorders the two top-level blocks so Salesforce/Wise info
- * leads and native HireHop record fields take a back seat. No new styling,
- * headings, relabeling, or colour — this is a pure DOM grouping/position
- * pass, verified against the real page markup:
+ * Groups the native Project Details fields (in #proj_info) into 5 boxed
+ * sections, reorders them so Salesforce/Wise info leads and native HireHop
+ * record fields take a back seat, and styles them so Wise Project Details
+ * reads as the main attraction while the rest (and especially System
+ * Details) stay visually quieter. Verified against the real page markup:
  *
  *   - Project ID# through Project/Onsite End (the header identity strip,
  *     contact/company/address, project type/warehouse/headline, and
@@ -30,22 +30,46 @@
  *     Links fields. Nothing needs to be relocated across the page for
  *     these — only wrapped in place.
  *
- * Grouping technique: each group is a plain <div data-wise-group="...">
- * created with `.wrapAll()` around the elements that already sit together
- * in the DOM, given `display:contents`. That one inline style is
- * structural, not decorative — it makes the wrapper invisible to
- * #proj_info's grid layout and #custom_fields_container's flex layout, so
- * every field keeps rendering in exactly the same place, at exactly the
- * same size, as it does natively today. Nothing is cloned, renamed, or
- * removed, and no cross-container relocation happens, so there is nothing
- * for this module to "release" or "undo" on a project switch — a freshly
- * rendered #proj_info just gets grouped again from a clean, native state.
+ * Grouping technique: each group is wrapped in place with `.wrapAll()`
+ * into <div data-wise-group="..." class="wise-pg-section"><div
+ * class="wise-pg-hdr">Title</div><div class="wise-pg-body">...fields...
+ * </div></div>. Nothing is cloned, renamed, or removed — every native
+ * field/input keeps its name/id/value/listeners untouched, it is only
+ * reparented one level deeper. No cross-container relocation happens (the
+ * "system-details" group and #custom_fields_container's four sub-groups
+ * are all built from elements that already lived together), so there is
+ * nothing to "release"/"undo" on a project switch — a freshly rendered
+ * #proj_info just gets grouped again from a clean, native state.
  *
- * Reordering: once grouped, #proj_info has exactly two top-level children —
- * #custom_fields_container and the "system-details" wrapper. These are
- * swapped (a plain DOM move, `insertBefore`) so #custom_fields_container
- * renders first. #custom_fields_container is moved as one already
- * self-contained unit, so its own flex layout needs no changes either.
+ * Layout technique: #proj_info's own CSS Grid and #custom_fields_container's
+ * own flex-wrap are replicated one level deeper on each section's
+ * `.wise-pg-body` (grid for System Details, flex-wrap for the other four),
+ * so every field still sizes/wraps the same way it did natively — the
+ * `calc(33% - 4px)` etc. inline widths HireHop already put on individual
+ * fields are untouched and still compute against a comparable container
+ * width. The section boxes themselves (`.wise-pg-section`) get real
+ * border/background styling since this pass IS the intentional styling
+ * step (grouping-only was the previous pass).
+ *
+ * Colour hierarchy (per request — Wise info is the main attraction, native
+ * HireHop info takes a back seat):
+ *   - Wise Project Details: white body, bold 4px accent-coloured top
+ *     border, larger header — the primary section.
+ *   - Project Ownership / Operational Timings / Working Links: light grey
+ *     body, thinner 2px accent top border — supporting sections.
+ *   - System Details: NO background override, so #proj_info's own native
+ *     project-colour banding (the coloured header strip, white row
+ *     backgrounds) keeps rendering exactly as HireHop draws it — only a
+ *     thin border and a small muted caption are added, plus a smaller
+ *     base font-size for the section as a whole.
+ *
+ * Accent colour: #proj_info already carries the live project colour as its
+ * own inline `background-color` (confirmed from real markup, e.g.
+ * `style="background-color: rgb(20, 196, 8)"`) — read directly and exposed
+ * as the `--wise-project-accent` CSS variable on #proj_info, so every
+ * section above inherits it. Falls back to the existing HireHop-orange
+ * accent already used elsewhere in this codebase only when no colour can
+ * be read.
  *
  * Deferred to a later pass (left in native position, ungrouped, for now):
  *   - Project/Onsite Start & End (the unlabeled `.start_date`/`.finish_date`
@@ -61,14 +85,9 @@
  * user's own active depot (window.user), not the shared 5-hirehop.js DOM
  * scan, which was confirmed unreliable on this specific page (see
  * isProposalCreationDepot below for why). On every other depot this
- * module does nothing at all.
- *
- * Colour: #proj_info already carries the live project colour as its own
- * inline `background-color` (confirmed from real markup, e.g.
- * `style="background-color: rgb(20, 196, 8)"`). No detection heuristics
- * are needed — reading that one property is enough. This module does not
- * apply any colour yet (no styling in this pass); recorded here for the
- * follow-up styling module to use directly.
+ * module does nothing at all, and none of the CSS below applies (every
+ * rule is scoped under the `.wise-pg-active` class this module adds to
+ * #proj_info only once grouping has actually run).
  * ========================================================================= */
 (function () {
   "use strict";
@@ -78,10 +97,20 @@
 
   var LOG_PREFIX = "[Wise Project Groups]";
   var GROUP_ATTR = "data-wise-group";
+  var ROOT_CLASS = "wise-pg-active";
+  var STYLES_ID = "wise-project-groups-styles";
+  var FALLBACK_ACCENT = "#f97316"; // Safe fallback only — real accent is read from #proj_info's own colour.
   var CUSTOM_FIELD_GROUP_KEYS = ["wise-project-details", "project-ownership", "operational-timings", "working-links"];
+  var GROUP_TITLES = {
+    "wise-project-details": "Wise Project Details",
+    "project-ownership": "Project Ownership",
+    "operational-timings": "Operational Timings",
+    "working-links": "Working Links",
+    "system-details": "System Details (HireHop)"
+  };
 
   var CFG = {
-    version: "2026-07-03.3",
+    version: "2026-07-04.1",
     maintainRecoveryMs: 5000
   };
 
@@ -93,6 +122,7 @@
   bootstrap();
 
   function bootstrap() {
+    installStyles();
     scheduleMaintain(0);
     state.maintainTimer = setInterval(function () { scheduleMaintain(0); }, CFG.maintainRecoveryMs);
 
@@ -126,6 +156,8 @@
     groupCustomFields($projectInfo);
     groupSystemDetails($projectInfo);
     reorderGroups($projectInfo);
+    applyAccentColour($projectInfo);
+    $projectInfo.addClass(ROOT_CLASS);
   }
 
   // ---- Depot gate ----------------------------------------------------------
@@ -209,7 +241,9 @@
 
     for (var i = 0; i < runs.length; i++) {
       if (!runs[i].length) continue;
-      $(runs[i]).wrapAll(makeGroupWrapper(CUSTOM_FIELD_GROUP_KEYS[i]));
+      var key = CUSTOM_FIELD_GROUP_KEYS[i];
+      $(runs[i]).wrapAll(makeGroupWrapper(key));
+      addSectionHeader($container.children("[" + GROUP_ATTR + "='" + key + "']"), GROUP_TITLES[key]);
     }
   }
 
@@ -248,6 +282,7 @@
 
     if (!toWrap.length) return;
     $(toWrap).wrapAll(makeGroupWrapper("system-details"));
+    addSectionHeader($projectInfo.children("[" + GROUP_ATTR + "='system-details']"), GROUP_TITLES["system-details"]);
   }
 
   // ---- Reorder: Salesforce/Wise info before native System Details ---------
@@ -259,8 +294,7 @@
   // fields). Per request, the native block should take a back seat: this
   // just swaps which of the two comes first among #proj_info's direct
   // children. #custom_fields_container is moved as a single, already
-  // self-contained unit — its own flex layout is untouched, so this is a
-  // pure position change with no new styling.
+  // self-contained unit — its own flex layout is untouched.
   function reorderGroups($projectInfo) {
     var $container = $projectInfo.find("#custom_fields_container").first();
     var $systemDetails = $projectInfo.children("[" + GROUP_ATTR + "='system-details']").first();
@@ -270,12 +304,90 @@
     $container.insertBefore($systemDetails);
   }
 
-  // `display:contents` is a structural style, not decoration: it makes the
-  // wrapper invisible to #proj_info's CSS Grid and #custom_fields_container's
-  // flex layout, so every field keeps rendering exactly where and how it
-  // does today. It is the only inline style this module ever sets.
+  // Each group becomes <div data-wise-group="key" class="wise-pg-section">
+  // wrapping a single <div class="wise-pg-body"> — wrapAll() places the
+  // matched fields into that inner body (the one unambiguous innermost
+  // element in this structure). The header caption is added afterwards
+  // (see addSectionHeader) rather than as a sibling inside this same
+  // structure, since wrapAll can only target a single nested chain, not a
+  // branching one.
   function makeGroupWrapper(key) {
-    return $("<div></div>").attr(GROUP_ATTR, key).css("display", "contents");
+    return $('<div><div class="wise-pg-body"></div></div>')
+      .attr(GROUP_ATTR, key)
+      .addClass("wise-pg-section");
+  }
+
+  function addSectionHeader($section, title) {
+    if (!$section.length || $section.children(".wise-pg-hdr").length) return;
+    $("<div></div>").addClass("wise-pg-hdr").text(title).prependTo($section);
+  }
+
+  // ---- Accent colour --------------------------------------------------------
+  // #proj_info's own inline background-color IS the live project colour
+  // (this is how HireHop already colours the header strip and job rows) —
+  // read it directly rather than guessing at swatches elsewhere on the
+  // page. Exposed as --wise-project-accent on #proj_info so every section
+  // box (all descendants) can use it via var(--wise-project-accent).
+  function applyAccentColour($projectInfo) {
+    var el = $projectInfo.get(0);
+    if (!el) return;
+
+    var hex = rgbToHex($projectInfo.css("background-color"));
+    el.style.setProperty("--wise-project-accent", hex || FALLBACK_ACCENT);
+  }
+
+  function rgbToHex(value) {
+    var match = String(value || "").match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+    if (!match) return "";
+    return "#" +
+      ("0" + parseInt(match[1], 10).toString(16)).slice(-2) +
+      ("0" + parseInt(match[2], 10).toString(16)).slice(-2) +
+      ("0" + parseInt(match[3], 10).toString(16)).slice(-2);
+  }
+
+  // ---- Styles ---------------------------------------------------------------
+  // Everything here is scoped under #proj_info.wise-pg-active so it can
+  // never affect any other page, and only ever applies once this module
+  // has actually grouped the fields on an allowed depot.
+  function installStyles() {
+    if (document.getElementById(STYLES_ID)) return;
+
+    var accentVar = "var(--wise-project-accent," + FALLBACK_ACCENT + ")";
+    var css = [
+      // Shared section-box base: full-width row (whether a flex child of
+      // #custom_fields_container or a grid item of #proj_info) with a
+      // thin native-style border.
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "]{box-sizing:border-box;width:100%;flex:1 1 100%;border:1px solid #a1a1a1;}",
+      "#proj_info.wise-pg-active #custom_fields_container>hr{display:none;}", // redundant once boxes provide the visual break
+
+      "#proj_info.wise-pg-active .wise-pg-hdr{font-weight:bold;padding:4px 8px;border-bottom:1px solid #a1a1a1;box-sizing:border-box;}",
+      "#proj_info.wise-pg-active .wise-pg-body{box-sizing:border-box;}",
+
+      // Wise Project Details: the primary/main-attraction section.
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']{background:#fff;border-top:4px solid " + accentVar + ";}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']>.wise-pg-hdr{font-size:1.05em;background:#f7f7f7;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']>.wise-pg-body{display:flex;flex-flow:wrap;justify-content:left;gap:4px;padding:6px 8px;}",
+
+      // Project Ownership / Operational Timings / Working Links: supporting
+      // sections — still boxed and accented, but visually lighter than
+      // Wise Project Details.
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='project-ownership'],#proj_info.wise-pg-active [" + GROUP_ATTR + "='operational-timings'],#proj_info.wise-pg-active [" + GROUP_ATTR + "='working-links']{background:#f7f7f7;border-top:2px solid " + accentVar + ";margin-top:6px;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='project-ownership']>.wise-pg-hdr,#proj_info.wise-pg-active [" + GROUP_ATTR + "='operational-timings']>.wise-pg-hdr,#proj_info.wise-pg-active [" + GROUP_ATTR + "='working-links']>.wise-pg-hdr{font-size:0.95em;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='project-ownership']>.wise-pg-body,#proj_info.wise-pg-active [" + GROUP_ATTR + "='operational-timings']>.wise-pg-body,#proj_info.wise-pg-active [" + GROUP_ATTR + "='working-links']>.wise-pg-body{display:flex;flex-flow:wrap;justify-content:left;gap:4px;padding:4px 8px;}",
+
+      // System Details: no background override, so the native project-
+      // colour header strip and native white row backgrounds keep
+      // rendering exactly as HireHop draws them today — only a thin
+      // border, a smaller base font, and a small muted caption are added.
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']{grid-column:1 / -1;font-size:0.92em;margin-top:6px;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-hdr{font-size:0.85em;color:#555;background:#f0f0f0;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body{display:grid;grid-template-columns:repeat(3,1fr);}"
+    ].join("\n");
+
+    var style = document.createElement("style");
+    style.id = STYLES_ID;
+    style.textContent = css;
+    document.head.appendChild(style);
   }
 
   function log() {
@@ -302,6 +414,7 @@
           currentUserDepotId: rawDepot && shared && shared.depot && shared.depot.normaliseId ? shared.depot.normaliseId(rawDepot) : "",
           resolvedProposalCreationId: (shared && shared.depot && typeof shared.depot.resolveId === "function" && shared.depot.resolveId("Proposal Creation")) || KNOWN_PROPOSAL_CREATION_DEPOT_ID + " (fallback, window.depots unavailable)"
         },
+        accentColour: $projectInfo.length ? $projectInfo.get(0).style.getPropertyValue("--wise-project-accent") : "",
         groups: $projectInfo.length ? $projectInfo.find("[" + GROUP_ATTR + "]").map(function () {
           return $(this).attr(GROUP_ATTR);
         }).get() : []
