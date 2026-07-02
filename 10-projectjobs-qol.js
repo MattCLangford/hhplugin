@@ -652,6 +652,10 @@
  *     instead of breaking the page.
  *   - Colours are derived from whatever HireHop/Salesforce already applied
  *     to this project; the HireHop orange is only a last-resort fallback.
+ * Restricted to the Proposal Creation depot only (see isProposalCreationDepot
+ * below) — other depots keep the plain native layout untouched. This is
+ * distinct from the date/kit-booking field hiding in the module above,
+ * which intentionally still applies across all depots.
  * Runs independently of the "compact toggle" module above so a failure in
  * one never affects the other or the native HireHop screen.
  * ========================================================================= */
@@ -664,7 +668,7 @@
   var LOG_PREFIX = "[Wise Project Layout]";
 
   var CFG = {
-    version: "2026-07-02.1",
+    version: "2026-07-02.3",
     stylesId: "wise-project-layout-styles",
     rootId: "wise-project-layout-root",
     rootClass: "wise-project-layout-active",
@@ -714,7 +718,7 @@
 
   var state = {
     sections: null,
-    lastFingerprint: "",
+    lastProjectInfoEl: null,
     maintainTimer: null,
     maintainScheduled: null
   };
@@ -755,15 +759,33 @@
       return;
     }
 
-    var fingerprint = getProjectFingerprint($projectInfo);
-    if (fingerprint && fingerprint !== state.lastFingerprint) {
-      // Different project (or a full native re-render) — release any
-      // previously relocated fields back to #proj_info first so nothing is
-      // ever destroyed, then rebuild fresh from the current native markup.
-      releaseRelocatedFields($projectInfo);
-      state.sections = null;
-      state.lastFingerprint = fingerprint;
+    // This visual regrouping is Proposal Creation-only by request — other
+    // depots keep the plain native layout. The date/kit-booking field
+    // hiding above (the first module in this file) is deliberately NOT
+    // gated here, since that should keep applying across all depots.
+    if (!isProposalCreationDepot()) {
+      teardown();
+      return;
     }
+
+    // Rebuild from a clean slate only when #proj_info is a genuinely new
+    // DOM node (project switch / full native re-render). Detecting this by
+    // node identity — rather than hashing visible text, which this module
+    // itself keeps changing as it relocates fields — avoids false
+    // positives that would otherwise re-run the "first build" path (and
+    // duplicate the section/caption chrome) on every ordinary refresh.
+    if (state.lastProjectInfoEl && state.lastProjectInfoEl !== $projectInfo.get(0)) {
+      $("#" + CFG.rootId).remove();
+      $(".wise-pl-system-caption").remove();
+      state.sections = null;
+    }
+    state.lastProjectInfoEl = $projectInfo.get(0);
+
+    // Self-heal: if an earlier bug (or an unexpected duplicate ajax burst)
+    // ever left more than one caption/root behind, collapse back to one
+    // instead of letting them accumulate.
+    $("#" + CFG.rootId).slice(1).remove();
+    $(".wise-pl-system-caption").slice(1).remove();
 
     buildLayout($projectInfo);
   }
@@ -773,34 +795,30 @@
     $(".wise-pl-system-caption").remove();
     $("body").removeClass(CFG.rootClass);
     state.sections = null;
-    state.lastFingerprint = "";
+    state.lastProjectInfoEl = null;
   }
 
-  function getProjectFingerprint($projectInfo) {
-    var fromUrl = String(window.location.href || "").match(/[?&#\/](?:id|project)=?(\d{2,})/i);
-    if (fromUrl && fromUrl[1]) return "url:" + fromUrl[1];
+  // ---- Depot gate ----------------------------------------------------------
+  // Reuses the shared, already-tested depot-detection module from
+  // 5-hirehop.js (loaded alongside this file for the project details route
+  // — see 0-loader.js) rather than re-implementing depot detection here.
+  // Its default rule is already "Proposal Creation" only, which is exactly
+  // what this visual regrouping should be limited to.
+  // ASSUMPTION: if the shared module hasn't finished loading yet, or can't
+  // detect a depot at all on this page, this fails *closed* (treats the
+  // depot as not allowed) rather than guessing — the native layout is
+  // always a safe fallback, so a missed detection just means one extra
+  // maintain pass before the sections appear once the module is ready.
+  function isProposalCreationDepot() {
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    if (!shared || !shared.depot || typeof shared.depot.isAllowed !== "function") return false;
 
-    // Fallback: hash the first non-empty row's label text. Good enough to
-    // notice a project swap even when the URL doesn't change (SPA-style
-    // navigation) without depending on any single field's exact wording.
-    var text = compactText($projectInfo.find("tr,li,.row").first().text());
-    return text ? "row:" + text.slice(0, 80) : "";
-  }
-
-  function releaseRelocatedFields($projectInfo) {
-    var $root = $("#" + CFG.rootId);
-    if (!$root.length) return;
-
-    $root.find("tr").each(function () {
-      var $tr = $(this);
-      if ($tr.hasClass("wise-pl-wrap-row")) {
-        $tr.find(".wise-pl-wrap-cell").children().appendTo($projectInfo);
-      } else {
-        $projectInfo.append($tr);
-      }
-    });
-
-    $root.remove();
+    try {
+      return !!shared.depot.isAllowed();
+    } catch (err) {
+      log("depot check failed, layout left inactive as a precaution", err);
+      return false;
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -817,7 +835,11 @@
       $root = $("<div></div>").attr("id", CFG.rootId).addClass("wise-pl-root");
       $projectInfo.before($root);
       state.sections = buildSectionChrome($root);
-    } else if (!isImmediatelyBefore($root, $projectInfo)) {
+    } else if (!isBeforeInDocument($root, $projectInfo)) {
+      // Only reposition when truly out of place. Requiring $root to sit
+      // *immediately* before #proj_info would fight the System Details
+      // caption for that exact slot every pass (the caption also wants to
+      // be adjacent to #proj_info) and needlessly reorder the DOM.
       $root.detach();
       $projectInfo.before($root);
     }
@@ -851,6 +873,12 @@
 
   function isImmediatelyBefore($el, $reference) {
     return !!($el.length && $reference.length && $el.next().is($reference));
+  }
+
+  function isBeforeInDocument($el, $reference) {
+    if (!$el.length || !$reference.length) return false;
+    var position = $el.get(0).compareDocumentPosition($reference.get(0));
+    return !!(position & Node.DOCUMENT_POSITION_FOLLOWING);
   }
 
   function getSearchScope($projectInfo, $root) {
@@ -934,6 +962,11 @@
     if (!result) return null;
     if (claimed) claimed.push(result.get(0));
 
+    // $row is kept only as a fallback/search context — HireHop packs
+    // several unrelated label/value pairs into a single native <tr>, so
+    // the row itself must never be moved wholesale (see
+    // appendFieldToSection): only $label and $valueCell/control, which are
+    // scoped tightly to this one field, are ever relocated.
     var $row = result.closest("tr");
     if (!$row.length) $row = result.closest(".row,.form-row,.field-row,li,.ui-helper-clearfix");
     if (!$row.length) $row = result.parent();
@@ -945,7 +978,11 @@
       try { control = document.getElementById(forId); } catch (err) { control = null; }
     }
     if (!control) {
-      var $control = $row.find("input,textarea,select").first();
+      // Only look inside the matched value cell (or the label's own
+      // immediate parent when there is no separate cell) — never the whole
+      // row, which may contain other fields' controls too.
+      var $controlScope = $valueCell.length ? $valueCell : result.parent();
+      var $control = $controlScope.find("input,textarea,select").addBack("input,textarea,select").first();
       if ($control.length) control = $control.get(0);
     }
 
@@ -967,11 +1004,14 @@
   }
 
   // ---- Helper: moveFieldToSection -----------------------------------------
-  // Physically relocates a field's row into a section's <tbody>. The field
-  // element itself is moved (appendTo), never cloned, so its name/id/value/
-  // bound listeners are untouched — this is a reparent, not a redraw.
-  // `newLabel`, if given, only rewrites the *label's own text node* — the
-  // underlying control's name/id/value are never touched.
+  // Physically relocates a field into a section's <tbody>. Only the
+  // matched label and its value cell/control are moved (appendTo, never
+  // cloned) — never the whole native row, because HireHop often packs
+  // several unrelated label/value pairs into one <tr> and moving the row
+  // wholesale would drag those unrelated fields along with it. Names/ids/
+  // values/bound listeners are untouched — this is a reparent, not a
+  // redraw. `newLabel`, if given, only rewrites the *label's own text
+  // node* — the underlying control's name/id/value are never touched.
   function moveFieldToSection(aliases, $sectionBody, newLabel, $scope, claimed, options) {
     options = options || {};
     var field = findFieldByLabel(aliases, $scope, claimed);
@@ -981,20 +1021,39 @@
     }
 
     if (newLabel) relabel(field.$label, newLabel);
-    appendRowToSection(field.$row, $sectionBody);
+    appendFieldToSection(field, $sectionBody);
     if (options.normaliseEmpty) normaliseEmptyValue(field);
     return true;
   }
 
-  function appendRowToSection($row, $sectionBody) {
-    if ($row.is("tr")) {
-      $sectionBody.append($row);
+  // Builds one small <tr> per field inside the target section, containing
+  // only that field's own label and value/control — never any sibling
+  // content from a shared native row. Idempotent: if this exact field was
+  // already relocated on an earlier pass, its row is found (the label is
+  // still inside it) and simply re-appended rather than rebuilt, so
+  // repeated maintain passes never leave orphaned empty rows behind.
+  function appendFieldToSection(field, $sectionBody) {
+    var $existingRow = field.$label.closest(".wise-pl-field-row");
+    if ($existingRow.length && $sectionBody.find($existingRow).length) {
+      $sectionBody.append($existingRow);
       return;
     }
-    if ($sectionBody.find($row).length) return; // already relocated on an earlier pass
-    var $wrapRow = $("<tr></tr>").addClass("wise-pl-wrap-row");
-    $("<td></td>").addClass("wise-pl-wrap-cell").attr("colspan", 2).append($row).appendTo($wrapRow);
+
+    var $wrapRow = $("<tr></tr>").addClass("wise-pl-field-row");
+    $wrapRow.append(asRowCell(field.$label));
+
+    if (field.$valueCell && field.$valueCell.length) {
+      $wrapRow.append(asRowCell(field.$valueCell));
+    } else if (field.control) {
+      $wrapRow.append(asRowCell($(field.control)));
+    }
+
     $sectionBody.append($wrapRow);
+  }
+
+  function asRowCell($el) {
+    if ($el.is("td,th")) return $el;
+    return $("<td></td>").addClass("wise-pl-wrap-cell").append($el);
   }
 
   function relabel($label, newLabel) {
@@ -1017,15 +1076,17 @@
   // Blank display-only values read as "Not set" instead of empty space.
   // Never rewrites an <input>/<select>/<textarea>'s value — those only get
   // a muted CSS class, since changing their value would change saved data.
+  // Scoped strictly to this field's own value cell/control — never the
+  // wider native row (see moveFieldToSection) — so a blank value never
+  // wipes out unrelated sibling fields that happen to share that row.
   function normaliseEmptyValue(field) {
-    var $target = field.$valueCell && field.$valueCell.length ? field.$valueCell : field.$row;
-    if (!$target || !$target.length) return;
-
-    var $controls = $target.find("input,textarea,select");
-    if ($controls.length) {
-      if (!compactText($controls.first().val())) $target.addClass("wise-pl-empty-control");
+    if (field.control) {
+      if (!compactText(field.control.value)) $(field.control).addClass("wise-pl-empty-control");
       return;
     }
+
+    var $target = field.$valueCell;
+    if (!$target || !$target.length) return; // no safely-scoped target — leave native display as-is
 
     if (!compactText($target.text())) {
       $target.addClass("wise-pl-empty-value").html('<span class="wise-pl-empty-dash">Not set</span>');
@@ -1051,13 +1112,17 @@
     var $btn = makeLinkButton(field, fieldDef.buttonLabel);
     if (!$btn) return false;
 
-    appendRowToSection(field.$row, $sectionBody);
+    appendFieldToSection(field, $sectionBody);
     return true;
   }
 
   // ---- Helper: makeLinkButton ----------------------------------------------
+  // Scoped to this field's own value cell/control only — never the whole
+  // native row, which (per moveFieldToSection above) may hold unrelated
+  // fields too and must never be searched or moved wholesale.
   function makeLinkButton(field, label) {
-    var $existingAnchor = field.$row.find("a[href]").first();
+    var $valueScope = field.$valueCell && field.$valueCell.length ? field.$valueCell : field.$label;
+    var $existingAnchor = $valueScope.find("a[href]").addBack("a[href]").first();
     if ($existingAnchor.length) {
       $existingAnchor
         .addClass("wise-pl-link-btn ui-button ui-corner-all ui-widget")
@@ -1070,6 +1135,9 @@
     var url = extractUrl(field);
     if (!url) return null;
 
+    var $existingBtn = $valueScope.find(".wise-pl-link-btn").first();
+    if ($existingBtn.length) return $existingBtn; // already built on an earlier pass
+
     var $btn = $("<a></a>")
       .addClass("wise-pl-link-btn ui-button ui-corner-all ui-widget")
       .attr({ href: url, target: "_blank", rel: "noopener noreferrer" })
@@ -1080,7 +1148,8 @@
     if (field.control) $(field.control).addClass("wise-pl-visually-hidden");
     else if (field.$valueCell && field.$valueCell.length) field.$valueCell.addClass("wise-pl-visually-hidden");
 
-    $btn.appendTo(field.$row);
+    if (field.$valueCell && field.$valueCell.length) $btn.appendTo(field.$valueCell);
+    else $btn.insertAfter(field.$label);
     return $btn;
   }
 
@@ -1088,7 +1157,7 @@
     var candidates = [];
     if (field.control) candidates.push(field.control.value);
     if (field.$valueCell && field.$valueCell.length) candidates.push(field.$valueCell.text());
-    candidates.push(field.$row.text());
+    else candidates.push(field.$label.text());
 
     for (var i = 0; i < candidates.length; i++) {
       var match = String(candidates[i] || "").match(/https?:\/\/\S+/);
@@ -1184,8 +1253,14 @@
     if (!$projectInfo.length) return;
     $projectInfo.addClass("wise-pl-system");
 
-    if (!$projectInfo.prev().is(".wise-pl-system-caption")) {
-      var $caption = $("<div></div>").addClass("wise-pl-system-caption");
+    // Look up the caption by class rather than by "is it my immediate
+    // previous sibling" — $root can legitimately get re-inserted directly
+    // before #proj_info on a later pass (see buildLayout), which would
+    // otherwise push the existing caption out of that position and fool a
+    // positional check into creating a duplicate every pass.
+    var $caption = $(".wise-pl-system-caption").first();
+    if (!$caption.length) {
+      $caption = $("<div></div>").addClass("wise-pl-system-caption");
       $("<span></span>").addClass("wise-pl-section-title").text("System Details (HireHop)").appendTo($caption);
       $("<button></button>")
         .attr("type", "button")
@@ -1197,6 +1272,8 @@
           $(this).text(expanded ? "Show less" : "Show more");
         })
         .appendTo($caption);
+    }
+    if (!isImmediatelyBefore($caption, $projectInfo)) {
       $caption.insertBefore($projectInfo);
     }
 
@@ -1207,22 +1284,19 @@
     });
   }
 
-  // ASSUMPTION: native rows follow a simple label-then-value layout, so the
-  // last cell in a row is treated as its "value" for blank detection.
+  // A native row may still hold several unrelated label/value pairs (see
+  // moveFieldToSection), so there is no single reliable "value cell" to
+  // check in isolation here. To avoid ever hiding a row that actually has
+  // visible content, this only counts a row as blank when *nothing* in it
+  // — no cell text, no control value — is non-empty.
   function hasVisibleValue($row) {
-    var $cells = $row.children("td,th");
-    var $valueCell = $cells.length > 1 ? $cells.last() : $row;
-    var $controls = $valueCell.find("input,textarea,select");
+    var hasValue = false;
+    $row.find("input,textarea,select").each(function () {
+      if (compactText($(this).val())) hasValue = true;
+    });
+    if (hasValue) return true;
 
-    if ($controls.length) {
-      var hasValue = false;
-      $controls.each(function () {
-        if (compactText($(this).val())) hasValue = true;
-      });
-      return hasValue;
-    }
-
-    return !!compactText($valueCell.text());
+    return !!compactText($row.text());
   }
 
   function installStyles() {
@@ -1274,7 +1348,10 @@
   window.__wiseProjectLayout = {
     version: CFG.version,
     refresh: function () {
-      state.lastFingerprint = "";
+      $("#" + CFG.rootId).remove();
+      $(".wise-pl-system-caption").remove();
+      state.sections = null;
+      state.lastProjectInfoEl = null;
       scheduleMaintain(0);
     }
   };

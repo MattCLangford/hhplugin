@@ -84,8 +84,8 @@
     {
       "file": "10-projectjobs-qol.js",
       "status": "lazy-project-details",
-      "cacheVersion": "0.6",
-      "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable, adds a compact project-info toggle above the jobs grid, hides secondary project-level timing fields so project dates read as the Wise event wrapper, and regroups the native project fields into Wise Project Details/Project Ownership/Operational Timings/Working Links panels (progressive enhancement, native save behaviour untouched).",
+      "cacheVersion": "0.8",
+      "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable, adds a compact project-info toggle above the jobs grid, and hides secondary project-level timing fields so project dates read as the Wise event wrapper (all depots). Also regroups the native project fields into Wise Project Details/Project Ownership/Operational Timings/Working Links panels, restricted to the Proposal Creation depot only (progressive enhancement, native save behaviour untouched).",
       "recommendedLoadOrder": 10
     },
     {

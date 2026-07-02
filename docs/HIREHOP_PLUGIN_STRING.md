@@ -31,7 +31,7 @@ These files are not included directly in the HireHop company config string. `0-l
 | 7 | `7-captrack.js` | `3.0` | `lazy-home-page` |
 | 8 | `8-stagedesigner.js` | `2.0` | `lazy-supplying-list` |
 | 9 | `9-jobchecklist.js` | `1.0` | `lazy-project-job-tabs` |
-| 10 | `10-projectjobs-qol.js` | `0.6` | `lazy-project-details` |
+| 10 | `10-projectjobs-qol.js` | `0.8` | `lazy-project-details` |
 | 11 | `11-projectjourney.js` | `0.6` | `lazy-project-tabs` |
 
 ## Maintenance Rule
