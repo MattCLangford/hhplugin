@@ -21,7 +21,7 @@
       captrack: { file: "7-captrack.js", version: "3.0" },
       stage: { file: "8-stagedesigner.js", version: "2.0" },
       checklist: { file: "9-jobchecklist.js", version: "1.0" },
-      projectJobs: { file: "10-projectjobs-qol.js", version: "0.5" },
+      projectJobs: { file: "10-projectjobs-qol.js", version: "0.6" },
       projectJourney: { file: "11-projectjourney.js", version: "0.6" }
     }
   };

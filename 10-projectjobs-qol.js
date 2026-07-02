@@ -637,3 +637,645 @@
     }
   };
 })();
+
+/* ===========================================================================
+ * Wise Project Layout
+ * ---------------------------------------------------------------------------
+ * Regroups the native Project Details fields (in #proj_info) into clearer
+ * sections — Wise Project Details, Project Ownership, Operational Timings,
+ * Working Links — plus a muted "System Details" remainder and a relabelled
+ * jobs table caption. This is presentation-only:
+ *   - Fields are MOVED, never cloned or removed, so native names/ids/
+ *     values/event listeners are untouched and nothing native breaks.
+ *   - Every lookup is by visible label text (no fixed IDs to rely on), and
+ *     every step is wrapped so a missing/renamed field is skipped quietly
+ *     instead of breaking the page.
+ *   - Colours are derived from whatever HireHop/Salesforce already applied
+ *     to this project; the HireHop orange is only a last-resort fallback.
+ * Runs independently of the "compact toggle" module above so a failure in
+ * one never affects the other or the native HireHop screen.
+ * ========================================================================= */
+(function () {
+  "use strict";
+
+  var $ = window.jQuery;
+  if (!$) return;
+
+  var LOG_PREFIX = "[Wise Project Layout]";
+
+  var CFG = {
+    version: "2026-07-02.1",
+    stylesId: "wise-project-layout-styles",
+    rootId: "wise-project-layout-root",
+    rootClass: "wise-project-layout-active",
+    maintainRecoveryMs: 5000,
+    fallbackAccent: "#f97316" // Safe fallback only — real accent is detected per project.
+  };
+
+  // Label aliases are matched case-insensitively against the *visible* text
+  // HireHop already renders for a field's label (colon/whitespace ignored).
+  // ASSUMPTION: exact label wording is unconfirmed, so each entry lists the
+  // reasonable variants; anything that doesn't match is left in place
+  // untouched rather than guessed at.
+  var WISE_FIELDS = [
+    { aliases: ["wise status", "sf status", "salesforce status"], label: "Status" },
+    { aliases: ["tier", "client tier"], label: "Tier" },
+    { aliases: ["client", "customer", "account", "client name"], label: "Client" },
+    { aliases: ["type of event", "event type"], label: "Type of Event" },
+    { aliases: ["ye promo budget allocation", "ye promo budget", "promo budget allocation"], label: "YE Promo Budget Allocation" },
+    { aliases: ["project name"], label: "Project Name" },
+    { aliases: ["sf project name", "salesforce project name"], label: "SF Project Name" },
+    { aliases: ["venue", "venue name"], label: "Venue" },
+    { aliases: ["revenue"], label: "Revenue" },
+    { aliases: ["probability"], label: "Probability" },
+    { aliases: ["wise job number", "wise job no", "wise job #"], label: "Wise Job Number" },
+    { aliases: ["project/onsite start", "project onsite start", "onsite start"], label: "Project/Onsite Start" },
+    { aliases: ["project/onsite end", "project onsite end", "onsite end"], label: "Project/Onsite End" },
+    { aliases: ["delivery address", "delivery/contact address"], label: "Delivery Address" },
+    { aliases: ["contact address", "site address"], label: "Contact Address" }
+  ];
+
+  var OWNERSHIP_FIELDS = [
+    { aliases: ["project manager"], label: "Project Manager" },
+    { aliases: ["designer assigned", "designer"], label: "Designer" },
+    { aliases: ["tpm assigned", "tpm", "technical pm"], label: "Technical PM" },
+    { aliases: ["production assigned", "production lead", "production"], label: "Production Lead" }
+  ];
+
+  var TIMING_FIELDS = [
+    { aliases: ["install start"], label: "Install Start" },
+    { aliases: ["show start"], label: "Show Start" },
+    { aliases: ["show end"], label: "Show End" },
+    { aliases: ["derig start"], label: "Derig Start" }
+  ];
+
+  var PLAN_FIELD = { aliases: ["plan url", "planner url", "plan link", "ms planner", "microsoft planner"], buttonLabel: "Open Plan" };
+  var LOOP_FIELD = { aliases: ["loop url", "loop link", "cover sheet", "ms loop", "microsoft loop"], buttonLabel: "Open Cover Sheet" };
+
+  var state = {
+    sections: null,
+    lastFingerprint: "",
+    maintainTimer: null,
+    maintainScheduled: null
+  };
+
+  bootstrap();
+
+  function bootstrap() {
+    installStyles();
+    scheduleMaintain(0);
+    state.maintainTimer = setInterval(function () { scheduleMaintain(0); }, CFG.maintainRecoveryMs);
+
+    $(window).on("load.wiseProjectLayout focus.wiseProjectLayout resize.wiseProjectLayout hashchange.wiseProjectLayout", function () {
+      scheduleMaintain(60);
+    });
+    $(document).on("ajaxComplete.wiseProjectLayout", function () {
+      scheduleMaintain(80);
+    });
+  }
+
+  function scheduleMaintain(delay) {
+    if (state.maintainScheduled) clearTimeout(state.maintainScheduled);
+    state.maintainScheduled = setTimeout(function () {
+      state.maintainScheduled = null;
+      // Safety net: this module must never be able to take the native
+      // HireHop screen down with it, so every pass is caught here.
+      try {
+        maintainLayout();
+      } catch (err) {
+        log("maintain failed, native screen unaffected", err);
+      }
+    }, Math.max(0, Number(delay) || 0));
+  }
+
+  function maintainLayout() {
+    var $projectInfo = $("#proj_info").first();
+    if (!$projectInfo.length) {
+      teardown();
+      return;
+    }
+
+    var fingerprint = getProjectFingerprint($projectInfo);
+    if (fingerprint && fingerprint !== state.lastFingerprint) {
+      // Different project (or a full native re-render) — release any
+      // previously relocated fields back to #proj_info first so nothing is
+      // ever destroyed, then rebuild fresh from the current native markup.
+      releaseRelocatedFields($projectInfo);
+      state.sections = null;
+      state.lastFingerprint = fingerprint;
+    }
+
+    buildLayout($projectInfo);
+  }
+
+  function teardown() {
+    $("#" + CFG.rootId).remove();
+    $(".wise-pl-system-caption").remove();
+    $("body").removeClass(CFG.rootClass);
+    state.sections = null;
+    state.lastFingerprint = "";
+  }
+
+  function getProjectFingerprint($projectInfo) {
+    var fromUrl = String(window.location.href || "").match(/[?&#\/](?:id|project)=?(\d{2,})/i);
+    if (fromUrl && fromUrl[1]) return "url:" + fromUrl[1];
+
+    // Fallback: hash the first non-empty row's label text. Good enough to
+    // notice a project swap even when the URL doesn't change (SPA-style
+    // navigation) without depending on any single field's exact wording.
+    var text = compactText($projectInfo.find("tr,li,.row").first().text());
+    return text ? "row:" + text.slice(0, 80) : "";
+  }
+
+  function releaseRelocatedFields($projectInfo) {
+    var $root = $("#" + CFG.rootId);
+    if (!$root.length) return;
+
+    $root.find("tr").each(function () {
+      var $tr = $(this);
+      if ($tr.hasClass("wise-pl-wrap-row")) {
+        $tr.find(".wise-pl-wrap-cell").children().appendTo($projectInfo);
+      } else {
+        $projectInfo.append($tr);
+      }
+    });
+
+    $root.remove();
+  }
+
+  // ---------------------------------------------------------------------
+  // Layout build — runs on every maintain pass. Idempotent: fields already
+  // relocated on a previous pass are found again (search scope covers both
+  // #proj_info and the section root) and simply re-appended in place, so
+  // repeated calls never duplicate or drop anything.
+  // ---------------------------------------------------------------------
+  function buildLayout($projectInfo) {
+    var $root = $("#" + CFG.rootId);
+    var firstBuild = !$root.length;
+
+    if (firstBuild) {
+      $root = $("<div></div>").attr("id", CFG.rootId).addClass("wise-pl-root");
+      $projectInfo.before($root);
+      state.sections = buildSectionChrome($root);
+    } else if (!isImmediatelyBefore($root, $projectInfo)) {
+      $root.detach();
+      $projectInfo.before($root);
+    }
+
+    $("body").addClass(CFG.rootClass);
+    $root.get(0).style.setProperty("--wise-project-accent", detectProjectAccentColour());
+
+    var claimed = [];
+    var $scope = getSearchScope($projectInfo, $root);
+
+    WISE_FIELDS.forEach(function (field) {
+      moveFieldToSection(field.aliases, state.sections.wise.$body, field.label, $scope, claimed);
+    });
+    OWNERSHIP_FIELDS.forEach(function (field) {
+      moveFieldToSection(field.aliases, state.sections.ownership.$body, field.label, $scope, claimed);
+    });
+    TIMING_FIELDS.forEach(function (field) {
+      moveFieldToSection(field.aliases, state.sections.timings.$body, field.label, $scope, claimed, { normaliseEmpty: true });
+    });
+
+    buildWorkingLinks($scope, claimed);
+
+    hideSectionIfEmpty(state.sections.wise);
+    hideSectionIfEmpty(state.sections.ownership);
+    hideSectionIfEmpty(state.sections.timings);
+    hideSectionIfEmpty(state.sections.links);
+
+    applySystemDetailsTreatment($projectInfo);
+    relabelDeliveryPackages();
+  }
+
+  function isImmediatelyBefore($el, $reference) {
+    return !!($el.length && $reference.length && $el.next().is($reference));
+  }
+
+  function getSearchScope($projectInfo, $root) {
+    return $projectInfo.add($root);
+  }
+
+  function buildSectionChrome($root) {
+    var wise = createSection("Wise Project Details", { key: "wise", primary: true });
+    var ownership = createSection("Project Ownership", { key: "ownership" });
+    var timings = createSection("Operational Timings", { key: "timings" });
+    var links = createSection("Working Links", { key: "links" });
+
+    $root.append(wise.$section, ownership.$section, timings.$section, links.$section);
+
+    return { wise: wise, ownership: ownership, timings: timings, links: links };
+  }
+
+  function hideSectionIfEmpty(section) {
+    if (!section) return;
+    section.$section.toggleClass("wise-pl-section--empty", section.$body.children().length === 0);
+  }
+
+  // ---- Helper: createSection ---------------------------------------------
+  // Builds a native-looking grey panel (thin border, small caption, thin
+  // accent-coloured top rule) and returns the <tbody> fields get appended
+  // into. `options.primary` gives it a lighter/prominent header;
+  // `options.secondary` mutes it; `options.collapsible` adds a
+  // native-looking "Show more" toggle, collapsed by default.
+  function createSection(title, options) {
+    options = options || {};
+    var $section = $("<section></section>")
+      .addClass("wise-pl-section")
+      .attr("data-wise-pl-section", options.key || "");
+    if (options.primary) $section.addClass("wise-pl-section--primary");
+    if (options.secondary) $section.addClass("wise-pl-section--secondary");
+
+    var $hdr = $("<div></div>").addClass("wise-pl-section-hdr").appendTo($section);
+    $("<h3></h3>").addClass("wise-pl-section-title").text(title).appendTo($hdr);
+
+    if (options.collapsible) {
+      $section.addClass("wise-pl-section--collapsible is-collapsed");
+      $("<button></button>")
+        .attr("type", "button")
+        .addClass("wise-pl-toggle")
+        .text("Show more")
+        .on("click.wiseProjectLayout", function (event) {
+          event.preventDefault();
+          var collapsed = $section.toggleClass("is-collapsed").hasClass("is-collapsed");
+          $(this).text(collapsed ? "Show more" : "Show less");
+        })
+        .appendTo($hdr);
+    }
+
+    var $table = $("<table></table>").addClass("wise-pl-table").appendTo($section);
+    var $body = $("<tbody></tbody>").appendTo($table);
+
+    return { $section: $section, $body: $body, $hdr: $hdr };
+  }
+
+  // ---- Helper: findFieldByLabel -------------------------------------------
+  // Finds a visible label matching one of `aliases` within `$scope`.
+  // Returns null (never throws) when nothing matches so callers can skip
+  // the field safely — this is the module's core "safe fallback".
+  function findFieldByLabel(aliases, $scope, claimed) {
+    if (!$scope || !$scope.length) return null;
+
+    var wanted = aliases.map(normaliseLabelText);
+    var result = null;
+
+    $scope.find("label,td,th,span,b,strong,dt,div").each(function () {
+      if (result) return false;
+      if (claimed && claimed.indexOf(this) !== -1) return;
+
+      var text = normaliseLabelText(ownText($(this)));
+      if (!text || wanted.indexOf(text) === -1) return;
+
+      result = $(this);
+      return false;
+    });
+
+    if (!result) return null;
+    if (claimed) claimed.push(result.get(0));
+
+    var $row = result.closest("tr");
+    if (!$row.length) $row = result.closest(".row,.form-row,.field-row,li,.ui-helper-clearfix");
+    if (!$row.length) $row = result.parent();
+
+    var $valueCell = result.is("td,th") ? result.nextAll("td,th").first() : $();
+    var control = null;
+    var forId = result.attr("for");
+    if (forId) {
+      try { control = document.getElementById(forId); } catch (err) { control = null; }
+    }
+    if (!control) {
+      var $control = $row.find("input,textarea,select").first();
+      if ($control.length) control = $control.get(0);
+    }
+
+    return { $label: result, $row: $row, $valueCell: $valueCell, control: control };
+  }
+
+  function normaliseLabelText(value) {
+    return compactText(value).toLowerCase().replace(/[:：]\s*$/, "");
+  }
+
+  function ownText($element) {
+    if (!$element || !$element.length) return "";
+    var text = "";
+    $element.contents().each(function () {
+      if (this.nodeType === 3) text += this.nodeValue;
+    });
+    text = compactText(text);
+    return text || compactText($element.text());
+  }
+
+  // ---- Helper: moveFieldToSection -----------------------------------------
+  // Physically relocates a field's row into a section's <tbody>. The field
+  // element itself is moved (appendTo), never cloned, so its name/id/value/
+  // bound listeners are untouched — this is a reparent, not a redraw.
+  // `newLabel`, if given, only rewrites the *label's own text node* — the
+  // underlying control's name/id/value are never touched.
+  function moveFieldToSection(aliases, $sectionBody, newLabel, $scope, claimed, options) {
+    options = options || {};
+    var field = findFieldByLabel(aliases, $scope, claimed);
+    if (!field) {
+      log("Field not found, left in native position:", aliases[0]);
+      return false;
+    }
+
+    if (newLabel) relabel(field.$label, newLabel);
+    appendRowToSection(field.$row, $sectionBody);
+    if (options.normaliseEmpty) normaliseEmptyValue(field);
+    return true;
+  }
+
+  function appendRowToSection($row, $sectionBody) {
+    if ($row.is("tr")) {
+      $sectionBody.append($row);
+      return;
+    }
+    if ($sectionBody.find($row).length) return; // already relocated on an earlier pass
+    var $wrapRow = $("<tr></tr>").addClass("wise-pl-wrap-row");
+    $("<td></td>").addClass("wise-pl-wrap-cell").attr("colspan", 2).append($row).appendTo($wrapRow);
+    $sectionBody.append($wrapRow);
+  }
+
+  function relabel($label, newLabel) {
+    if (!$label || !$label.length) return;
+    var node = $label.get(0);
+    var textNode = null;
+    for (var i = 0; i < node.childNodes.length; i++) {
+      if (node.childNodes[i].nodeType === 3 && compactText(node.childNodes[i].nodeValue)) {
+        textNode = node.childNodes[i];
+        break;
+      }
+    }
+    var hadColon = /[:：]\s*$/.test(compactText($label.text()));
+    var nextText = newLabel + (hadColon ? ":" : "");
+    if (textNode) textNode.nodeValue = nextText;
+    else $label.text(nextText);
+  }
+
+  // ---- Helper: normaliseEmptyValue ----------------------------------------
+  // Blank display-only values read as "Not set" instead of empty space.
+  // Never rewrites an <input>/<select>/<textarea>'s value — those only get
+  // a muted CSS class, since changing their value would change saved data.
+  function normaliseEmptyValue(field) {
+    var $target = field.$valueCell && field.$valueCell.length ? field.$valueCell : field.$row;
+    if (!$target || !$target.length) return;
+
+    var $controls = $target.find("input,textarea,select");
+    if ($controls.length) {
+      if (!compactText($controls.first().val())) $target.addClass("wise-pl-empty-control");
+      return;
+    }
+
+    if (!compactText($target.text())) {
+      $target.addClass("wise-pl-empty-value").html('<span class="wise-pl-empty-dash">Not set</span>');
+    }
+  }
+
+  // ---- Section: Working Links ----------------------------------------------
+  // Plan/Loop links become native-looking buttons that open in a new tab.
+  // When HireHop already renders a real <a href>, that element is restyled
+  // in place (href/target/listeners untouched) rather than replaced.
+  function buildWorkingLinks($scope, claimed) {
+    appendLinkRow(PLAN_FIELD, state.sections.links.$body, $scope, claimed);
+    appendLinkRow(LOOP_FIELD, state.sections.links.$body, $scope, claimed);
+  }
+
+  function appendLinkRow(fieldDef, $sectionBody, $scope, claimed) {
+    var field = findFieldByLabel(fieldDef.aliases, $scope, claimed);
+    if (!field) {
+      log("Link field not found, left in native position:", fieldDef.aliases[0]);
+      return false;
+    }
+
+    var $btn = makeLinkButton(field, fieldDef.buttonLabel);
+    if (!$btn) return false;
+
+    appendRowToSection(field.$row, $sectionBody);
+    return true;
+  }
+
+  // ---- Helper: makeLinkButton ----------------------------------------------
+  function makeLinkButton(field, label) {
+    var $existingAnchor = field.$row.find("a[href]").first();
+    if ($existingAnchor.length) {
+      $existingAnchor
+        .addClass("wise-pl-link-btn ui-button ui-corner-all ui-widget")
+        .attr("target", "_blank")
+        .attr("rel", "noopener noreferrer")
+        .text(label);
+      return $existingAnchor;
+    }
+
+    var url = extractUrl(field);
+    if (!url) return null;
+
+    var $btn = $("<a></a>")
+      .addClass("wise-pl-link-btn ui-button ui-corner-all ui-widget")
+      .attr({ href: url, target: "_blank", rel: "noopener noreferrer" })
+      .text(label);
+
+    // Keep the raw control/text in the DOM (so any native save logic bound
+    // to it keeps running) but hide it visually behind the new button.
+    if (field.control) $(field.control).addClass("wise-pl-visually-hidden");
+    else if (field.$valueCell && field.$valueCell.length) field.$valueCell.addClass("wise-pl-visually-hidden");
+
+    $btn.appendTo(field.$row);
+    return $btn;
+  }
+
+  function extractUrl(field) {
+    var candidates = [];
+    if (field.control) candidates.push(field.control.value);
+    if (field.$valueCell && field.$valueCell.length) candidates.push(field.$valueCell.text());
+    candidates.push(field.$row.text());
+
+    for (var i = 0; i < candidates.length; i++) {
+      var match = String(candidates[i] || "").match(/https?:\/\/\S+/);
+      if (match) return match[0].replace(/[),.]+$/, "");
+    }
+    return "";
+  }
+
+  // ---- Helper: detectProjectAccentColour -----------------------------------
+  // Reuses whatever colour HireHop/Salesforce already applied to this
+  // project (a status swatch near the project fields, or a coloured jobs
+  // grid row). Falls back to the existing HireHop orange only when nothing
+  // usable is found — never a hard-coded brand colour otherwise.
+  function detectProjectAccentColour() {
+    return findColourSwatch() || findJobRowColour() || CFG.fallbackAccent;
+  }
+
+  function findColourSwatch() {
+    var found = "";
+    $("#proj_info [class*='colour'],#proj_info [class*='color'],#proj_info [style*='background']").each(function () {
+      if (found) return false;
+      var hex = rgbToHex($(this).css("background-color"));
+      if (hex && !isNeutralColour(hex)) found = hex;
+    });
+    return found;
+  }
+
+  function findJobRowColour() {
+    var found = "";
+    $("#jobs_grid tr,#project_jobs_grid tr").each(function () {
+      if (found) return false;
+      var hex = rgbToHex($(this).css("background-color"));
+      if (hex && !isNeutralColour(hex)) found = hex;
+    });
+    return found;
+  }
+
+  function rgbToHex(value) {
+    var match = String(value || "").match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+    if (!match) return "";
+    return "#" +
+      ("0" + parseInt(match[1], 10).toString(16)).slice(-2) +
+      ("0" + parseInt(match[2], 10).toString(16)).slice(-2) +
+      ("0" + parseInt(match[3], 10).toString(16)).slice(-2);
+  }
+
+  function isNeutralColour(hex) {
+    var match = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+    if (!match) return true;
+    var r = parseInt(match[1], 16), g = parseInt(match[2], 16), b = parseInt(match[3], 16);
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    return (max - min) < 12 || max > 250; // greyscale or near-white counts as "no real colour"
+  }
+
+  // ---- Section: Delivery Packages (jobs table) -----------------------------
+  // The native jobs grid itself is never touched — only a caption is added
+  // above it, and (best-effort) its jqGrid title bar text is relabelled.
+  function relabelDeliveryPackages() {
+    var $grid = $("#gbox_jobs_grid").first();
+    if (!$grid.length) return;
+
+    if (!$grid.prev().is(".wise-pl-jobs-caption")) {
+      $("<div></div>").addClass("wise-pl-jobs-caption").text("Delivery Packages (Jobs)").insertBefore($grid);
+    }
+
+    var $titleBar = $grid.find(".ui-jqgrid-titlebar .ui-jqgrid-title").first();
+    if ($titleBar.length && !$titleBar.attr("data-wise-pl-original-title")) {
+      $titleBar.attr("data-wise-pl-original-title", $titleBar.text() || "1");
+      $titleBar.text("Delivery Packages (Jobs)");
+    }
+
+    applyJobStatusBadges();
+  }
+
+  // Lightly badges job rows using whatever status/row colour HireHop has
+  // already applied — additive only (an inset box-shadow), never replaces
+  // native row styling, and does nothing if no colour is detectable.
+  function applyJobStatusBadges() {
+    $("#jobs_grid tr[role='row']").each(function () {
+      var $row = $(this);
+      var hex = rgbToHex($row.css("background-color"));
+      if (!hex || isNeutralColour(hex)) return;
+      $row.find("td").first().css("box-shadow", "inset 3px 0 0 " + hex);
+    });
+  }
+
+  // ---- Section: System Details (HireHop) -----------------------------------
+  // Left in its native table/position — nothing here is moved — so any
+  // HireHop behaviour bound to these rows keeps working exactly as before.
+  // Rows with a value stay visible (just visually muted/secondary); rows
+  // with no value are hidden behind a native-looking "Show more" toggle.
+  function applySystemDetailsTreatment($projectInfo) {
+    if (!$projectInfo.length) return;
+    $projectInfo.addClass("wise-pl-system");
+
+    if (!$projectInfo.prev().is(".wise-pl-system-caption")) {
+      var $caption = $("<div></div>").addClass("wise-pl-system-caption");
+      $("<span></span>").addClass("wise-pl-section-title").text("System Details (HireHop)").appendTo($caption);
+      $("<button></button>")
+        .attr("type", "button")
+        .addClass("wise-pl-toggle")
+        .text("Show more")
+        .on("click.wiseProjectLayout", function (event) {
+          event.preventDefault();
+          var expanded = $projectInfo.toggleClass("wise-pl-system-expanded").hasClass("wise-pl-system-expanded");
+          $(this).text(expanded ? "Show less" : "Show more");
+        })
+        .appendTo($caption);
+      $caption.insertBefore($projectInfo);
+    }
+
+    $projectInfo.find("tr").each(function () {
+      var $row = $(this);
+      if ($row.closest(".wise-pl-section").length) return; // already relocated into a named section
+      $row.toggleClass("wise-pl-blank-row", !hasVisibleValue($row));
+    });
+  }
+
+  // ASSUMPTION: native rows follow a simple label-then-value layout, so the
+  // last cell in a row is treated as its "value" for blank detection.
+  function hasVisibleValue($row) {
+    var $cells = $row.children("td,th");
+    var $valueCell = $cells.length > 1 ? $cells.last() : $row;
+    var $controls = $valueCell.find("input,textarea,select");
+
+    if ($controls.length) {
+      var hasValue = false;
+      $controls.each(function () {
+        if (compactText($(this).val())) hasValue = true;
+      });
+      return hasValue;
+    }
+
+    return !!compactText($valueCell.text());
+  }
+
+  function installStyles() {
+    if ($("#" + CFG.stylesId).length) return;
+
+    var accentVar = "var(--wise-project-accent," + CFG.fallbackAccent + ")";
+    var css = [
+      "#" + CFG.rootId + "{margin:0 0 8px;box-sizing:border-box;}",
+      ".wise-pl-section{background:#f7f7f7;border:1px solid #c9c9c9;border-radius:3px;margin-bottom:8px;box-sizing:border-box;overflow:hidden;}",
+      ".wise-pl-section--empty{display:none;}",
+      ".wise-pl-section-hdr{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 8px;background:#ececec;border-bottom:1px solid #c9c9c9;border-top:3px solid " + accentVar + ";box-sizing:border-box;}",
+      ".wise-pl-section--primary{border-color:" + accentVar + ";}",
+      ".wise-pl-section--primary>.wise-pl-section-hdr{background:#fff;}",
+      ".wise-pl-section-title{font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#333;margin:0;}",
+      ".wise-pl-toggle{font-size:11px;border:1px solid #c9c9c9;background:#fff;border-radius:3px;padding:2px 8px;cursor:pointer;color:#333;}",
+      ".wise-pl-toggle:hover{background:#f0f0f0;}",
+      ".wise-pl-section--collapsible.is-collapsed .wise-pl-table{display:none;}",
+      ".wise-pl-table{width:100%;border-collapse:collapse;font-size:12px;}",
+      ".wise-pl-table tr>td:first-child,.wise-pl-table tr>th:first-child{width:38%;padding:3px 8px;color:#555;vertical-align:top;}",
+      ".wise-pl-table tr>td:last-child,.wise-pl-table tr>th:last-child{padding:3px 8px;color:#111;}",
+      ".wise-pl-table tr:nth-child(even){background:rgba(0,0,0,.03);}",
+      ".wise-pl-wrap-cell{padding:3px 8px;}",
+      ".wise-pl-empty-value{color:#999;}",
+      ".wise-pl-empty-dash{font-style:italic;color:#999;}",
+      ".wise-pl-empty-control{opacity:.6;}",
+      ".wise-pl-visually-hidden{display:none!important;}",
+      ".wise-pl-link-btn{display:inline-block;text-decoration:none;padding:3px 10px;font-size:12px;}",
+      "#proj_info.wise-pl-system{font-size:11px;color:#555;background:#fafafa;}",
+      "#proj_info.wise-pl-system tr.wise-pl-blank-row{display:none;}",
+      "#proj_info.wise-pl-system.wise-pl-system-expanded tr.wise-pl-blank-row{display:table-row;}",
+      ".wise-pl-system-caption{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 8px;border-top:3px solid " + accentVar + ";background:#ececec;border:1px solid #c9c9c9;border-bottom:0;box-sizing:border-box;}",
+      ".wise-pl-jobs-caption{font-size:11px;font-weight:bold;text-transform:uppercase;letter-spacing:.04em;color:#333;padding:4px 2px;border-top:3px solid " + accentVar + ";margin-top:4px;}"
+    ].join("\n");
+
+    $("<style></style>", { id: CFG.stylesId, text: css }).appendTo("head");
+  }
+
+  function compactText(value) {
+    return String(value == null ? "" : value).replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+  }
+
+  function log() {
+    if (!window.console || !window.console.log) return;
+    var args = Array.prototype.slice.call(arguments);
+    args.unshift(LOG_PREFIX);
+    window.console.log.apply(window.console, args);
+  }
+
+  window.__wiseProjectLayout = {
+    version: CFG.version,
+    refresh: function () {
+      state.lastFingerprint = "";
+      scheduleMaintain(0);
+    }
+  };
+})();

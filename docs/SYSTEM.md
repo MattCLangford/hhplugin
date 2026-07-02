@@ -34,7 +34,7 @@ Load this in HireHop:
 
 `9-jobchecklist.js` adjusts the project and job page tabs across all depots. Non-admin users have the Billing and Purchase orders tabs hidden, admin users keep the full native tab set, and everyone gets a Checklist tab that fills the native tab content area. The checklist uses placeholder technical-manager items until the final HireHop project and job custom fields are named.
 
-`10-projectjobs-qol.js` keeps the project page jobs list reachable across all depots when project-level custom fields make the upper information section tall. It makes the project details tab scrollable and adds a native-looking compact toggle that hides only the upper project information block so the existing HireHop jobs grid gets more visible space.
+`10-projectjobs-qol.js` keeps the project page jobs list reachable across all depots when project-level custom fields make the upper information section tall. It makes the project details tab scrollable and adds a native-looking compact toggle that hides only the upper project information block so the existing HireHop jobs grid gets more visible space. It also regroups the native project fields into clearer Wise Project Details, Project Ownership, Operational Timings, and Working Links panels (fields are relocated, never cloned, so native names/ids/save behaviour are untouched), mutes the remaining native fields behind a "System Details (HireHop)" show-more, and relabels the jobs table caption to "Delivery Packages (Jobs)".
 
 ## Reference And Legacy Files
 
