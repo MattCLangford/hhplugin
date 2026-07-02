@@ -60,7 +60,7 @@
   var CUSTOM_FIELD_GROUP_KEYS = ["wise-project-details", "project-ownership", "operational-timings", "working-links"];
 
   var CFG = {
-    version: "2026-07-03.1",
+    version: "2026-07-03.2",
     maintainRecoveryMs: 5000
   };
 
@@ -107,21 +107,66 @@
   }
 
   // ---- Depot gate ----------------------------------------------------------
-  // Reuses the shared, already-tested depot-detection module from
-  // 5-hirehop.js rather than re-implementing depot detection here. Its
-  // default rule is already "Proposal Creation" only. Fails closed (no
-  // grouping) if the shared module isn't available or can't detect a
-  // depot — the native layout is always a safe fallback.
+  // This gate must reflect the logged-in USER's assigned/active depot (a
+  // session-level permissions barrier), not which depot any given project
+  // happens to belong to.
+  //
+  // 5-hirehop.js's shared `depot.isAllowed()` was deliberately NOT reused
+  // here: on the project details page it was confirmed (via
+  // WiseProposalSectionBuilderHireHop.depot.debug()) to always resolve to
+  // {id:"14", name:"proposal creation"} regardless of the user's actual
+  // active depot — its DOM-wide `select,input,textarea` scan is latching
+  // onto some other always-present element on this page, not the header
+  // depot switcher. That heuristic is shared with other pages that DO
+  // depend on it working as-is, so it wasn't safe to change; instead this
+  // module reads the one signal that was confirmed (via the same debug
+  // output) to actually track the live active depot: window.user's own
+  // depot field, which changed from 17 to 14 when the depot was switched
+  // to Proposal Creation in testing.
+  //
+  // ASSUMPTION: window.user exposes the active depot as an id under one of
+  // USER_DEPOT_KEYS below (confirmed present, exact key not individually
+  // isolated). depot id 14 = "Proposal Creation" was confirmed the same
+  // way; resolved dynamically via window.depots when available, with that
+  // confirmed id as a fallback if the depots table isn't loaded on this
+  // page. Fails closed (no grouping) whenever this can't be confirmed.
+  var USER_DEPOT_KEYS = [
+    "DEPOT_ID", "depot_id", "DEFAULT_DEPOT_ID", "default_depot_id",
+    "BRANCH_ID", "branch_id", "WAREHOUSE_ID", "warehouse_id",
+    "DEPOT", "depot", "DEPOT_NAME", "depot_name",
+    "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
+  ];
+  var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14"; // confirmed via depot.debug(); used only if window.depots can't resolve it dynamically
+
   function isProposalCreationDepot() {
     var shared = window.WiseProposalSectionBuilderHireHop;
-    if (!shared || !shared.depot || typeof shared.depot.isAllowed !== "function") return false;
+    if (!shared || !shared.depot) return false;
 
     try {
-      return !!shared.depot.isAllowed();
+      var raw = readCurrentUserDepotValue();
+      if (!raw) return false; // can't confirm the user's depot — fail closed
+
+      var rawId = shared.depot.normaliseId ? shared.depot.normaliseId(raw) : "";
+      var allowedId = (typeof shared.depot.resolveId === "function" && shared.depot.resolveId("Proposal Creation")) || KNOWN_PROPOSAL_CREATION_DEPOT_ID;
+      if (rawId && allowedId && rawId === allowedId) return true;
+
+      var rawText = shared.depot.normaliseText ? shared.depot.normaliseText(raw) : String(raw).trim().toLowerCase();
+      return rawText === "proposal creation";
     } catch (err) {
       log("depot check failed, grouping left inactive as a precaution", err);
       return false;
     }
+  }
+
+  function readCurrentUserDepotValue() {
+    if (!window.user || typeof window.user !== "object") return "";
+
+    for (var i = 0; i < USER_DEPOT_KEYS.length; i++) {
+      var value = window.user[USER_DEPOT_KEYS[i]];
+      if (value != null && value !== "") return value;
+    }
+
+    return "";
   }
 
   // ---- Group: Wise Project Details / Project Ownership / Operational
@@ -203,10 +248,18 @@
     refresh: function () { scheduleMaintain(0); },
     describe: function () {
       var $projectInfo = $("#proj_info").first();
+      var shared = window.WiseProposalSectionBuilderHireHop;
+      var rawDepot = readCurrentUserDepotValue();
+
       return {
         version: CFG.version,
         projectInfoFound: !!$projectInfo.length,
         depotAllowed: isProposalCreationDepot(),
+        depotDebug: {
+          currentUserDepotRaw: rawDepot,
+          currentUserDepotId: rawDepot && shared && shared.depot && shared.depot.normaliseId ? shared.depot.normaliseId(rawDepot) : "",
+          resolvedProposalCreationId: (shared && shared.depot && typeof shared.depot.resolveId === "function" && shared.depot.resolveId("Proposal Creation")) || KNOWN_PROPOSAL_CREATION_DEPOT_ID + " (fallback, window.depots unavailable)"
+        },
         groups: $projectInfo.length ? $projectInfo.find("[" + GROUP_ATTR + "]").map(function () {
           return $(this).attr(GROUP_ATTR);
         }).get() : []

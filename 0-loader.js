@@ -23,7 +23,7 @@
       checklist: { file: "9-jobchecklist.js", version: "1.0" },
       projectJobs: { file: "10-projectjobs-qol.js", version: "0.9" },
       projectJourney: { file: "11-projectjourney.js", version: "0.6" },
-      projectGroups: { file: "12-projectgroups.js", version: "0.1" }
+      projectGroups: { file: "12-projectgroups.js", version: "0.2" }
     }
   };
 
