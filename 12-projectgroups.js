@@ -2,9 +2,22 @@
  * Wise Project Field Groups
  * ---------------------------------------------------------------------------
  * Groups the native Project Details fields (in #proj_info) into 5 logical
- * groups WITHOUT any visual change: no new styling, no headings, no
- * relabeling, no colour. This is a pure DOM-grouping pass to set up for a
- * later styling change, verified against the real page markup:
+ * groups and reorders the two top-level blocks so Salesforce/Wise info
+ * leads and native HireHop record fields take a back seat. No new styling,
+ * headings, relabeling, or colour — this is a pure DOM grouping/position
+ * pass, verified against the real page markup:
+ *
+ *   - Project ID# through Project/Onsite End (the header identity strip,
+ *     contact/company/address, project type/warehouse/headline, and
+ *     venue/delivery/dates blocks) are native HireHop record fields.
+ *   - Status through YE Promo Budget Allocation are Salesforce-linked,
+ *     read-only mirrors of Salesforce data (not editable in HireHop).
+ *   - Project Manager through Production Assigned are also Salesforce
+ *     fields; Technical (TPM) and Production additionally have a native
+ *     HireHop equivalent (the "managed by" field in the header strip) —
+ *     that native/Salesforce overlap is left as-is this pass.
+ *   - Install Start through Plan are operational fields assigned directly
+ *     in HireHop for the event.
  *
  *   - #proj_info is a CSS Grid (3 columns). Its native direct children are:
  *     the project-id/managed-by header block, the contact/company/address
@@ -28,6 +41,12 @@
  * for this module to "release" or "undo" on a project switch — a freshly
  * rendered #proj_info just gets grouped again from a clean, native state.
  *
+ * Reordering: once grouped, #proj_info has exactly two top-level children —
+ * #custom_fields_container and the "system-details" wrapper. These are
+ * swapped (a plain DOM move, `insertBefore`) so #custom_fields_container
+ * renders first. #custom_fields_container is moved as one already
+ * self-contained unit, so its own flex layout needs no changes either.
+ *
  * Deferred to a later pass (left in native position, ungrouped, for now):
  *   - Project/Onsite Start & End (the unlabeled `.start_date`/`.finish_date`
  *     rows inside #dates_container) — these currently rely on being
@@ -38,9 +57,11 @@
  *     — a compound interactive widget; safer to leave untouched until we
  *     confirm it doesn't rely on being at its current DOM position.
  *
- * Restricted to the Proposal Creation depot (reuses the shared depot
- * module from 5-hirehop.js, loaded alongside this file — see
- * 0-loader.js). On every other depot this module does nothing at all.
+ * Restricted to the Proposal Creation depot — gated on the logged-in
+ * user's own active depot (window.user), not the shared 5-hirehop.js DOM
+ * scan, which was confirmed unreliable on this specific page (see
+ * isProposalCreationDepot below for why). On every other depot this
+ * module does nothing at all.
  *
  * Colour: #proj_info already carries the live project colour as its own
  * inline `background-color` (confirmed from real markup, e.g.
@@ -60,7 +81,7 @@
   var CUSTOM_FIELD_GROUP_KEYS = ["wise-project-details", "project-ownership", "operational-timings", "working-links"];
 
   var CFG = {
-    version: "2026-07-03.2",
+    version: "2026-07-03.3",
     maintainRecoveryMs: 5000
   };
 
@@ -104,6 +125,7 @@
 
     groupCustomFields($projectInfo);
     groupSystemDetails($projectInfo);
+    reorderGroups($projectInfo);
   }
 
   // ---- Depot gate ----------------------------------------------------------
@@ -226,6 +248,26 @@
 
     if (!toWrap.length) return;
     $(toWrap).wrapAll(makeGroupWrapper("system-details"));
+  }
+
+  // ---- Reorder: Salesforce/Wise info before native System Details ---------
+  // #proj_info has exactly two top-level children once grouped:
+  // #custom_fields_container (Wise Project Details, Project Ownership,
+  // Operational Timings, Working Links — all Salesforce-linked or
+  // HireHop-assigned operational fields) and the "system-details" wrapper
+  // (Project ID through Project/Onsite End — native HireHop record
+  // fields). Per request, the native block should take a back seat: this
+  // just swaps which of the two comes first among #proj_info's direct
+  // children. #custom_fields_container is moved as a single, already
+  // self-contained unit — its own flex layout is untouched, so this is a
+  // pure position change with no new styling.
+  function reorderGroups($projectInfo) {
+    var $container = $projectInfo.find("#custom_fields_container").first();
+    var $systemDetails = $projectInfo.children("[" + GROUP_ATTR + "='system-details']").first();
+    if (!$container.length || !$systemDetails.length) return;
+    if ($container.next().is($systemDetails)) return; // already in the desired order
+
+    $container.insertBefore($systemDetails);
   }
 
   // `display:contents` is a structural style, not decoration: it makes the

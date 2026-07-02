@@ -98,8 +98,8 @@
     {
       "file": "12-projectgroups.js",
       "status": "lazy-project-details",
-      "cacheVersion": "0.2",
-      "role": "Proposal Creation depot only (gated on the logged-in user's active depot via window.user, not the shared 5-hirehop.js DOM-scan helper, which was confirmed unreliable on this page): groups the native #proj_info project details fields into 5 logical groups (System Details, Wise Project Details, Project Ownership, Operational Timings, Working Links) via in-place display:contents wrapping — pure DOM grouping, no styling/headings/relabeling/colour yet, native layout and save behaviour fully unaffected.",
+      "cacheVersion": "0.3",
+      "role": "Proposal Creation depot only (gated on the logged-in user's active depot via window.user, not the shared 5-hirehop.js DOM-scan helper, which was confirmed unreliable on this page): groups the native #proj_info project details fields into 5 logical groups (System Details, Wise Project Details, Project Ownership, Operational Timings, Working Links) via in-place display:contents wrapping, then reorders the two top-level blocks so the Salesforce/Wise group renders before the native System Details block. Pure DOM grouping/position, no styling/headings/relabeling/colour yet, native layout and save behaviour fully unaffected.",
       "recommendedLoadOrder": 12
     }
   ],
