@@ -2,11 +2,11 @@
  * Wise Project Field Groups
  * ---------------------------------------------------------------------------
  * Groups the native Project Details fields (in #proj_info) into boxed
- * "card" sections, reorders them so System Details (compact, native
- * HireHop record fields) leads, Wise Project Details (Salesforce-linked,
- * the main attraction) follows, and Project Ownership / Operational
- * Timings / Working Links sit together as a row of three supporting
- * cards underneath. Verified against the real page markup:
+ * "card" sections, reorders them so Wise Project Details (Salesforce-
+ * linked, the main attraction) leads, Project Ownership / Operational
+ * Timings / Working Links follow as a row of three supporting cards, and
+ * System Details (compact, native HireHop record fields) takes a back
+ * seat at the bottom. Verified against the real page markup:
  *
  *   - Project ID# through Project/Onsite End (the header identity strip,
  *     contact/company/address, project type/warehouse/headline, and
@@ -53,25 +53,38 @@
  * render as three equal cards side by side.
  *
  * Visual design: every section is styled as a white, rounded, subtly
- * shadowed "card" with a small accent-tinted icon badge and an uppercase
- * title in its header — deliberately closer to a dashboard-style layout
- * than plain bordered boxes. System Details, being native/lower-priority
- * information, is intentionally compact by default with a "Show more" /
- * "Show less" toggle that expands its body — Wise Project Details (the
- * Salesforce-sourced info that matters most day-to-day) is left fully
- * expanded and visually primary. The Status field inside Wise Project
- * Details gets a small coloured pill (best-effort text match against
- * known status values — see applyStatusBadge — since the native markup
- * for individual fields isn't something this module otherwise inspects).
+ * shadowed "card" with a bold accent-coloured left rail, an accent-tinted
+ * icon badge, and an uppercase title in its header — deliberately closer
+ * to a dashboard-style layout than plain bordered boxes, and deliberately
+ * making the live project/stage colour hard to miss (thicker rail on
+ * Wise Project Details specifically, as the primary card). System
+ * Details, being native/lower-priority information, is intentionally
+ * compact by default with a "Show more" / "Show less" toggle that
+ * expands its body, and forces dark text on its body (see the system-
+ * details CSS rules) because some of its native rows are styled by
+ * HireHop as white text meant to sit on #proj_info's own native coloured
+ * fill, which our white card background would otherwise hide behind.
+ * Wise Project Details itself is laid out as 3 equal columns (its
+ * native per-field inline widths are overridden for this). The Status
+ * field inside Wise Project Details gets a small coloured pill
+ * (best-effort text match against known status values — see
+ * applyStatusBadge — since the native markup for individual fields isn't
+ * something this module otherwise inspects) using a fixed palette:
+ * purple=quote, yellow=very likely, orange=hold, green=confirmed,
+ * grey=closed/lost/cancelled, blue=completed/invoiced.
  *
  * Accent colour: #proj_info already carries the live project colour as its
  * own inline `background-color` (confirmed from real markup, e.g.
  * `style="background-color: rgb(20, 196, 8)"`) — read directly and exposed
  * as the `--wise-project-accent` (hex) and `--wise-project-accent-rgb`
  * ("r,g,b", for translucent tints) CSS variables on #proj_info, so every
- * section above inherits it. Falls back to the existing HireHop-orange
- * accent already used elsewhere in this codebase only when no colour can
- * be read. NOTE: the accent is applied per-section via CSS var, but is
+ * section above inherits it (left rails, icon badges). Falls back to the
+ * existing HireHop-orange accent already used elsewhere in this codebase
+ * only when no colour can be read. The Status pill is the one exception:
+ * it deliberately does NOT use this dynamic accent — it follows the
+ * fixed stage palette above instead, per request, since it needs to
+ * reflect the specific Salesforce stage rather than whatever colour
+ * happens to be on #proj_info. NOTE: the dynamic accent itself is still
  * NOT yet uniform across every element that arguably should use it (e.g.
  * some native HireHop chrome still uses its own colouring) — known gap,
  * intentionally left for a later pass.
@@ -131,16 +144,26 @@
     "working-links": '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="1.5" y="6.5" width="8" height="6" rx="3" transform="rotate(-45 5.5 9.5)"/><rect x="10.5" y="6.5" width="8" height="6" rx="3" transform="rotate(-45 14.5 9.5)"/></svg>'
   };
 
-  // Best-effort colour map for the Status pill — matched against the
-  // Status field's plain text (see applyStatusBadge). Unknown statuses
-  // are simply left unbadged rather than guessed at.
-  var STATUS_COLOURS = {
-    "confirmed": true, "completed": true, "hold": true, "provisional": true,
-    "enquiry": true, "cancelled": true, "lost": true, "open": true
-  };
+  // Fixed stage colour palette (per request) for any on-page colour that
+  // codes project stage but ISN'T simply mirroring the live, dynamic
+  // --wise-project-accent (which already reflects the true HireHop/
+  // Salesforce project colour and is used as-is for borders/icons
+  // elsewhere in this file). The Status pill is the one place this module
+  // invents its own stage colour, so it follows this palette rather than
+  // guessing: purple=quote, yellow=very likely, orange=hold, green=
+  // confirmed, grey=closed/lost/cancelled, blue=completed/invoiced.
+  // Order matters — first matching pattern wins (checked top to bottom).
+  var STATUS_STAGE_PATTERNS = [
+    { key: "quote", re: /\bquote\b/i },
+    { key: "very-likely", re: /very\s*likely/i },
+    { key: "hold", re: /\bhold\b/i },
+    { key: "confirmed", re: /\bconfirmed\b/i },
+    { key: "closed", re: /closed|lost|cancelled/i },
+    { key: "completed", re: /completed|invoiced/i }
+  ];
 
   var CFG = {
-    version: "2026-07-02.1",
+    version: "2026-07-02.2",
     maintainRecoveryMs: 5000
   };
 
@@ -332,9 +355,9 @@
     $groups.wrapAll('<div class="wise-pg-row" data-wise-group="quick-info-row"></div>');
   }
 
-  // ---- Reorder: System Details first (compact/native), then Wise Project
-  // Details + the ownership/timings/links row (Salesforce-linked and
-  // HireHop-assigned operational info, the main attraction) ------------
+  // ---- Reorder: Wise Project Details + the ownership/timings/links row
+  // first (Salesforce-linked and HireHop-assigned operational info, the
+  // main attraction), then System Details (compact/native) ------------
   // #proj_info has exactly two top-level children once grouped:
   // #custom_fields_container (Wise Project Details + the quick-info row)
   // and the "system-details" wrapper (Project ID through Project/Onsite
@@ -345,9 +368,9 @@
     var $container = $projectInfo.find("#custom_fields_container").first();
     var $systemDetails = $projectInfo.children("[" + GROUP_ATTR + "='system-details']").first();
     if (!$container.length || !$systemDetails.length) return;
-    if ($systemDetails.next().is($container)) return; // already in the desired order
+    if ($container.next().is($systemDetails)) return; // already in the desired order
 
-    $systemDetails.insertBefore($container);
+    $container.insertBefore($systemDetails);
   }
 
   // Each group becomes <div data-wise-group="key" class="wise-pg-section">
@@ -409,22 +432,28 @@
     if ($field.find(".wise-status-badge").length) return; // already badged
 
     var html = $field.html();
-    var matchedKey = null;
-    for (var key in STATUS_COLOURS) {
-      if (Object.prototype.hasOwnProperty.call(STATUS_COLOURS, key) && new RegExp("\\b" + key + "\\b", "i").test($field.text())) {
-        matchedKey = key;
+    var text = $field.text();
+    var matched = null;
+    for (var i = 0; i < STATUS_STAGE_PATTERNS.length; i++) {
+      var m = text.match(STATUS_STAGE_PATTERNS[i].re);
+      if (m) {
+        matched = { key: STATUS_STAGE_PATTERNS[i].key, text: m[0] };
         break;
       }
     }
-    if (!matchedKey) return;
+    if (!matched) return;
 
     // Negative lookahead avoids matching text that's actually inside a
     // tag (e.g. an attribute value) rather than visible field text.
-    var re = new RegExp("(\\b" + matchedKey + "\\b)(?![^<]*>)", "i");
-    var newHtml = html.replace(re, '<span class="wise-status-badge" data-wise-status="' + matchedKey.toLowerCase() + '">$1</span>');
+    var re = new RegExp("(" + escapeRegExp(matched.text) + ")(?![^<]*>)", "i");
+    var newHtml = html.replace(re, '<span class="wise-status-badge" data-wise-status="' + matched.key + '">$1</span>');
     if (newHtml === html) return; // couldn't safely isolate the value — leave native text untouched
 
     $field.html(newHtml);
+  }
+
+  function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
   function findFieldByLabel($body, label) {
@@ -479,25 +508,32 @@
     var css = [
       // Shared card base: full-width row (whether a flex child of
       // #custom_fields_container or a grid item of #proj_info), rounded,
-      // white, subtly shadowed.
-      "#proj_info.wise-pg-active [" + GROUP_ATTR + "]{box-sizing:border-box;width:100%;flex:1 1 100%;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);margin-top:14px;overflow:hidden;}",
+      // white, subtly shadowed. A bold accent-coloured left rail on every
+      // card keeps the live project/stage colour clearly visible
+      // throughout, not just as a thin decorative line.
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "]{box-sizing:border-box;width:100%;flex:1 1 100%;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accentVar + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);margin-top:14px;overflow:hidden;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "]:first-child{margin-top:0;}",
       "#proj_info.wise-pg-active #custom_fields_container>hr{display:none;}", // redundant once cards provide the visual break
       "#proj_info.wise-pg-active #custom_fields_container{display:block;}",
 
       // Header: icon badge + uppercase title, optional right-aligned
-      // "Show more" toggle.
+      // "Show more" toggle. Icon badge uses a stronger accent tint (and a
+      // matching border) so the stage colour reads clearly at a glance.
       "#proj_info.wise-pg-active .wise-pg-hdr{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #eee;background:#fff;}",
       "#proj_info.wise-pg-active .wise-pg-hdr-text{font-weight:700;font-size:.8em;letter-spacing:.03em;text-transform:uppercase;color:#1f2937;}",
-      "#proj_info.wise-pg-active .wise-pg-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:24px;height:24px;border-radius:6px;background:rgba(" + accentRgbVar + ",.14);color:" + accentVar + ";}",
+      "#proj_info.wise-pg-active .wise-pg-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:26px;border-radius:7px;background:rgba(" + accentRgbVar + ",.2);border:1px solid rgba(" + accentRgbVar + ",.35);color:" + accentVar + ";}",
       "#proj_info.wise-pg-active .wise-pg-toggle{margin-left:auto;border:1px solid #d1d5db;background:#fff;border-radius:6px;padding:3px 10px;font-size:.72em;font-weight:600;color:#374151;cursor:pointer;}",
       "#proj_info.wise-pg-active .wise-pg-toggle:hover{background:#f9fafb;}",
 
       "#proj_info.wise-pg-active .wise-pg-body{box-sizing:border-box;}",
 
-      // Wise Project Details: the primary/main-attraction section — full
-      // body always visible, generous spacing.
-      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']>.wise-pg-body{display:flex;flex-flow:wrap;justify-content:left;gap:10px 16px;padding:14px;}",
+      // Wise Project Details: the primary/main-attraction section — an
+      // extra-bold left rail, always-expanded body, laid out as 3 equal
+      // columns (overriding the native per-field inline widths, which
+      // were sized for the old 2-up flex-wrap).
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']{border-left-width:10px;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']>.wise-pg-body{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 20px;padding:16px;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']>.wise-pg-body>*{width:auto!important;max-width:none!important;flex:none!important;}",
 
       // Project Ownership / Operational Timings / Working Links: three
       // equal supporting cards in a row.
@@ -508,23 +544,32 @@
 
       // System Details: compact/collapsed by default (native, lower-
       // priority info) — same card chrome as everything else, just a
-      // clipped body with a fade + "Show more" toggle to expand.
+      // clipped body with a fade + "Show more" toggle to expand. Text
+      // colour is forced dark (!important) because some native rows here
+      // (e.g. the Project ID#/Technical/Production/Created by strip) are
+      // styled by HireHop as white text meant to sit on #proj_info's own
+      // native coloured fill — our white card background sits on top of
+      // that and would otherwise leave the text unreadable.
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']{grid-column:1 / -1;font-size:.92em;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body{display:grid;grid-template-columns:repeat(3,1fr);max-height:190px;overflow:hidden;position:relative;transition:max-height .2s ease;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body,#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body *{color:#111827!important;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body::after{content:'';position:absolute;left:0;right:0;bottom:0;height:36px;background:linear-gradient(to bottom, rgba(255,255,255,0), #fff);pointer-events:none;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details'].wise-pg-expanded>.wise-pg-body{max-height:none;overflow:visible;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details'].wise-pg-expanded>.wise-pg-body::after{display:none;}",
 
-      // Status pill (best-effort — see applyStatusBadge).
+      // Status pill (best-effort — see applyStatusBadge). Fixed palette
+      // per request: purple=quote, yellow=very likely, orange=hold,
+      // green=confirmed, grey=closed/lost/cancelled, blue=completed/
+      // invoiced. Deliberately NOT derived from --wise-project-accent —
+      // this is the one spot the module invents its own stage colour
+      // rather than mirroring the live project colour.
       "#proj_info.wise-pg-active .wise-status-badge{display:inline-block;padding:2px 10px;margin-left:4px;border-radius:999px;font-weight:700;font-size:.85em;background:#f3f4f6;color:#374151;}",
+      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='quote']{background:#ede9fe;color:#6d28d9;}",
+      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='very-likely']{background:#fef9c3;color:#854d0e;}",
+      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='hold']{background:#ffedd5;color:#c2410c;}",
       "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='confirmed']{background:#dcfce7;color:#15803d;}",
-      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='completed']{background:#dcfce7;color:#15803d;}",
-      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='open']{background:#dcfce7;color:#15803d;}",
-      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='hold']{background:#fef3c7;color:#b45309;}",
-      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='provisional']{background:#dbeafe;color:#1d4ed8;}",
-      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='enquiry']{background:#ede9fe;color:#6d28d9;}",
-      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='cancelled']{background:#fee2e2;color:#b91c1c;}",
-      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='lost']{background:#f3f4f6;color:#6b7280;}"
+      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='closed']{background:#f3f4f6;color:#6b7280;}",
+      "#proj_info.wise-pg-active .wise-status-badge[data-wise-status='completed']{background:#dbeafe;color:#1d4ed8;}"
     ].join("\n");
 
     var style = document.createElement("style");
