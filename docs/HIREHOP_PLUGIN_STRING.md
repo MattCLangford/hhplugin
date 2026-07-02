@@ -33,7 +33,7 @@ These files are not included directly in the HireHop company config string. `0-l
 | 9 | `9-jobchecklist.js` | `1.0` | `lazy-project-job-tabs` |
 | 10 | `10-projectjobs-qol.js` | `0.9` | `lazy-project-details` |
 | 11 | `11-projectjourney.js` | `0.6` | `lazy-project-tabs` |
-| 12 | `12-projectgroups.js` | `0.4` | `lazy-project-details` |
+| 12 | `12-projectgroups.js` | `0.5` | `lazy-project-details` |
 
 ## Maintenance Rule
 

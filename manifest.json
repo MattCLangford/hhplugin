@@ -98,8 +98,8 @@
     {
       "file": "12-projectgroups.js",
       "status": "lazy-project-details",
-      "cacheVersion": "0.4",
-      "role": "Proposal Creation depot only (gated on the logged-in user's active depot via window.user, not the shared 5-hirehop.js DOM-scan helper, which was confirmed unreliable on this page): groups the native #proj_info project details fields into 5 boxed sections (System Details, Wise Project Details, Project Ownership, Operational Timings, Working Links), reorders them so Salesforce/Wise info leads and native HireHop record fields take a back seat, and styles them (light-grey/white native-style panels, thin borders) with Wise Project Details as the visually primary section. Accent colour is read directly from #proj_info's own inline background-color (the live project colour); System Details keeps its native project-colour banding unobscured (no background override). Native layout structure and save behaviour fully unaffected — fields are reparented, never cloned/removed.",
+      "cacheVersion": "0.5",
+      "role": "Proposal Creation depot only (gated on the logged-in user's active depot via window.user, not the shared 5-hirehop.js DOM-scan helper, which was confirmed unreliable on this page): groups the native #proj_info project details fields into 5 white rounded 'card' sections (Wise Project Details, Project Ownership, Operational Timings, Working Links, System Details), reorders them so Salesforce/Wise info leads and native HireHop record fields (System Details, compact/collapsible via a Show more toggle) take a back seat, and gives every card an accent-coloured left rail plus icon badge so the live project/stage colour reads clearly. Wise Project Details renders as 3 equal columns and gets a coloured Status pill using a fixed stage palette (purple=quote, yellow=very likely, orange=hold, green=confirmed, grey=closed/lost/cancelled, blue=completed/invoiced). Accent colour is read directly from #proj_info's own inline background-color (the live project colour). Native layout structure and save behaviour fully unaffected — fields are reparented, never cloned/removed.",
       "recommendedLoadOrder": 12
     }
   ],
