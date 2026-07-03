@@ -67,3 +67,4 @@ On a supplying-list page, the proposal bundle should lazy-load. Then this should
 ```js
 window.__wiseProposalPageEditor.describe()
 ```
+
