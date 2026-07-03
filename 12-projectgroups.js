@@ -163,7 +163,7 @@
   ];
 
   var CFG = {
-    version: "2026-07-03.1",
+    version: "2026-07-03.2",
     maintainRecoveryMs: 5000
   };
 
@@ -529,15 +529,28 @@
       // white, subtly shadowed. A bold accent-coloured left rail on every
       // card keeps the live project/stage colour clearly visible
       // throughout, not just as a thin decorative line.
-      "#proj_info.wise-pg-active [" + GROUP_ATTR + "]{box-sizing:border-box;width:100%;flex:1 1 100%;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accentVar + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);margin-top:14px;overflow:hidden;}",
+      // :not(quick-info-row) — the row wrapper carries the same
+      // data-wise-group attribute as every real card (see wrapQuickInfoRow)
+      // purely so wrapAll() had a single element to target; it isn't a
+      // titled section itself (no .wise-pg-hdr). Without this exclusion it
+      // ALSO matched this generic rule and grew its own accent rail/border/
+      // shadow directly around the Project Ownership card's own rail,
+      // producing a doubled/stacked accent line down the left edge.
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "]:not([" + GROUP_ATTR + "='quick-info-row']){box-sizing:border-box;width:100%;flex:1 1 100%;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accentVar + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);margin-top:10px;overflow:hidden;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "]:first-child{margin-top:0;}",
       "#proj_info.wise-pg-active #custom_fields_container>hr{display:none;}", // redundant once cards provide the visual break
-      "#proj_info.wise-pg-active #custom_fields_container{display:block;}",
+      // display:block (rather than leaving #proj_info's own native grid in
+      // control) drops any native row-gap/track sizing that HireHop had
+      // calculated for the old, taller, multi-row ungrouped layout — that
+      // leftover native spacing, not our own margins, was the source of
+      // the large empty gaps above/below this container.
+      "#proj_info.wise-pg-active{display:block;}",
+      "#proj_info.wise-pg-active #custom_fields_container{display:block;padding:0;margin:0;}",
 
       // Header: icon badge + uppercase title, optional right-aligned
       // "Show more" toggle. Icon badge uses a stronger accent tint (and a
       // matching border) so the stage colour reads clearly at a glance.
-      "#proj_info.wise-pg-active .wise-pg-hdr{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #eee;background:#fff;}",
+      "#proj_info.wise-pg-active .wise-pg-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #eee;background:#fff;}",
       "#proj_info.wise-pg-active .wise-pg-hdr-text{font-weight:700;font-size:.8em;letter-spacing:.03em;text-transform:uppercase;color:#1f2937;}",
       "#proj_info.wise-pg-active .wise-pg-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:26px;border-radius:7px;background:rgba(" + accentRgbVar + ",.2);border:1px solid rgba(" + accentRgbVar + ",.35);color:" + accentVar + ";}",
       "#proj_info.wise-pg-active .wise-pg-toggle{margin-left:auto;border:1px solid #d1d5db;background:#fff;border-radius:6px;padding:3px 10px;font-size:.72em;font-weight:600;color:#374151;cursor:pointer;}",
@@ -550,15 +563,22 @@
       // columns (overriding the native per-field inline widths, which
       // were sized for the old 2-up flex-wrap).
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']{border-left-width:10px;}",
-      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']>.wise-pg-body{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 20px;padding:16px;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']>.wise-pg-body{display:grid;grid-template-columns:repeat(3,1fr);gap:8px 16px;padding:14px;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='wise-project-details']>.wise-pg-body>*{width:auto!important;max-width:none!important;flex:none!important;}",
 
       // Project Ownership / Operational Timings / Working Links: three
       // equal supporting cards in a row.
-      "#proj_info.wise-pg-active .wise-pg-row{display:flex;flex:1 1 100%;gap:14px;align-items:stretch;margin-top:14px;}",
+      "#proj_info.wise-pg-active .wise-pg-row{display:flex;flex:1 1 100%;gap:10px;align-items:stretch;margin-top:10px;}",
       "#proj_info.wise-pg-active .wise-pg-row:first-child{margin-top:0;}",
       "#proj_info.wise-pg-active .wise-pg-row>[" + GROUP_ATTR + "]{flex:1 1 0;width:auto;margin-top:0;min-width:0;}",
-      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='project-ownership']>.wise-pg-body,#proj_info.wise-pg-active [" + GROUP_ATTR + "='operational-timings']>.wise-pg-body,#proj_info.wise-pg-active [" + GROUP_ATTR + "='working-links']>.wise-pg-body{display:flex;flex-flow:wrap;justify-content:left;gap:8px 12px;padding:12px 14px;}",
+      // These 3 cards are only ~1/3 page width, but each native field still
+      // carries HireHop's own inline width (a calc(33%-4px)-style percentage
+      // sized for the old full-width layout) — at a third of the space that
+      // shrinks to a sliver, forcing "Label : Value" to wrap word-by-word.
+      // Stacking one field per row (matching the wise-project-details
+      // override above) keeps every value on a single, legible line.
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='project-ownership']>.wise-pg-body,#proj_info.wise-pg-active [" + GROUP_ATTR + "='operational-timings']>.wise-pg-body,#proj_info.wise-pg-active [" + GROUP_ATTR + "='working-links']>.wise-pg-body{display:flex;flex-direction:column;gap:7px;padding:10px 12px;}",
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='project-ownership']>.wise-pg-body>*,#proj_info.wise-pg-active [" + GROUP_ATTR + "='operational-timings']>.wise-pg-body>*,#proj_info.wise-pg-active [" + GROUP_ATTR + "='working-links']>.wise-pg-body>*{width:100%!important;max-width:none!important;flex:none!important;white-space:normal;}",
 
       // System Details: compact/collapsed by default (native, lower-
       // priority info) — same card chrome as everything else, just a
