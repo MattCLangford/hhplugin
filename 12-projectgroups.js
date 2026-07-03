@@ -163,7 +163,7 @@
   ];
 
   var CFG = {
-    version: "2026-07-03.5",
+    version: "2026-07-03.6",
     maintainRecoveryMs: 5000
   };
 
@@ -212,7 +212,30 @@
     reorderGroups($projectInfo);
     applyAccentColour($projectInfo);
     applyStatusBadge($projectInfo);
+    applySystemDetailsPeek($projectInfo);
     $projectInfo.addClass(ROOT_CLASS);
+  }
+
+  // System Details collapses to just its first grid row (Project ID# /
+  // Technical / Created by) rather than fully to nothing, so there's still
+  // an at-a-glance identifier when collapsed. Measured live off the DOM
+  // (the offset of the first item in row 2) instead of a guessed pixel
+  // value, since row height depends on font/content and this stays correct
+  // if either changes. overflow:hidden doesn't affect layout, so this is
+  // safe to measure even while the collapsed max-height is already applied.
+  function applySystemDetailsPeek($projectInfo) {
+    var $section = $projectInfo.children("[" + GROUP_ATTR + "='system-details']").first();
+    if (!$section.length) return;
+    var $body = $section.children(".wise-pg-body").first();
+    if (!$body.length) return;
+
+    var $children = $body.children();
+    if ($children.length <= 3) return; // one row or less already — nothing to collapse
+
+    var bodyTop = $body.get(0).getBoundingClientRect().top;
+    var rowTwoTop = $children.get(3).getBoundingClientRect().top;
+    var peek = Math.round(rowTwoTop - bodyTop);
+    if (peek > 0) $section.get(0).style.setProperty("--wise-system-peek-height", peek + "px");
   }
 
   // ---- Depot gate ----------------------------------------------------------
@@ -478,7 +501,15 @@
     var el = $projectInfo.get(0);
     if (!el) return;
 
-    var rgb = parseRgb($projectInfo.css("background-color"));
+    // Read el.style (the element's own inline declaration) rather than the
+    // computed/cascaded value: once wise-pg-active is applied, our own
+    // stylesheet forces #proj_info's visible background to white
+    // (see installStyles) to stop it bleeding through card gaps, which
+    // would otherwise make the computed background-color white too on
+    // every cycle after the first and overwrite the accent back to white.
+    // The inline declaration itself is untouched and still the true
+    // native colour HireHop set.
+    var rgb = parseRgb(el.style.backgroundColor);
     el.style.setProperty("--wise-project-accent", rgb ? rgbToHex(rgb) : FALLBACK_ACCENT);
     el.style.setProperty("--wise-project-accent-rgb", rgb ? rgb.join(",") : FALLBACK_ACCENT_RGB);
   }
@@ -556,6 +587,11 @@
       // module ever added, but not wanted once the individual card rails
       // already carry that colour, so it's explicitly cancelled here.
       "#proj_info.wise-pg-active{border:none!important;outline:none!important;}",
+      // #proj_info's own inline background-color is also still literally
+      // green behind everything — the margin gaps between cards are
+      // transparent, so that native green was bleeding through in every
+      // gap. Forcing it white makes those gaps read as plain whitespace.
+      "#proj_info.wise-pg-active{background:#fff!important;}",
       "#proj_info.wise-pg-active #custom_fields_container{display:block;padding:0;margin:0;}",
 
       // Header: icon badge + uppercase title, optional right-aligned
@@ -600,9 +636,12 @@
       // native coloured fill — our white card background sits on top of
       // that and would otherwise leave the text unreadable.
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']{grid-column:1 / -1;font-size:.92em;}",
-      // Collapsed by default down to just the header row (max-height:0) —
-      // no peek content and no fade needed since nothing shows through.
-      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body{display:grid;grid-template-columns:repeat(3,1fr);max-height:0;padding-top:0;padding-bottom:0;overflow:hidden;transition:max-height .2s ease;}",
+      // Collapsed by default down to just the first grid row (Project ID#/
+      // Technical/Created by) via --wise-system-peek-height, measured live
+      // off the DOM (see applySystemDetailsPeek) — 44px is only a sane
+      // fallback for the brief moment before that measurement has run. No
+      // fade needed since the cut lands cleanly on a row boundary.
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body{display:grid;grid-template-columns:repeat(3,1fr);max-height:var(--wise-system-peek-height,44px);overflow:hidden;transition:max-height .2s ease;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body,#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body *{color:#111827!important;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details'].wise-pg-expanded>.wise-pg-body{max-height:none;overflow:visible;}",
 
