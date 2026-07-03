@@ -163,7 +163,7 @@
   ];
 
   var CFG = {
-    version: "2026-07-02.2",
+    version: "2026-07-03.1",
     maintainRecoveryMs: 5000
   };
 
@@ -483,10 +483,28 @@
     el.style.setProperty("--wise-project-accent-rgb", rgb ? rgb.join(",") : FALLBACK_ACCENT_RGB);
   }
 
+  // Native getComputedStyle always reports colours as rgb()/rgba(), but
+  // some browser extensions rewrite computed colour values to hex before
+  // jQuery's .css() ever sees them (confirmed live: .css("background-color")
+  // returned "#14c408" instead of "rgb(20, 196, 8)" on a real project page)
+  // — so both shapes have to be accepted or the accent colour silently
+  // falls back to orange whenever that happens.
   function parseRgb(value) {
-    var match = String(value || "").match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
-    if (!match) return null;
-    return [parseInt(match[1], 10), parseInt(match[2], 10), parseInt(match[3], 10)];
+    value = String(value || "").trim();
+
+    var rgbMatch = value.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (rgbMatch) {
+      return [parseInt(rgbMatch[1], 10), parseInt(rgbMatch[2], 10), parseInt(rgbMatch[3], 10)];
+    }
+
+    var hexMatch = value.match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/i);
+    if (hexMatch) {
+      var hex = hexMatch[1];
+      if (hex.length === 3) hex = hex.replace(/(.)/g, "$1$1");
+      return [parseInt(hex.substr(0, 2), 16), parseInt(hex.substr(2, 2), 16), parseInt(hex.substr(4, 2), 16)];
+    }
+
+    return null;
   }
 
   function rgbToHex(rgb) {
