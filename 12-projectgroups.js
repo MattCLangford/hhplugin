@@ -163,7 +163,7 @@
   ];
 
   var CFG = {
-    version: "2026-07-03.2",
+    version: "2026-07-03.5",
     maintainRecoveryMs: 5000
   };
 
@@ -538,13 +538,24 @@
       // producing a doubled/stacked accent line down the left edge.
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "]:not([" + GROUP_ATTR + "='quick-info-row']){box-sizing:border-box;width:100%;flex:1 1 100%;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accentVar + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);margin-top:10px;overflow:hidden;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "]:first-child{margin-top:0;}",
-      "#proj_info.wise-pg-active #custom_fields_container>hr{display:none;}", // redundant once cards provide the visual break
+      // !important: confirmed live that HireHop's own native CSS forces
+      // these hr to display:flex at higher specificity, so a plain
+      // display:none here silently loses that fight — the hr's own box
+      // stays tiny (~1px) but its native vertical margin still renders,
+      // which was the real source of the leftover gaps between cards.
+      "#proj_info.wise-pg-active #custom_fields_container>hr{display:none!important;margin:0!important;}",
       // display:block (rather than leaving #proj_info's own native grid in
       // control) drops any native row-gap/track sizing that HireHop had
       // calculated for the old, taller, multi-row ungrouped layout — that
       // leftover native spacing, not our own margins, was the source of
       // the large empty gaps above/below this container.
       "#proj_info.wise-pg-active{display:block;}",
+      // #proj_info's own inline background-color (the live project colour
+      // we read for every card rail) is also used natively by HireHop to
+      // draw a border/outline around the whole block — not something this
+      // module ever added, but not wanted once the individual card rails
+      // already carry that colour, so it's explicitly cancelled here.
+      "#proj_info.wise-pg-active{border:none!important;outline:none!important;}",
       "#proj_info.wise-pg-active #custom_fields_container{display:block;padding:0;margin:0;}",
 
       // Header: icon badge + uppercase title, optional right-aligned
@@ -589,11 +600,11 @@
       // native coloured fill — our white card background sits on top of
       // that and would otherwise leave the text unreadable.
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']{grid-column:1 / -1;font-size:.92em;}",
-      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body{display:grid;grid-template-columns:repeat(3,1fr);max-height:190px;overflow:hidden;position:relative;transition:max-height .2s ease;}",
+      // Collapsed by default down to just the header row (max-height:0) —
+      // no peek content and no fade needed since nothing shows through.
+      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body{display:grid;grid-template-columns:repeat(3,1fr);max-height:0;padding-top:0;padding-bottom:0;overflow:hidden;transition:max-height .2s ease;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body,#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body *{color:#111827!important;}",
-      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details']>.wise-pg-body::after{content:'';position:absolute;left:0;right:0;bottom:0;height:36px;background:linear-gradient(to bottom, rgba(255,255,255,0), #fff);pointer-events:none;}",
       "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details'].wise-pg-expanded>.wise-pg-body{max-height:none;overflow:visible;}",
-      "#proj_info.wise-pg-active [" + GROUP_ATTR + "='system-details'].wise-pg-expanded>.wise-pg-body::after{display:none;}",
 
       // Status pill (best-effort — see applyStatusBadge). Fixed palette
       // per request: purple=quote, yellow=very likely, orange=hold,
