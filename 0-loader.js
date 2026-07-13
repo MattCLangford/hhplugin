@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-13.1",
+    version: "2026-07-13.2",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -23,7 +23,8 @@
       checklist: { file: "9-jobchecklist.js", version: "1.0" },
       projectJobs: { file: "10-projectjobs-qol.js", version: "0.9" },
       projectJourney: { file: "11-projectjourney.js", version: "0.6" },
-      projectGroups: { file: "12-projectgroups.js", version: "0.5" }
+      projectGroups: { file: "12-projectgroups.js", version: "0.5" },
+      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.1" }
     }
   };
 
@@ -140,7 +141,7 @@
   }
 
   function loadProposalSupplyingBundle() {
-    loadSequence(["hirehop", "docprev", "meta", "layout", "editor", "stage"]);
+    loadSequence(["hirehop", "docprev", "meta", "layout", "editor", "stage", "proposalPageIcons"]);
   }
 
   function loadSequence(keys) {

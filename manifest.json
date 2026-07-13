@@ -1,7 +1,7 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-13.1",
-  "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, capacity tracking, project journey visibility, and QTC renderer alignment.",
+  "version": "2026-07-13.2",
+  "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
     "baseUrl": "https://mattclangford.github.io/hhplugin/",
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "0.8",
+      "cacheVersion": "0.9",
       "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
       "recommendedLoadOrder": 1
     }
@@ -102,6 +102,13 @@
       "cacheVersion": "0.11",
       "role": "Proposal Creation depot only (gated on the logged-in user's active depot via window.user, not the shared 5-hirehop.js DOM-scan helper, which was confirmed unreliable on this page): groups the native #proj_info project details fields into 5 white rounded 'card' sections (Wise Project Details, Project Ownership, Operational Timings, Working Links, System Details), reorders them so Salesforce/Wise info leads and native HireHop record fields (System Details, compact/collapsible via a Show more toggle) take a back seat, and gives every card an accent-coloured left rail plus icon badge so the live project/stage colour reads clearly. Wise Project Details renders as 3 equal columns and gets a coloured Status pill using a fixed stage palette (purple=quote, yellow=very likely, orange=hold, green=confirmed, grey=closed/lost/cancelled, blue=completed/invoiced). Accent colour is read directly from #proj_info's own inline background-color (the live project colour). Native layout structure and save behaviour fully unaffected — fields are reparented, never cloned/removed.",
       "recommendedLoadOrder": 12
+    },
+    {
+      "file": "13-proposalpageicons.js",
+      "status": "lazy-supplying-list-proposal-creation",
+      "cacheVersion": "0.1",
+      "role": "Proposal Creation depot only: replaces the native folder icon on Section:/Dept: supplying-list headings with a document-page icon, and gives // Section:/Dept: headings a visibly muted prohibited-page icon so users can see which headings the document generator will render. Heading data and every unmatched native tree icon remain untouched.",
+      "recommendedLoadOrder": 13
     }
   ],
   "referenceFiles": [

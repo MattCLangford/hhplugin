@@ -91,7 +91,7 @@ Recommended HireHop script set:
 
 `0-loader.js` then lazy-loads the old module set only when the matching HireHop surface exists:
 
-- Supplying list: `5-hirehop.js`, `1-docprev.js`, `3-meta.js`, `4-layout.js`, and `8-stagedesigner.js`. `6-editor2.js` remains registered in this sequence but is currently disabled and skipped.
+- Supplying list: `5-hirehop.js`, `1-docprev.js`, `3-meta.js`, `4-layout.js`, `8-stagedesigner.js`, and `13-proposalpageicons.js`. `6-editor2.js` remains registered in this sequence but is currently disabled and skipped.
 - Autopull dialog: `2-apselall.js`.
 - Home page: `5-hirehop.js` and `7-captrack.js`.
 - Project or job tab set: `9-jobchecklist.js` and `11-projectjourney.js` (`11-projectjourney.js` only installs its tab on project pages).

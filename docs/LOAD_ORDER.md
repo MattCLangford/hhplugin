@@ -22,10 +22,13 @@ The loader preserves this order when a route needs the modules.
 10. `10-projectjobs-qol.js`
 11. `11-projectjourney.js`
 12. `12-projectgroups.js`
+13. `13-proposalpageicons.js`
 
 `11-projectjourney.js` loads on the project/job tab route, but it only installs the Journey tab when it detects the project tab set.
 
 `12-projectgroups.js` loads on the project details route alongside `5-hirehop.js` and `10-projectjobs-qol.js`, but only groups fields (Proposal Creation depot only) — every other depot leaves it inactive.
+
+`13-proposalpageicons.js` loads with the supplying-list bundle, but only changes icons when the logged-in user's active depot is Proposal Creation. `Section:` and `Dept:` heading folders become document-page icons; their `// Section:` and `// Dept:` disabled forms become muted prohibited-page icons. All other headings and list rows retain their native icons.
 
 `6-editor2.js` remains registered but `0-loader.js` currently skips it, so the other supplying-list modules continue loading normally. To turn it back on, change its loader entry from `enabled: false` to `enabled: true`, restore its manifest status to `lazy-supplying-list-primary`, and set manifest `enabled` to `true`.
 
