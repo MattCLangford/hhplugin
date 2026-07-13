@@ -70,6 +70,7 @@ foreach ($script in $lazyScripts) {
   $version = [string]$script.cacheVersion
   $order = [string]$script.recommendedLoadOrder
   $status = [string]$script.status
+  $enabled = if ($null -ne $script.enabled -and -not [bool]$script.enabled) { "no" } else { "yes" }
 
   if (-not $file) {
     throw "A lazyScripts entry is missing file"
@@ -86,7 +87,7 @@ foreach ($script in $lazyScripts) {
     throw "Runtime file listed in manifest does not exist locally: $file"
   }
 
-  $lazyTableRows.Add(('| {0} | `{1}` | `{2}` | `{3}` |' -f $order, $file, $version, $status)) | Out-Null
+  $lazyTableRows.Add(('| {0} | `{1}` | `{2}` | `{3}` | {4} |' -f $order, $file, $version, $status, $enabled)) | Out-Null
 }
 
 $pluginString = ($urls -join "; ") + ";"
@@ -101,8 +102,8 @@ if ($lazyTableRows.Count) {
 
 These files are not included directly in the HireHop company config string. ``0-loader.js`` injects them only when the matching HireHop page, tab set, supplying list, or dialog exists.
 
-| Order | File | Cache version | Trigger |
-| --- | --- | --- | --- |
+| Order | File | Cache version | Trigger | Enabled |
+| --- | --- | --- | --- | --- |
 $lazyTable
 "@
 }
@@ -154,11 +155,13 @@ ${fence}js
 window.WiseHireHopEnhancementLoader
 ${fence}
 
-On a supplying-list page, the proposal bundle should lazy-load. Then this should be available:
+On a supplying-list page, the proposal bundle should lazy-load. Inspect the result with:
 
 ${fence}js
-window.__wiseProposalPageEditor.describe()
+window.WiseHireHopEnhancementLoader.loaded
 ${fence}
+
+Enabled supplying-list modules such as ``hirehop``, ``docprev``, and ``stage`` should be ``true``. A disabled module such as ``editor`` should be absent.
 "@
 
 $outputDir = Split-Path -Parent $OutputPath

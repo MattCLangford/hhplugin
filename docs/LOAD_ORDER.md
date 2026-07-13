@@ -15,7 +15,7 @@ The loader preserves this order when a route needs the modules.
 3. `2-apselall.js`
 4. `3-meta.js`
 5. `4-layout.js`
-6. `6-editor2.js`
+6. `6-editor2.js` — currently disabled
 7. `7-captrack.js`
 8. `8-stagedesigner.js`
 9. `9-jobchecklist.js`
@@ -26,6 +26,8 @@ The loader preserves this order when a route needs the modules.
 `11-projectjourney.js` loads on the project/job tab route, but it only installs the Journey tab when it detects the project tab set.
 
 `12-projectgroups.js` loads on the project details route alongside `5-hirehop.js` and `10-projectjobs-qol.js`, but only groups fields (Proposal Creation depot only) — every other depot leaves it inactive.
+
+`6-editor2.js` remains registered but `0-loader.js` currently skips it, so the other supplying-list modules continue loading normally. To turn it back on, change its loader entry from `enabled: false` to `enabled: true`, restore its manifest status to `lazy-supplying-list-primary`, and set manifest `enabled` to `true`.
 
 For the full paste-ready company config string, use `docs/HIREHOP_PLUGIN_STRING.md`.
 

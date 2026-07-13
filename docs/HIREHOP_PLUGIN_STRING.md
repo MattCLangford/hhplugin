@@ -7,33 +7,33 @@ Do not hand-edit the current string or source table. Update `manifest.json` firs
 ## Current String
 
 ```text
-https://mattclangford.github.io/hhplugin/0-loader.js?v=0.7;
+https://mattclangford.github.io/hhplugin/0-loader.js?v=0.8;
 ```
 
 ## Source Table
 
 | Order | File | Cache version |
 | --- | --- | --- |
-| 1 | `0-loader.js` | `0.7` |
+| 1 | `0-loader.js` | `0.8` |
 
 ## Lazy Loaded Runtime Modules
 
 These files are not included directly in the HireHop company config string. `0-loader.js` injects them only when the matching HireHop page, tab set, supplying list, or dialog exists.
 
-| Order | File | Cache version | Trigger |
-| --- | --- | --- | --- |
-| 1 | `5-hirehop.js` | `0.7` | `lazy-shared-module` |
-| 2 | `1-docprev.js` | `0.6` | `lazy-supplying-list` |
-| 3 | `2-apselall.js` | `0.5` | `lazy-autopull-dialog` |
-| 4 | `3-meta.js` | `0.1` | `lazy-supplying-list-module` |
-| 5 | `4-layout.js` | `0.1` | `lazy-supplying-list-module` |
-| 6 | `6-editor2.js` | `1.6` | `lazy-supplying-list-primary` |
-| 7 | `7-captrack.js` | `3.0` | `lazy-home-page` |
-| 8 | `8-stagedesigner.js` | `2.0` | `lazy-supplying-list` |
-| 9 | `9-jobchecklist.js` | `1.0` | `lazy-project-job-tabs` |
-| 10 | `10-projectjobs-qol.js` | `0.9` | `lazy-project-details` |
-| 11 | `11-projectjourney.js` | `0.6` | `lazy-project-tabs` |
-| 12 | `12-projectgroups.js` | `0.5` | `lazy-project-details` |
+| Order | File | Cache version | Trigger | Enabled |
+| --- | --- | --- | --- | --- |
+| 1 | `5-hirehop.js` | `0.7` | `lazy-shared-module` | yes |
+| 2 | `1-docprev.js` | `0.6` | `lazy-supplying-list` | yes |
+| 3 | `2-apselall.js` | `0.5` | `lazy-autopull-dialog` | yes |
+| 4 | `3-meta.js` | `0.1` | `lazy-supplying-list-module` | yes |
+| 5 | `4-layout.js` | `0.1` | `lazy-supplying-list-module` | yes |
+| 6 | `6-editor2.js` | `1.6` | `disabled-ready-to-enable` | no |
+| 7 | `7-captrack.js` | `3.0` | `lazy-home-page` | yes |
+| 8 | `8-stagedesigner.js` | `2.0` | `lazy-supplying-list` | yes |
+| 9 | `9-jobchecklist.js` | `1.0` | `lazy-project-job-tabs` | yes |
+| 10 | `10-projectjobs-qol.js` | `0.9` | `lazy-project-details` | yes |
+| 11 | `11-projectjourney.js` | `0.6` | `lazy-project-tabs` | yes |
+| 12 | `12-projectgroups.js` | `0.11` | `lazy-project-details` | yes |
 
 ## Maintenance Rule
 
@@ -62,9 +62,10 @@ After updating HireHop company config, run this in the browser console:
 window.WiseHireHopEnhancementLoader
 ```
 
-On a supplying-list page, the proposal bundle should lazy-load. Then this should be available:
+On a supplying-list page, the proposal bundle should lazy-load. Inspect the result with:
 
 ```js
-window.__wiseProposalPageEditor.describe()
+window.WiseHireHopEnhancementLoader.loaded
 ```
-~ML
+
+Enabled supplying-list modules such as `hirehop`, `docprev`, and `stage` should be `true`. A disabled module such as `editor` should be absent.

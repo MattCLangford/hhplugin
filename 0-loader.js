@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-06-24.6",
+    version: "2026-07-13.1",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -17,7 +17,7 @@
       autopull: { file: "2-apselall.js", version: "0.5" },
       meta: { file: "3-meta.js", version: "0.1" },
       layout: { file: "4-layout.js", version: "0.1" },
-      editor: { file: "6-editor2.js", version: "1.6" },
+      editor: { file: "6-editor2.js", version: "1.6", enabled: false },
       captrack: { file: "7-captrack.js", version: "3.0" },
       stage: { file: "8-stagedesigner.js", version: "2.0" },
       checklist: { file: "9-jobchecklist.js", version: "1.0" },
@@ -156,6 +156,7 @@
   function loadScript(key) {
     var item = CFG.scripts[key];
     if (!item) return Promise.reject(new Error("Unknown Wise HireHop module: " + key));
+    if (item.enabled === false) return Promise.resolve();
     if (loaded[key]) return Promise.resolve();
     if (loading[key]) return loading[key];
 

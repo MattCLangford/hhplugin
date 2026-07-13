@@ -26,7 +26,7 @@ Load this in HireHop:
 
 `4-layout.js` contains the proposal page catalogue and layout matching rules.
 
-`6-editor2.js` is the primary editor. It gives non-technical users a safer visual page editor for baseline QTC standards, while still handing native item editing back to HireHop where appropriate.
+`6-editor2.js` is the primary editor implementation, but it is currently disabled in `0-loader.js`. The file remains available to restore later; when enabled it gives non-technical users a safer visual page editor for baseline QTC standards, while still handing native item editing back to HireHop where appropriate.
 
 `7-captrack.js` is the Wise capacity tracker. Its home-page entry button is visible across all depots. It opens as a full-page planning view and uses project-level Wise custom fields for event naming, status, revenue, tier, client, venue, and role allocation.
 
