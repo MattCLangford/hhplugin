@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-13.2",
+  "version": "2026-07-13.3",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "0.9",
+      "cacheVersion": "1.0",
       "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
       "recommendedLoadOrder": 1
     }
@@ -106,8 +106,8 @@
     {
       "file": "13-proposalpageicons.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "0.1",
-      "role": "Proposal Creation depot only: replaces the native folder icon on Section:/Dept: supplying-list headings with a document-page icon, and gives // Section:/Dept: headings a visibly muted prohibited-page icon so users can see which headings the document generator will render. Heading data and every unmatched native tree icon remain untouched.",
+      "cacheVersion": "0.2",
+      "role": "Proposal Creation depot only: replaces the native folder icon on Section:/Dept: supplying-list headings with a compact, native-toned document-page icon, and gives // Section:/Dept: headings a visibly muted grey slashed-page icon so users can see which headings the document generator will render. Heading data and every unmatched native tree icon remain untouched.",
       "recommendedLoadOrder": 13
     }
   ],

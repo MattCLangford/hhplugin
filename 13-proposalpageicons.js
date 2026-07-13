@@ -22,7 +22,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-13.1",
+    version: "2026-07-13.2",
     styleId: "wise-proposal-page-icon-styles",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     refreshDelayMs: 70,
@@ -268,18 +268,21 @@
 
     var activeSvg = svgDataUri(
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 30">' +
-        '<path d="M6 2.5h10.8L22.5 8v19.5H6z" fill="#fff" stroke="#24323d" stroke-width="1.8" stroke-linejoin="round"/>' +
-        '<path d="M16.8 2.8V8h5.3" fill="#dcecf7" stroke="#24323d" stroke-width="1.6" stroke-linejoin="round"/>' +
-        '<path d="M9.5 13h9.3M9.5 17h9.3M9.5 21h6.7" fill="none" stroke="#2b6f98" stroke-width="1.7" stroke-linecap="round"/>' +
+        '<defs><linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffdf2"/><stop offset="1" stop-color="#f0dfa5"/></linearGradient></defs>' +
+        '<path d="M7.8 3.8h9.1l4.3 4.4v18.1H7.8z" fill="#b9a15f" opacity=".28" transform="translate(1 1)"/>' +
+        '<path d="M7.8 3.8h9.1l4.3 4.4v18.1H7.8z" fill="url(#paper)" stroke="#ad9553" stroke-width="1.25" stroke-linejoin="round"/>' +
+        '<path d="M16.9 4.1v4.1h4" fill="#e5cf89" stroke="#ad9553" stroke-width="1.1" stroke-linejoin="round"/>' +
+        '<path d="M10.7 13.3h7.7M10.7 17h7.7M10.7 20.7h5.5" fill="none" stroke="#99813e" stroke-width="1.2" stroke-linecap="round"/>' +
       '</svg>'
     );
     var disabledSvg = svgDataUri(
       '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 30">' +
-        '<path d="M6 2.5h10.8L22.5 8v19.5H6z" fill="#eceff1" stroke="#8a9298" stroke-width="1.8" stroke-linejoin="round"/>' +
-        '<path d="M16.8 2.8V8h5.3" fill="#d9dde0" stroke="#8a9298" stroke-width="1.6" stroke-linejoin="round"/>' +
-        '<path d="M9.5 13h8M9.5 17h6" fill="none" stroke="#a5acb1" stroke-width="1.7" stroke-linecap="round"/>' +
-        '<circle cx="18.5" cy="20.5" r="6" fill="#f7f7f7" stroke="#a7332b" stroke-width="2"/>' +
-        '<path d="M14.4 16.4l8.2 8.2" fill="none" stroke="#a7332b" stroke-width="2.1" stroke-linecap="round"/>' +
+        '<defs><linearGradient id="muted" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f5f5f2"/><stop offset="1" stop-color="#d8dad8"/></linearGradient></defs>' +
+        '<path d="M7.8 3.8h9.1l4.3 4.4v18.1H7.8z" fill="#9fa39f" opacity=".2" transform="translate(1 1)"/>' +
+        '<path d="M7.8 3.8h9.1l4.3 4.4v18.1H7.8z" fill="url(#muted)" stroke="#929792" stroke-width="1.2" stroke-linejoin="round"/>' +
+        '<path d="M16.9 4.1v4.1h4" fill="#d1d4d1" stroke="#929792" stroke-width="1.05" stroke-linejoin="round"/>' +
+        '<path d="M10.7 13.3h7.2M10.7 17h5.7" fill="none" stroke="#a5aaa5" stroke-width="1.15" stroke-linecap="round"/>' +
+        '<path d="M9.6 23.3l10.2-11.1" fill="none" stroke="#777d78" stroke-width="1.7" stroke-linecap="round" opacity=".9"/>' +
       '</svg>'
     );
 
@@ -289,10 +292,10 @@
       CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "{" +
         "background-image:url(\"" + activeSvg + "\")!important;" +
         "background-position:center!important;background-repeat:no-repeat!important;" +
-        "background-size:25px 27px!important;opacity:1!important;" +
+        "background-size:20px 22px!important;opacity:.96!important;" +
       "}" +
       CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "." + DISABLED_CLASS + "{" +
-        "background-image:url(\"" + disabledSvg + "\")!important;opacity:.92!important;" +
+        "background-image:url(\"" + disabledSvg + "\")!important;opacity:.82!important;" +
       "}";
     (document.head || document.documentElement).appendChild(style);
   }
