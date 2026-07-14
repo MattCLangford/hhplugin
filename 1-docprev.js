@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-14.1"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-14.2"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -37,6 +37,9 @@
   var IFRAME_PRIMARY_ID = "wise-doc-preview-iframe-primary";
   var IFRAME_SECONDARY_ID = "wise-doc-preview-iframe-secondary";
   var VARIANT_SELECT_ID = "wise-doc-preview-variant";
+  var JOB_PERFORMANCE_ID = "wise-job-performance";
+  var JOB_PERFORMANCE_IFRAME_ID = "wise-job-performance-source";
+  var JOB_PERFORMANCE_VARIANT_KEY = "jobtrack_gp_predictor";
 
   var PREVIEW_CONFIG = {
     minPreviewWidth: 360,
@@ -95,6 +98,9 @@
   var autoRefreshEnabled = true;
   var refreshTimer = null;
   var domObserver = null;
+  var jobPerformanceRefreshTimer = null;
+  var jobPerformanceLoadTimer = null;
+  var jobPerformanceLoadToken = 0;
 
   var lastIframeScrollTop = 0;
   var lastIframeScrollRatio = 0;
@@ -832,6 +838,70 @@
       '#' + PANEL_ID + ' .wise-doc-preview-frame.is-buffer {',
       '  z-index:1;',
       '}',
+      '#' + JOB_PERFORMANCE_ID + ' {',
+      '  --wjp-tone:#b45309;',
+      '  --wjp-tint:#fff7ed;',
+      '  --wjp-soft:#fed7aa;',
+      '  margin:14px 10px 18px;',
+      '  border:1px solid #d7dde3;',
+      '  border-left:4px solid var(--wjp-tone);',
+      '  border-radius:10px;',
+      '  background:linear-gradient(135deg,#ffffff 0%,#f7f9fb 100%);',
+      '  box-shadow:0 5px 16px rgba(15,23,42,.08);',
+      '  color:#17212b;',
+      '  overflow:hidden;',
+      '}',
+      '#' + JOB_PERFORMANCE_ID + '.is-strong { --wjp-tone:#15803d; --wjp-tint:#f0fdf4; --wjp-soft:#bbf7d0; }',
+      '#' + JOB_PERFORMANCE_ID + '.is-on-track { --wjp-tone:#a16207; --wjp-tint:#fffbeb; --wjp-soft:#fde68a; }',
+      '#' + JOB_PERFORMANCE_ID + '.is-review { --wjp-tone:#b42318; --wjp-tint:#fff1f0; --wjp-soft:#fecaca; }',
+      '#' + JOB_PERFORMANCE_ID + '.is-unavailable { --wjp-tone:#64748b; --wjp-tint:#f8fafc; --wjp-soft:#cbd5e1; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-head {',
+      '  display:flex;',
+      '  align-items:center;',
+      '  justify-content:space-between;',
+      '  gap:12px;',
+      '  padding:10px 12px 8px;',
+      '}',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-title { font-size:13px; font-weight:700; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-kicker { margin-left:7px; color:#64748b; font-size:11px; font-weight:500; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-actions { display:flex; align-items:center; gap:8px; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-status {',
+      '  display:inline-flex;',
+      '  align-items:center;',
+      '  gap:6px;',
+      '  border:1px solid var(--wjp-soft);',
+      '  border-radius:999px;',
+      '  background:var(--wjp-tint);',
+      '  color:var(--wjp-tone);',
+      '  padding:3px 8px;',
+      '  font-size:11px;',
+      '  font-weight:700;',
+      '  white-space:nowrap;',
+      '}',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-status-dot { width:7px; height:7px; border-radius:50%; background:currentColor; box-shadow:0 0 0 3px var(--wjp-soft); }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-refresh { border:0; background:transparent; color:#52606d; padding:3px 5px; cursor:pointer; font-size:11px; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-refresh:hover { color:#17212b; text-decoration:underline; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-metrics {',
+      '  display:grid;',
+      '  grid-template-columns:repeat(4,minmax(105px,1fr));',
+      '  border-top:1px solid #e5e9ed;',
+      '  border-bottom:1px solid #e5e9ed;',
+      '}',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-metric { padding:9px 12px 10px; min-width:0; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-metric + .wjp-metric { border-left:1px solid #e5e9ed; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-label { display:block; color:#667085; font-size:10px; font-weight:650; letter-spacing:.04em; text-transform:uppercase; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-value { display:block; margin-top:3px; color:#17212b; font-size:17px; line-height:1.15; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-metric.is-gp .wjp-value,#' + JOB_PERFORMANCE_ID + ' .wjp-metric.is-gp-pct .wjp-value { color:var(--wjp-tone); }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-health { display:grid; grid-template-columns:minmax(150px,1fr) auto; align-items:center; gap:12px; padding:8px 12px 10px; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail { position:relative; height:7px; border-radius:999px; background:#e4e9ee; overflow:hidden; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail-fill { height:100%; width:0; border-radius:inherit; background:var(--wjp-tone); transition:width .25s ease; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-health-note { color:#667085; font-size:10px; white-space:nowrap; }',
+      '#' + JOB_PERFORMANCE_IFRAME_ID + ' { display:none!important; width:0; height:0; border:0; }',
+      '@media (max-width:850px) {',
+      '  #' + JOB_PERFORMANCE_ID + ' .wjp-metrics { grid-template-columns:repeat(2,minmax(110px,1fr)); }',
+      '  #' + JOB_PERFORMANCE_ID + ' .wjp-metric:nth-child(3) { border-left:0; border-top:1px solid #e5e9ed; }',
+      '  #' + JOB_PERFORMANCE_ID + ' .wjp-metric:nth-child(4) { border-top:1px solid #e5e9ed; }',
+      '}',
       '</style>'
     ].join("");
 
@@ -880,6 +950,7 @@
       $host.append($btn);
     }
 
+    mountJobPerformanceStrip();
     openPreviewByDefaultOnce();
   }
 
@@ -891,6 +962,210 @@
       if (panelOpen || !$("#" + TOGGLE_ID).length) return;
       openDockedPreview();
     }, 0);
+  }
+
+  // =========================================================
+  // LIGHTWEIGHT JOB TRACK SUMMARY
+  // =========================================================
+  function mountJobPerformanceStrip() {
+    if ($("#" + JOB_PERFORMANCE_ID).length) return;
+
+    var $itemsTab = $("#items_tab");
+    if (!$itemsTab.length) return;
+
+    var $strip = $(
+      '<section id="' + JOB_PERFORMANCE_ID + '" class="is-unavailable" aria-label="Job performance after assumptions">' +
+        '<div class="wjp-head">' +
+          '<div><span class="wjp-title">Job Performance</span><span class="wjp-kicker">Final post-assumption</span></div>' +
+          '<div class="wjp-actions">' +
+            '<span class="wjp-status" aria-live="polite"><span class="wjp-status-dot"></span><span data-wjp-status>Calculating...</span></span>' +
+            '<button class="wjp-refresh" type="button">Refresh</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="wjp-metrics">' +
+          jobPerformanceMetricHtml("revenue", "Revenue", "") +
+          jobPerformanceMetricHtml("cos", "COS", "") +
+          jobPerformanceMetricHtml("gp", "GP£", "is-gp") +
+          jobPerformanceMetricHtml("gp-pct", "GP%", "is-gp-pct") +
+        '</div>' +
+        '<div class="wjp-health">' +
+          '<div class="wjp-rail" aria-hidden="true"><div class="wjp-rail-fill"></div></div>' +
+          '<div class="wjp-health-note" data-wjp-health-note>Loading live Job Track calculation</div>' +
+        '</div>' +
+        '<iframe id="' + JOB_PERFORMANCE_IFRAME_ID + '" title="Job Track calculation source" tabindex="-1" aria-hidden="true"></iframe>' +
+      '</section>'
+    );
+
+    $itemsTab.append($strip);
+    $strip.find(".wjp-refresh").on("click", function () { refreshJobPerformanceNow("manual"); });
+    $("#" + JOB_PERFORMANCE_IFRAME_ID).on("load.wiseJobPerformance", function () {
+      try {
+        if (this.contentWindow && this.contentWindow.location.href === "about:blank") return;
+      } catch (err) {}
+      var token = jobPerformanceLoadToken;
+      clearTimeout(jobPerformanceLoadTimer);
+      jobPerformanceLoadTimer = setTimeout(function () { readJobPerformanceFromFrame(token, 0); }, 80);
+    });
+
+    refreshJobPerformanceNow("mount");
+  }
+
+  function jobPerformanceMetricHtml(key, label, extraClass) {
+    return '<div class="wjp-metric ' + escapeHtml(extraClass || "") + '">' +
+      '<span class="wjp-label">' + escapeHtml(label) + '</span>' +
+      '<span class="wjp-value" data-wjp-metric="' + escapeHtml(key) + '">—</span>' +
+    '</div>';
+  }
+
+  function refreshJobPerformanceSoon(reason) {
+    if (!$("#" + JOB_PERFORMANCE_ID).length) return;
+    clearTimeout(jobPerformanceRefreshTimer);
+    jobPerformanceRefreshTimer = setTimeout(function () {
+      refreshJobPerformanceNow(reason || "debounced");
+    }, REFRESH_DEBOUNCE_MS);
+  }
+
+  function refreshJobPerformanceNow(reason) {
+    var $strip = $("#" + JOB_PERFORMANCE_ID);
+    if (!$strip.length) return;
+
+    clearTimeout(jobPerformanceRefreshTimer);
+    clearTimeout(jobPerformanceLoadTimer);
+    jobPerformanceLoadToken += 1;
+
+    var url = buildJobPerformanceUrl();
+    if (!url) {
+      renderJobPerformanceUnavailable("Job Track unavailable", "Could not determine this job's calculation source");
+      return;
+    }
+
+    setJobPerformanceTone("is-unavailable");
+    $strip.find("[data-wjp-status]").text(reason === "manual" ? "Refreshing..." : "Calculating...");
+    $strip.find("[data-wjp-health-note]").text("Loading live Job Track calculation");
+    document.getElementById(JOB_PERFORMANCE_IFRAME_ID).src = url;
+  }
+
+  function readJobPerformanceFromFrame(token, attempt) {
+    if (token !== jobPerformanceLoadToken) return;
+
+    var iframe = document.getElementById(JOB_PERFORMANCE_IFRAME_ID);
+    var doc = null;
+
+    try {
+      doc = iframe && iframe.contentDocument;
+    } catch (err) {
+      renderJobPerformanceUnavailable("Job Track unavailable", "The live calculation could not be read on this page");
+      return;
+    }
+
+    var row = doc && doc.querySelector("tr.summary-subtotal-row.summary-assumed");
+    var cells = row ? row.querySelectorAll("td") : [];
+    if (!row || cells.length < 7) {
+      if (attempt < 15) {
+        clearTimeout(jobPerformanceLoadTimer);
+        jobPerformanceLoadTimer = setTimeout(function () {
+          readJobPerformanceFromFrame(token, attempt + 1);
+        }, 120);
+        return;
+      }
+      renderJobPerformanceUnavailable("Waiting for Job Track", "The final post-assumption subtotal is not available yet");
+      return;
+    }
+
+    var metrics = {
+      cos: normaliseWhitespace(cells[1].textContent || ""),
+      revenue: normaliseWhitespace(cells[3].textContent || ""),
+      gp: normaliseWhitespace(cells[4].textContent || ""),
+      gpPctText: normaliseWhitespace(cells[5].textContent || ""),
+      sourceStatus: normaliseWhitespace(cells[6].textContent || "")
+    };
+    metrics.gpPct = parseJobPerformancePercent(metrics.gpPctText);
+    metrics.thresholdPct = readJobPerformancePercent(doc, [
+      "[name='job:gp_threshold_percent']",
+      "[name='project:gp_threshold_percent']",
+      "[name='gp_threshold_percent']"
+    ], 46);
+    metrics.targetPct = 50;
+
+    renderJobPerformanceMetrics(metrics);
+  }
+
+  function readJobPerformancePercent(doc, selectors, fallback) {
+    for (var i = 0; doc && i < selectors.length; i++) {
+      var el = doc.querySelector(selectors[i]);
+      var parsed = parseJobPerformancePercent(el ? el.textContent : "");
+      if (parsed != null) return parsed;
+    }
+    return fallback;
+  }
+
+  function parseJobPerformancePercent(value) {
+    var cleaned = String(value == null ? "" : value).replace(/,/g, "").replace(/%/g, "").trim();
+    if (!cleaned || /\{\{/.test(cleaned)) return null;
+    var parsed = Number(cleaned);
+    return isFinite(parsed) ? parsed : null;
+  }
+
+  function renderJobPerformanceMetrics(metrics) {
+    var $strip = $("#" + JOB_PERFORMANCE_ID);
+    if (!$strip.length) return;
+
+    setJobPerformanceMetric("revenue", metrics.revenue);
+    setJobPerformanceMetric("cos", metrics.cos);
+    setJobPerformanceMetric("gp", metrics.gp);
+    setJobPerformanceMetric("gp-pct", metrics.gpPctText);
+
+    var needsReview = /review|low/i.test(metrics.sourceStatus || "") ||
+      (metrics.gpPct != null && metrics.gpPct < metrics.thresholdPct);
+    var strong = !needsReview && metrics.gpPct != null && metrics.gpPct >= metrics.targetPct;
+    var tone = needsReview ? "is-review" : (strong ? "is-strong" : "is-on-track");
+    var label = needsReview ? "Needs review" : (strong ? "Strong" : "On track");
+    var scaleMax = 60;
+    var railWidth = metrics.gpPct == null ? 0 : Math.max(0, Math.min(100, (metrics.gpPct / scaleMax) * 100));
+
+    setJobPerformanceTone(tone);
+    $strip.find("[data-wjp-status]").text(label);
+    $strip.find(".wjp-rail-fill").css("width", railWidth.toFixed(1) + "%");
+    $strip.find("[data-wjp-health-note]").text(
+      "Threshold " + formatJobPerformancePercent(metrics.thresholdPct) + " · Target " + formatJobPerformancePercent(metrics.targetPct)
+    );
+    $strip.attr("title", "Worst-case after realised assumptions. Job Track status: " + (metrics.sourceStatus || label) + ".");
+    releaseJobPerformanceFrame(jobPerformanceLoadToken);
+  }
+
+  function releaseJobPerformanceFrame(token) {
+    setTimeout(function () {
+      if (token !== jobPerformanceLoadToken) return;
+      var iframe = document.getElementById(JOB_PERFORMANCE_IFRAME_ID);
+      if (iframe) iframe.src = "about:blank";
+    }, 0);
+  }
+
+  function renderJobPerformanceUnavailable(status, note) {
+    setJobPerformanceTone("is-unavailable");
+    setJobPerformanceMetric("revenue", "—");
+    setJobPerformanceMetric("cos", "—");
+    setJobPerformanceMetric("gp", "—");
+    setJobPerformanceMetric("gp-pct", "—");
+    $("#" + JOB_PERFORMANCE_ID).find("[data-wjp-status]").text(status || "Unavailable");
+    $("#" + JOB_PERFORMANCE_ID).find("[data-wjp-health-note]").text(note || "Live Job Track calculation unavailable");
+    $("#" + JOB_PERFORMANCE_ID).find(".wjp-rail-fill").css("width", "0");
+    releaseJobPerformanceFrame(jobPerformanceLoadToken);
+  }
+
+  function setJobPerformanceMetric(key, value) {
+    $("#" + JOB_PERFORMANCE_ID).find('[data-wjp-metric="' + key + '"]').text(value || "—");
+  }
+
+  function setJobPerformanceTone(tone) {
+    $("#" + JOB_PERFORMANCE_ID)
+      .removeClass("is-strong is-on-track is-review is-unavailable")
+      .addClass(tone || "is-unavailable");
+  }
+
+  function formatJobPerformancePercent(value) {
+    if (value == null || !isFinite(value)) return "—";
+    return (Math.round(value * 10) / 10).toFixed(value % 1 ? 1 : 0) + "%";
   }
 
   function findToolbarHost() {
@@ -1117,6 +1392,19 @@
 
     clearStatus();
 
+    return buildDocumentVariantUrl(activeVariant, true);
+  }
+
+  function buildJobPerformanceUrl() {
+    var variant = getDocumentVariantByKey(JOB_PERFORMANCE_VARIANT_KEY);
+    if (!variant || !getCurrentJobId()) return "";
+    return buildDocumentVariantUrl(variant, false);
+  }
+
+  function buildDocumentVariantUrl(variant, includeSelectedIds) {
+    var jobId = getCurrentJobId();
+    if (!variant || !jobId) return "";
+
     var params = new URLSearchParams();
     params.set("main_id", jobId);
 
@@ -1126,18 +1414,20 @@
       params.set(key, PREVIEW_CONFIG.staticParams[key]);
     }
 
-    var variantParamKeys = Object.keys(activeVariant.params || {});
+    var variantParamKeys = Object.keys(variant.params || {});
     for (var v = 0; v < variantParamKeys.length; v++) {
       var variantKey = variantParamKeys[v];
-      params.set(variantKey, activeVariant.params[variantKey]);
+      params.set(variantKey, variant.params[variantKey]);
     }
 
     params.set("local", formatLocalDateTime(new Date()));
     params.set("tz", PREVIEW_CONFIG.timezone);
 
-    var selectedIds = getSelectedSupplyingNodeIds();
-    for (var i = 0; i < selectedIds.length; i++) {
-      params.append("params[selected][]", selectedIds[i]);
+    if (includeSelectedIds) {
+      var selectedIds = getSelectedSupplyingNodeIds();
+      for (var i = 0; i < selectedIds.length; i++) {
+        params.append("params[selected][]", selectedIds[i]);
+      }
     }
 
     params.set("_ts", String(Date.now()));
@@ -1977,6 +2267,7 @@
 
           if (shouldTriggerPreviewRefresh(url, xhr.status)) {
             refreshPreviewSoon("xhr");
+            refreshJobPerformanceSoon("xhr");
           }
         } catch (e) {}
       });
@@ -1999,6 +2290,7 @@
         try {
           if (shouldTriggerPreviewRefresh(url, response && response.status)) {
             refreshPreviewSoon("fetch");
+            refreshJobPerformanceSoon("fetch");
           }
         } catch (e) {}
         return response;
