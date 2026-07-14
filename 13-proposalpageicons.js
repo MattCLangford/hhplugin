@@ -8,6 +8,7 @@
  *   Dept: ...          landscape image/table page (rendered)
  *   // Section: ...    muted/prohibited hero/title page (not rendered)
  *   // Dept: ...       muted/prohibited image/table page (not rendered)
+ *   Technical Summary  client-visible revenue medallion (support heading)
  *
  * Every other HireHop tree icon is left untouched. This module changes only
  * the rendered jsTree icon class; it never changes heading names or item data.
@@ -22,7 +23,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-14.1",
+    version: "2026-07-14.2",
     styleId: "wise-proposal-page-icon-styles",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     refreshDelayMs: 70,
@@ -34,6 +35,7 @@
   var DISABLED_CLASS = "wise-proposal-page-icon-disabled";
   var SECTION_CLASS = "wise-proposal-page-icon-section";
   var DEPT_CLASS = "wise-proposal-page-icon-dept";
+  var TECHNICAL_SUMMARY_CLASS = "wise-proposal-page-icon-technical-summary";
   var USER_DEPOT_KEYS = [
     "DEPOT_ID", "depot_id", "DEFAULT_DEPOT_ID", "default_depot_id",
     "BRANCH_ID", "branch_id", "WAREHOUSE_ID", "warehouse_id",
@@ -48,7 +50,8 @@
     observer: null,
     observedTree: null,
     activeCount: 0,
-    disabledCount: 0
+    disabledCount: 0,
+    technicalSummaryCount: 0
   };
 
   bootstrap();
@@ -108,6 +111,7 @@
 
     var activeCount = 0;
     var disabledCount = 0;
+    var technicalSummaryCount = 0;
 
     $treeHost.find("li.jstree-node").each(function () {
       var $li = $(this);
@@ -129,15 +133,18 @@
       $icon.addClass(ACTIVE_CLASS)
         .toggleClass(SECTION_CLASS, pageType.type === "section")
         .toggleClass(DEPT_CLASS, pageType.type === "dept")
+        .toggleClass(TECHNICAL_SUMMARY_CLASS, pageType.type === "technical-summary")
         .toggleClass(DISABLED_CLASS, pageType.disabled)
         .attr("data-wise-proposal-page", pageType.type + (pageType.disabled ? "-disabled" : ""));
 
-      if (pageType.disabled) disabledCount += 1;
+      if (pageType.type === "technical-summary") technicalSummaryCount += 1;
+      else if (pageType.disabled) disabledCount += 1;
       else activeCount += 1;
     });
 
     state.activeCount = activeCount;
     state.disabledCount = disabledCount;
+    state.technicalSummaryCount = technicalSummaryCount;
   }
 
   function maintainObserver(treeHost) {
@@ -165,11 +172,12 @@
     }
     state.activeCount = 0;
     state.disabledCount = 0;
+    state.technicalSummaryCount = 0;
   }
 
   function clearIcon($icon) {
     if (!$icon || !$icon.length || !$icon.hasClass(ACTIVE_CLASS)) return;
-    $icon.removeClass(ACTIVE_CLASS + " " + DISABLED_CLASS + " " + SECTION_CLASS + " " + DEPT_CLASS)
+    $icon.removeClass(ACTIVE_CLASS + " " + DISABLED_CLASS + " " + SECTION_CLASS + " " + DEPT_CLASS + " " + TECHNICAL_SUMMARY_CLASS)
       .removeAttr("data-wise-proposal-page");
   }
 
@@ -221,6 +229,10 @@
     var raw = $.trim(String(value == null ? "" : value));
     var disabled = /^\/\/\s*/.test(raw);
     if (disabled) raw = raw.replace(/^\/\/\s*/, "");
+
+    if (!disabled && /^technical\s+summary$/i.test(raw)) {
+      return { type: "technical-summary", disabled: false };
+    }
 
     var match = raw.match(/^(section|dept)\s*:\s*/i);
     if (!match) return null;
@@ -274,6 +286,7 @@
     var deptSvg = svgDataUri(proposalPageSvg("dept", false));
     var disabledSectionSvg = svgDataUri(proposalPageSvg("section", true));
     var disabledDeptSvg = svgDataUri(proposalPageSvg("dept", true));
+    var technicalSummarySvg = svgDataUri(clientRevenueSvg());
 
     var style = document.createElement("style");
     style.id = CFG.styleId;
@@ -293,6 +306,10 @@
       "}" +
       CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "." + DEPT_CLASS + "." + DISABLED_CLASS + "{" +
         "background-image:url(\"" + disabledDeptSvg + "\")!important;opacity:.84!important;" +
+      "}" +
+      CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "." + TECHNICAL_SUMMARY_CLASS + "{" +
+        "background-image:url(\"" + technicalSummarySvg + "\")!important;" +
+        "background-size:23px 19px!important;opacity:1!important;" +
       "}";
     (document.head || document.documentElement).appendChild(style);
   }
@@ -339,6 +356,22 @@
     '</svg>';
   }
 
+  function clientRevenueSvg() {
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 26">' +
+      '<defs>' +
+        '<linearGradient id="eye" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffdf4"/><stop offset="1" stop-color="#ead89a"/></linearGradient>' +
+        '<radialGradient id="coin" cx="38%" cy="32%" r="72%"><stop offset="0" stop-color="#38566b"/><stop offset="1" stop-color="#102535"/></radialGradient>' +
+        '<filter id="shadow" x="-20%" y="-30%" width="150%" height="170%"><feDropShadow dx=".6" dy="1" stdDeviation=".75" flood-color="#2d3640" flood-opacity=".3"/></filter>' +
+      '</defs>' +
+      '<g filter="url(#shadow)">' +
+        '<path d="M2.7 13C6.4 7.1 10.9 4.2 16 4.2S25.6 7.1 29.3 13C25.6 18.9 21.1 21.8 16 21.8S6.4 18.9 2.7 13z" fill="url(#eye)" stroke="#9f8744" stroke-width="1.25" stroke-linejoin="round"/>' +
+        '<circle cx="16" cy="13" r="6.7" fill="url(#coin)" stroke="#d4b455" stroke-width="1.15"/>' +
+        '<path d="M18.75 9.45c-.72-.72-1.55-1.08-2.52-1.08-1.55 0-2.55 1-2.55 2.5 0 .82.23 1.52.62 2.25m-2.05 0h5.15m-5.05 4.18h6.35m-4.4-4.18c.2 1.63-.28 2.82-1.95 4.18" fill="none" stroke="#fff8dc" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"/>' +
+        '<circle cx="5.75" cy="13" r=".78" fill="#d4b455"/><circle cx="26.25" cy="13" r=".78" fill="#d4b455"/>' +
+      '</g>' +
+    '</svg>';
+  }
+
   function svgDataUri(svg) {
     return "data:image/svg+xml," + encodeURIComponent(svg)
       .replace(/%20/g, " ")
@@ -357,7 +390,8 @@
         supplyingListFound: !!$(CFG.tree).length,
         depotAllowed: isProposalCreationDepot(),
         activePageIcons: state.activeCount,
-        disabledPageIcons: state.disabledCount
+        disabledPageIcons: state.disabledCount,
+        technicalSummaryIcons: state.technicalSummaryCount
       };
     }
   };

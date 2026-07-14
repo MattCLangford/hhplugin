@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-14.1",
+  "version": "2026-07-14.2",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -106,8 +106,8 @@
     {
       "file": "13-proposalpageicons.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "0.3",
-      "role": "Proposal Creation depot only: replaces native Section:/Dept: supplying-list folder icons with distinct landscape page thumbnails—Section shows a hero image with a centred title, while Dept shows a half-image/half-table layout. Their // disabled forms keep the matching layout but add a muted slash. Heading data and every unmatched native tree icon remain untouched.",
+      "cacheVersion": "0.4",
+      "role": "Proposal Creation depot only: replaces native Section:/Dept: supplying-list folder icons with distinct landscape page thumbnails—Section shows a hero image with a centred title, while Dept shows a half-image/half-table layout. Their // disabled forms keep the matching layout but add a muted slash. The exact Technical Summary support heading gets a separate eye-and-revenue medallion for its client-visible line items. Heading data and every unmatched native tree icon remain untouched.",
       "recommendedLoadOrder": 13
     }
   ],
