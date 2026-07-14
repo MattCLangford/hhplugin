@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-14.4",
+  "version": "2026-07-14.5",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -28,8 +28,8 @@
     {
       "file": "1-docprev.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "0.8",
-      "role": "Document preview panel used by power users on the supplying list. It opens docked by default after the toolbar entry point mounts, remains user-closable, and does not reopen automatically after the user closes it during that page session. A compact Job Performance strip at the bottom reuses the live Job Track render to show final post-assumption Revenue, COS, GP£, GP%, threshold/target context, and a clear Strong/On track/Needs review signal.",
+      "cacheVersion": "0.9",
+      "role": "Document preview panel used by power users on the supplying list. It opens docked by default after the toolbar entry point mounts, remains user-closable, and does not reopen automatically after the user closes it during that page session. A compact Job Performance strip at the bottom reuses the live Job Track render to show final post-assumption Revenue, COS, GP£, GP%, threshold/target context, and a clear Strong/On track/Needs review signal. The misleading native Replacement cost/Weight/Volume/Discount-Markup/Quoted net total footer is hidden presentation-only and replaced with a reminder of the Discretionary discount, Venue commission, and Client commission job inputs.",
       "recommendedLoadOrder": 2
     },
     {

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-14.2"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-14.3"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -40,6 +40,8 @@
   var JOB_PERFORMANCE_ID = "wise-job-performance";
   var JOB_PERFORMANCE_IFRAME_ID = "wise-job-performance-source";
   var JOB_PERFORMANCE_VARIANT_KEY = "jobtrack_gp_predictor";
+  var COMMERCIAL_TERMS_ID = "wise-commercial-adjustments";
+  var NATIVE_TOTALS_HIDDEN_CLASS = "wise-native-job-totals-hidden";
 
   var PREVIEW_CONFIG = {
     minPreviewWidth: 360,
@@ -897,10 +899,30 @@
       '#' + JOB_PERFORMANCE_ID + ' .wjp-rail-fill { height:100%; width:0; border-radius:inherit; background:var(--wjp-tone); transition:width .25s ease; }',
       '#' + JOB_PERFORMANCE_ID + ' .wjp-health-note { color:#667085; font-size:10px; white-space:nowrap; }',
       '#' + JOB_PERFORMANCE_IFRAME_ID + ' { display:none!important; width:0; height:0; border:0; }',
+      '#items_tab .' + NATIVE_TOTALS_HIDDEN_CLASS + ' { display:none!important; }',
+      '#' + COMMERCIAL_TERMS_ID + ' {',
+      '  display:grid;',
+      '  grid-template-columns:minmax(180px,1.35fr) repeat(3,minmax(130px,1fr));',
+      '  align-items:stretch;',
+      '  margin:12px 10px 0;',
+      '  border:1px solid #d7dde3;',
+      '  border-radius:9px;',
+      '  background:#f8fafc;',
+      '  color:#17212b;',
+      '  overflow:hidden;',
+      '}',
+      '#' + COMMERCIAL_TERMS_ID + ' .wca-intro { display:flex; flex-direction:column; justify-content:center; padding:8px 12px; background:#eef2f6; }',
+      '#' + COMMERCIAL_TERMS_ID + ' .wca-title { font-size:12px; font-weight:700; }',
+      '#' + COMMERCIAL_TERMS_ID + ' .wca-note { margin-top:2px; color:#667085; font-size:10px; }',
+      '#' + COMMERCIAL_TERMS_ID + ' .wca-item { display:flex; align-items:center; justify-content:space-between; gap:9px; padding:8px 12px; border-left:1px solid #dde3e8; }',
+      '#' + COMMERCIAL_TERMS_ID + ' .wca-label { color:#667085; font-size:10px; font-weight:650; }',
+      '#' + COMMERCIAL_TERMS_ID + ' .wca-value { color:#17212b; font-size:13px; font-weight:750; white-space:nowrap; }',
       '@media (max-width:850px) {',
       '  #' + JOB_PERFORMANCE_ID + ' .wjp-metrics { grid-template-columns:repeat(2,minmax(110px,1fr)); }',
       '  #' + JOB_PERFORMANCE_ID + ' .wjp-metric:nth-child(3) { border-left:0; border-top:1px solid #e5e9ed; }',
       '  #' + JOB_PERFORMANCE_ID + ' .wjp-metric:nth-child(4) { border-top:1px solid #e5e9ed; }',
+      '  #' + COMMERCIAL_TERMS_ID + ' { grid-template-columns:1fr; }',
+      '  #' + COMMERCIAL_TERMS_ID + ' .wca-item { border-left:0; border-top:1px solid #dde3e8; }',
       '}',
       '</style>'
     ].join("");
@@ -973,6 +995,14 @@
     var $itemsTab = $("#items_tab");
     if (!$itemsTab.length) return;
 
+    var $terms = $(
+      '<aside id="' + COMMERCIAL_TERMS_ID + '" aria-label="Commercial adjustment inputs">' +
+        '<div class="wca-intro"><span class="wca-title">Commercial adjustments</span><span class="wca-note">Job inputs applied by Job Track</span></div>' +
+        commercialTermHtml("discount", "Discretionary discount") +
+        commercialTermHtml("venue", "Venue commission") +
+        commercialTermHtml("client", "Client commission") +
+      '</aside>'
+    );
     var $strip = $(
       '<section id="' + JOB_PERFORMANCE_ID + '" class="is-unavailable" aria-label="Job performance after assumptions">' +
         '<div class="wjp-head">' +
@@ -996,7 +1026,8 @@
       '</section>'
     );
 
-    $itemsTab.append($strip);
+    hideNativeJobTotalsRow();
+    $itemsTab.append($terms).append($strip);
     $strip.find(".wjp-refresh").on("click", function () { refreshJobPerformanceNow("manual"); });
     $("#" + JOB_PERFORMANCE_IFRAME_ID).on("load.wiseJobPerformance", function () {
       try {
@@ -1010,6 +1041,48 @@
     refreshJobPerformanceNow("mount");
   }
 
+  function commercialTermHtml(key, label) {
+    return '<div class="wca-item"><span class="wca-label">' + escapeHtml(label) + '</span>' +
+      '<span class="wca-value" data-wca-value="' + escapeHtml(key) + '">—</span></div>';
+  }
+
+  function hideNativeJobTotalsRow() {
+    var root = document.getElementById("items_tab");
+    if (!root) return null;
+
+    var candidates = root.querySelectorAll("div,tr,table,tbody,tfoot");
+    var best = null;
+    var bestTextLength = Infinity;
+
+    for (var i = 0; i < candidates.length; i++) {
+      var element = candidates[i];
+      if (!element || element.id === COMMERCIAL_TERMS_ID || element.id === JOB_PERFORMANCE_ID) continue;
+      if (element.querySelector && element.querySelector("#" + COMMERCIAL_TERMS_ID + ",#" + JOB_PERFORMANCE_ID)) continue;
+
+      var text = normaliseWhitespace(element.textContent || "").toLowerCase().replace(/\s*\/\s*/g, "/");
+      if (text.indexOf("discount/markup") === -1 || text.indexOf("quoted net total") === -1) continue;
+      if (text.length >= bestTextLength) continue;
+
+      best = element;
+      bestTextLength = text.length;
+    }
+
+    if (best) {
+      $(best).addClass(NATIVE_TOTALS_HIDDEN_CLASS).attr("data-wise-native-totals", "hidden");
+    }
+    return best;
+  }
+
+  function removeJobPerformanceStrip() {
+    clearTimeout(jobPerformanceRefreshTimer);
+    clearTimeout(jobPerformanceLoadTimer);
+    jobPerformanceLoadToken += 1;
+    $("#" + COMMERCIAL_TERMS_ID + ",#" + JOB_PERFORMANCE_ID).remove();
+    $("#items_tab ." + NATIVE_TOTALS_HIDDEN_CLASS)
+      .removeClass(NATIVE_TOTALS_HIDDEN_CLASS)
+      .removeAttr("data-wise-native-totals");
+  }
+
   function jobPerformanceMetricHtml(key, label, extraClass) {
     return '<div class="wjp-metric ' + escapeHtml(extraClass || "") + '">' +
       '<span class="wjp-label">' + escapeHtml(label) + '</span>' +
@@ -1019,6 +1092,7 @@
 
   function refreshJobPerformanceSoon(reason) {
     if (!$("#" + JOB_PERFORMANCE_ID).length) return;
+    hideNativeJobTotalsRow();
     clearTimeout(jobPerformanceRefreshTimer);
     jobPerformanceRefreshTimer = setTimeout(function () {
       refreshJobPerformanceNow(reason || "debounced");
@@ -1086,6 +1160,21 @@
       "[name='gp_threshold_percent']"
     ], 46);
     metrics.targetPct = 50;
+    metrics.discountPct = readJobPerformancePercent(doc, [
+      "[name='job:_Discount']",
+      "[name='_Discount']",
+      "[name='job:discount']"
+    ], 0);
+    metrics.venueCommissionPct = readJobPerformancePercent(doc, [
+      "[name='job:_VenueCommission']",
+      "[name='_VenueCommission']",
+      "[name='job:venue_commission']"
+    ], 0);
+    metrics.clientCommissionPct = readJobPerformancePercent(doc, [
+      "[name='job:_ClientCommission']",
+      "[name='_ClientCommission']",
+      "[name='job:client_commission']"
+    ], 0);
 
     renderJobPerformanceMetrics(metrics);
   }
@@ -1114,6 +1203,9 @@
     setJobPerformanceMetric("cos", metrics.cos);
     setJobPerformanceMetric("gp", metrics.gp);
     setJobPerformanceMetric("gp-pct", metrics.gpPctText);
+    setCommercialTerm("discount", metrics.discountPct);
+    setCommercialTerm("venue", metrics.venueCommissionPct);
+    setCommercialTerm("client", metrics.clientCommissionPct);
 
     var needsReview = /review|low/i.test(metrics.sourceStatus || "") ||
       (metrics.gpPct != null && metrics.gpPct < metrics.thresholdPct);
@@ -1147,6 +1239,9 @@
     setJobPerformanceMetric("cos", "—");
     setJobPerformanceMetric("gp", "—");
     setJobPerformanceMetric("gp-pct", "—");
+    setCommercialTerm("discount", null);
+    setCommercialTerm("venue", null);
+    setCommercialTerm("client", null);
     $("#" + JOB_PERFORMANCE_ID).find("[data-wjp-status]").text(status || "Unavailable");
     $("#" + JOB_PERFORMANCE_ID).find("[data-wjp-health-note]").text(note || "Live Job Track calculation unavailable");
     $("#" + JOB_PERFORMANCE_ID).find(".wjp-rail-fill").css("width", "0");
@@ -1155,6 +1250,12 @@
 
   function setJobPerformanceMetric(key, value) {
     $("#" + JOB_PERFORMANCE_ID).find('[data-wjp-metric="' + key + '"]').text(value || "—");
+  }
+
+  function setCommercialTerm(key, value) {
+    $("#" + COMMERCIAL_TERMS_ID).find('[data-wca-value="' + key + '"]').text(
+      value == null || !isFinite(value) ? "—" : formatJobPerformancePercent(value)
+    );
   }
 
   function setJobPerformanceTone(tone) {
@@ -1206,6 +1307,7 @@
 
   function removePreviewEntryPoint() {
     if (panelOpen) closeDockedPreview();
+    removeJobPerformanceStrip();
     $("#" + TOGGLE_ID).remove();
   }
 
