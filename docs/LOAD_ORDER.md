@@ -6,7 +6,7 @@ Use this order for the live HireHop scripts.
 
 `0-loader.js` is the only script that should be pasted into the HireHop company config string. It waits until HireHop has rendered enough page context, then lazy-loads the page-specific modules below.
 
-On the supplying list, `1-docprev.js` opens the docked proposal preview by default once its toolbar button is ready. The user can close it normally; subsequent page activity does not force it open again during that page session. The same module mounts a lightweight Job Performance strip at the bottom of the supplying list. It reads the final post-assumption subtotal from the live Job Track render (`doc=162`) and shows only Revenue, COS, GP£, GP%, and the current performance signal. The native totals footer is hidden presentation-only and replaced by a compact reminder of the job's Discretionary discount, Venue commission, and Client commission inputs.
+On the supplying list, `1-docprev.js` opens the docked proposal preview by default once its toolbar button is ready. The user can close it normally; subsequent page activity does not force it open again during that page session. Directly below the native button toolbar and above the list, the same module mounts the Commercial adjustments reminder followed by the lightweight Job Performance strip. It reads the final post-assumption subtotal from the live Job Track render (`doc=162`) and shows only Revenue, COS, GP£, GP%, and the current performance signal. The native totals footer remains hidden presentation-only.
 
 ## Lazy Module Order
 

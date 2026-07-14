@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-14.3"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-14.4"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -972,7 +972,7 @@
       $host.append($btn);
     }
 
-    mountJobPerformanceStrip();
+    mountJobPerformanceStrip($host);
     openPreviewByDefaultOnce();
   }
 
@@ -989,7 +989,7 @@
   // =========================================================
   // LIGHTWEIGHT JOB TRACK SUMMARY
   // =========================================================
-  function mountJobPerformanceStrip() {
+  function mountJobPerformanceStrip($toolbarHost) {
     if ($("#" + JOB_PERFORMANCE_ID).length) return;
 
     var $itemsTab = $("#items_tab");
@@ -1027,7 +1027,13 @@
     );
 
     hideNativeJobTotalsRow();
-    $itemsTab.append($terms).append($strip);
+    var $anchor = ($toolbarHost && $toolbarHost.length) ? $toolbarHost : findToolbarHost();
+    if ($anchor.length) {
+      $terms.insertAfter($anchor);
+      $strip.insertAfter($terms);
+    } else {
+      $itemsTab.prepend($strip).prepend($terms);
+    }
     $strip.find(".wjp-refresh").on("click", function () { refreshJobPerformanceNow("manual"); });
     $("#" + JOB_PERFORMANCE_IFRAME_ID).on("load.wiseJobPerformance", function () {
       try {
