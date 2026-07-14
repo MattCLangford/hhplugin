@@ -6,6 +6,8 @@ Use this order for the live HireHop scripts.
 
 `0-loader.js` is the only script that should be pasted into the HireHop company config string. It waits until HireHop has rendered enough page context, then lazy-loads the page-specific modules below.
 
+On the supplying list, `1-docprev.js` opens the docked proposal preview by default once its toolbar button is ready. The user can close it normally; subsequent page activity does not force it open again during that page session.
+
 ## Lazy Module Order
 
 The loader preserves this order when a route needs the modules.

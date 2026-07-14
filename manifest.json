@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-14.2",
+  "version": "2026-07-14.3",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -28,8 +28,8 @@
     {
       "file": "1-docprev.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "0.6",
-      "role": "Document preview panel used by power users and by the page editor preview dock.",
+      "cacheVersion": "0.7",
+      "role": "Document preview panel used by power users on the supplying list. It opens docked by default after the toolbar entry point mounts, remains user-closable, and does not reopen automatically after the user closes it during that page session.",
       "recommendedLoadOrder": 2
     },
     {

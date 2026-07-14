@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-05-21.2"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-14.1"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -91,6 +91,7 @@
   var REFRESH_DEBOUNCE_MS = PREVIEW_CONFIG.refreshDebounceMs;
 
   var panelOpen = false;
+  var defaultOpenAttempted = false;
   var autoRefreshEnabled = true;
   var refreshTimer = null;
   var domObserver = null;
@@ -878,6 +879,18 @@
     } else {
       $host.append($btn);
     }
+
+    openPreviewByDefaultOnce();
+  }
+
+  function openPreviewByDefaultOnce() {
+    if (defaultOpenAttempted) return;
+    defaultOpenAttempted = true;
+
+    setTimeout(function () {
+      if (panelOpen || !$("#" + TOGGLE_ID).length) return;
+      openDockedPreview();
+    }, 0);
   }
 
   function findToolbarHost() {

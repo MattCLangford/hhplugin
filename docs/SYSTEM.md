@@ -18,7 +18,7 @@ Load this in HireHop:
 
 `5-hirehop.js` names the HireHop UI selectors, endpoint paths, depot rules, timings, active depot detector, and tree item prefixes that the other runtime scripts depend on. It loads first so each module shares the same framework-aware HireHop context.
 
-`1-docprev.js` is essential because it lets users see what their list edits do to the rendered proposal. Power users can work directly in HireHop's native list editing with that preview open.
+`1-docprev.js` is essential because it lets users see what their list edits do to the rendered proposal. On an eligible supplying-list page it opens docked by default as soon as its toolbar entry point is mounted. The user can close it normally, and a one-time startup guard prevents later refreshes or DOM activity from forcing it open again during that page session. Power users can therefore work directly in HireHop's native list editing with the preview immediately visible.
 
 `2-apselall.js` is a small helper for a repetitive native popup action across all depots. It should remain independent and boring in the best possible way.
 
