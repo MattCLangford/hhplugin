@@ -4,10 +4,10 @@
  * Supplying-list-only visual helper for the Proposal Creation depot.
  *
  * Heading naming contract:
- *   Section: ...       document page (rendered by the proposal generator)
- *   Dept: ...          document page (rendered by the proposal generator)
- *   // Section: ...    muted/prohibited page (not rendered)
- *   // Dept: ...       muted/prohibited page (not rendered)
+ *   Section: ...       landscape hero/title page (rendered)
+ *   Dept: ...          landscape image/table page (rendered)
+ *   // Section: ...    muted/prohibited hero/title page (not rendered)
+ *   // Dept: ...       muted/prohibited image/table page (not rendered)
  *
  * Every other HireHop tree icon is left untouched. This module changes only
  * the rendered jsTree icon class; it never changes heading names or item data.
@@ -22,7 +22,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-13.2",
+    version: "2026-07-14.1",
     styleId: "wise-proposal-page-icon-styles",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     refreshDelayMs: 70,
@@ -32,6 +32,8 @@
 
   var ACTIVE_CLASS = "wise-proposal-page-icon";
   var DISABLED_CLASS = "wise-proposal-page-icon-disabled";
+  var SECTION_CLASS = "wise-proposal-page-icon-section";
+  var DEPT_CLASS = "wise-proposal-page-icon-dept";
   var USER_DEPOT_KEYS = [
     "DEPOT_ID", "depot_id", "DEFAULT_DEPOT_ID", "default_depot_id",
     "BRANCH_ID", "branch_id", "WAREHOUSE_ID", "warehouse_id",
@@ -125,8 +127,10 @@
       }
 
       $icon.addClass(ACTIVE_CLASS)
+        .toggleClass(SECTION_CLASS, pageType.type === "section")
+        .toggleClass(DEPT_CLASS, pageType.type === "dept")
         .toggleClass(DISABLED_CLASS, pageType.disabled)
-        .attr("data-wise-proposal-page", pageType.disabled ? "disabled" : "active");
+        .attr("data-wise-proposal-page", pageType.type + (pageType.disabled ? "-disabled" : ""));
 
       if (pageType.disabled) disabledCount += 1;
       else activeCount += 1;
@@ -165,7 +169,7 @@
 
   function clearIcon($icon) {
     if (!$icon || !$icon.length || !$icon.hasClass(ACTIVE_CLASS)) return;
-    $icon.removeClass(ACTIVE_CLASS + " " + DISABLED_CLASS)
+    $icon.removeClass(ACTIVE_CLASS + " " + DISABLED_CLASS + " " + SECTION_CLASS + " " + DEPT_CLASS)
       .removeAttr("data-wise-proposal-page");
   }
 
@@ -266,38 +270,73 @@
   function installStyles() {
     if (document.getElementById(CFG.styleId)) return;
 
-    var activeSvg = svgDataUri(
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 30">' +
-        '<defs><linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffdf2"/><stop offset="1" stop-color="#f0dfa5"/></linearGradient></defs>' +
-        '<path d="M7.8 3.8h9.1l4.3 4.4v18.1H7.8z" fill="#b9a15f" opacity=".28" transform="translate(1 1)"/>' +
-        '<path d="M7.8 3.8h9.1l4.3 4.4v18.1H7.8z" fill="url(#paper)" stroke="#ad9553" stroke-width="1.25" stroke-linejoin="round"/>' +
-        '<path d="M16.9 4.1v4.1h4" fill="#e5cf89" stroke="#ad9553" stroke-width="1.1" stroke-linejoin="round"/>' +
-        '<path d="M10.7 13.3h7.7M10.7 17h7.7M10.7 20.7h5.5" fill="none" stroke="#99813e" stroke-width="1.2" stroke-linecap="round"/>' +
-      '</svg>'
-    );
-    var disabledSvg = svgDataUri(
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 30">' +
-        '<defs><linearGradient id="muted" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f5f5f2"/><stop offset="1" stop-color="#d8dad8"/></linearGradient></defs>' +
-        '<path d="M7.8 3.8h9.1l4.3 4.4v18.1H7.8z" fill="#9fa39f" opacity=".2" transform="translate(1 1)"/>' +
-        '<path d="M7.8 3.8h9.1l4.3 4.4v18.1H7.8z" fill="url(#muted)" stroke="#929792" stroke-width="1.2" stroke-linejoin="round"/>' +
-        '<path d="M16.9 4.1v4.1h4" fill="#d1d4d1" stroke="#929792" stroke-width="1.05" stroke-linejoin="round"/>' +
-        '<path d="M10.7 13.3h7.2M10.7 17h5.7" fill="none" stroke="#a5aaa5" stroke-width="1.15" stroke-linecap="round"/>' +
-        '<path d="M9.6 23.3l10.2-11.1" fill="none" stroke="#777d78" stroke-width="1.7" stroke-linecap="round" opacity=".9"/>' +
-      '</svg>'
-    );
+    var sectionSvg = svgDataUri(proposalPageSvg("section", false));
+    var deptSvg = svgDataUri(proposalPageSvg("dept", false));
+    var disabledSectionSvg = svgDataUri(proposalPageSvg("section", true));
+    var disabledDeptSvg = svgDataUri(proposalPageSvg("dept", true));
 
     var style = document.createElement("style");
     style.id = CFG.styleId;
     style.textContent =
       CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "{" +
-        "background-image:url(\"" + activeSvg + "\")!important;" +
         "background-position:center!important;background-repeat:no-repeat!important;" +
-        "background-size:20px 22px!important;opacity:.96!important;" +
+        "background-size:24px 18px!important;opacity:.98!important;" +
       "}" +
-      CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "." + DISABLED_CLASS + "{" +
-        "background-image:url(\"" + disabledSvg + "\")!important;opacity:.82!important;" +
+      CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "." + SECTION_CLASS + "{" +
+        "background-image:url(\"" + sectionSvg + "\")!important;" +
+      "}" +
+      CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "." + DEPT_CLASS + "{" +
+        "background-image:url(\"" + deptSvg + "\")!important;" +
+      "}" +
+      CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "." + SECTION_CLASS + "." + DISABLED_CLASS + "{" +
+        "background-image:url(\"" + disabledSectionSvg + "\")!important;opacity:.84!important;" +
+      "}" +
+      CFG.tree + " .jstree-themeicon." + ACTIVE_CLASS + "." + DEPT_CLASS + "." + DISABLED_CLASS + "{" +
+        "background-image:url(\"" + disabledDeptSvg + "\")!important;opacity:.84!important;" +
       "}";
     (document.head || document.documentElement).appendChild(style);
+  }
+
+  function proposalPageSvg(type, disabled) {
+    var paperTop = disabled ? "#f4f4f1" : "#fffdf5";
+    var paperBottom = disabled ? "#d8dad7" : "#ead99b";
+    var frame = disabled ? "#8c928d" : "#9f8744";
+    var ink = disabled ? "#818681" : "#182a3a";
+    var imageTop = disabled ? "#b8bcba" : "#263f52";
+    var imageBottom = disabled ? "#8f9591" : "#102535";
+    var gold = disabled ? "#b1b4b1" : "#d4b455";
+    var content = "";
+
+    if (type === "section") {
+      content =
+        '<rect x="3.8" y="3.8" width="28.4" height="18.4" rx="1.3" fill="url(#hero)"/>' +
+        '<circle cx="26.6" cy="8" r="2.1" fill="' + gold + '" opacity=".95"/>' +
+        '<path d="M4.2 17.2l7-6.2 4.1 3.5 3.6-3 7.1 5.7z" fill="' + (disabled ? "#929792" : "#35566b") + '"/>' +
+        '<path d="M4.2 18.4l8.9-5 4.2 3.1 3.1-2.1 11.4 5.4v2H4.2z" fill="' + (disabled ? "#777d78" : "#1b3546") + '"/>' +
+        '<rect x="9" y="11.2" width="18" height="4.8" rx="1" fill="' + paperTop + '" stroke="' + gold + '" stroke-width=".65"/>' +
+        '<path d="M12.2 13.05h11.6M14.6 14.45h6.8" stroke="' + ink + '" stroke-width=".85" stroke-linecap="round"/>';
+    } else {
+      content =
+        '<path d="M3.8 3.8h13.9v18.4H3.8z" fill="url(#hero)"/>' +
+        '<circle cx="13.9" cy="8" r="1.8" fill="' + gold + '" opacity=".95"/>' +
+        '<path d="M4.2 17.7l5.3-6 3 3.2 2.1-2.1 2.7 3.3v5.7H4.2z" fill="' + (disabled ? "#838884" : "#28495d") + '"/>' +
+        '<path d="M17.7 3.8v18.4" stroke="' + frame + '" stroke-width=".75"/>' +
+        '<path d="M20.3 7h9.3M20.3 9.1h6.4" stroke="' + ink + '" stroke-width="1" stroke-linecap="round"/>' +
+        '<path d="M20.2 12h9.7v7.1h-9.7zM20.2 14.35h9.7M20.2 16.7h9.7M23.25 12v7.1" fill="none" stroke="' + frame + '" stroke-width=".65"/>';
+    }
+
+    if (disabled) {
+      content += '<path d="M6.2 21L29.8 5" fill="none" stroke="#6f7570" stroke-width="2.1" stroke-linecap="round" opacity=".94"/>';
+    }
+
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 26">' +
+      '<defs>' +
+        '<linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="' + paperTop + '"/><stop offset="1" stop-color="' + paperBottom + '"/></linearGradient>' +
+        '<linearGradient id="hero" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="' + imageTop + '"/><stop offset="1" stop-color="' + imageBottom + '"/></linearGradient>' +
+        '<filter id="shadow" x="-20%" y="-20%" width="150%" height="160%"><feDropShadow dx=".7" dy="1" stdDeviation=".8" flood-color="#2d3640" flood-opacity=".28"/></filter>' +
+      '</defs>' +
+      '<g filter="url(#shadow)"><rect x="2.5" y="2.5" width="31" height="21" rx="2" fill="url(#paper)" stroke="' + frame + '" stroke-width="1.15"/>' + content + '</g>' +
+    '</svg>';
   }
 
   function svgDataUri(svg) {
