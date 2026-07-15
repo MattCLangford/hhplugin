@@ -29,22 +29,36 @@
   var COMMERCIAL_TERMS = [
     /\bclient\s*reference\b/i, /\bcredit\s*period\b/i, /\bdiscount\b/i, /\bmarkup\b/i,
     /\bprice\s*group\b/i, /\bprice\s*structure\b/i, /\blate\s*fees?\b/i,
-    /\bearly\s*returns?\b/i, /\bcommission\b/i, /\bcommercial\b/i, /\bversion\b/i
+    /\bearly\s*returns?\b/i, /\bcommission\b/i, /\bcommercial\b/i
   ];
   var DATES_TERMS = [
     /\bkit\s*booking\b/i, /\bproject\s*\/\s*onsite\b/i, /\bproject\s+onsite\b/i,
     /\bgoods\s*out\b/i, /\bgoods\s*in\b/i, /\bcharge\s*period\b/i, /\bwise\s*prep\b/i,
     /\bvehicle\s*load\b/i, /\bvehicle\s*onsite\b/i, /\bvehicle\s*tip\b/i,
-    /\bempties\s*stored\b/i, /\bstart\s*(date|time)\b/i, /\bend\s*(date|time)\b/i,
+    /\bstart\s*(date|time)\b/i, /\bend\s*(date|time)\b/i,
     /\bfinish\s*(date|time)\b/i, /\bdelivery\s*(date|time)\b/i, /\bcollection\s*(date|time)\b/i
   ];
   var INFO_TERMS = [
-    /\bjob\s*id\b/i, /\bjob\s*type\b/i, /\bjob\s*memo\b/i, /\bjob\s*name\b/i,
+    /\bjob\s*id\b/i, /\bjob\s*type\b/i, /\bjob\s*memo\b/i, /\bjob\s*name\b/i, /\bversion\b/i,
     /\bcontact\s*name\b/i, /\bcompany\b/i, /\btelephone\b/i, /\bmobile\b/i, /\bemail\b/i,
     /\bvenue\b/i, /\bdelivery\s*address\b/i, /\bcollection\s*address\b/i,
-    /\buse\s*at\s*address\b/i, /\bwarehouse\s*name\b/i, /\bcreated\s*by\b/i
+    /\buse\s*at\s*address\b/i, /\bwarehouse\s*name\b/i, /\bcreated\s*by\b/i,
+    /\bempties\s*stored(?:\s*on\s*truck)?\b/i
   ];
-  var FULL_WIDTH_INFO_RE = /\b(job\s*id|created\s*by|job\s*memo|job\s*name)\b/i;
+  var EXPLICIT_INFO_RE = /\b(job\s*memo|version|empties\s*stored(?:\s*on\s*truck)?)\b/i;
+  var EXPLICIT_COMMERCIAL_RE = /\b(price\s*structure|discretionary\s*discount|(?:client|venue)\s*commission|commission)\b/i;
+  var DATE_PROGRESS_RULES = [
+    /\bkit\s*booking\s*start\b/i,
+    /\bwise\s*prep\s*start\b/i,
+    /\bvehicle\s*load\b/i,
+    /\bvehicle\s*onsite\s*[-–—:]?\s*install\b/i,
+    /\bproject\s*\/\s*onsite\s*start\b/i,
+    /\bvehicle\s*onsite\s*[-–—:]?\s*derig\b/i,
+    /\bproject\s*\/\s*onsite\s*end\b/i,
+    /\bvehicle\s*tip\b/i,
+    /\bkit\s*booking\s*end\b/i
+  ];
+  var FULL_WIDTH_INFO_RE = /\b(job\s*memo|job\s*name)\b/i;
   var USER_DEPOT_KEYS = [
     "DEPOT_ID", "depot_id", "DEFAULT_DEPOT_ID", "default_depot_id",
     "BRANCH_ID", "branch_id", "WAREHOUSE_ID", "warehouse_id",
@@ -52,7 +66,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-07-15.2", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-07-15.4", maintainRecoveryMs: 5000 };
   var state = { maintainTimer: null, maintainScheduled: null, lastRoot: null };
 
   bootstrap();
@@ -186,7 +200,7 @@
         collectCustomFieldUnits($child, units);
         return;
       }
-      if (normaliseText($child.text())) units.push({ element: this, source: "native" });
+      collectUnitsFromNode($child, units, "native");
     });
     return units;
   }
@@ -200,10 +214,51 @@
         return;
       }
       if (!normaliseText($field.text())) return;
-      units.push({ element: this, source: "custom" });
-      found += 1;
+      found += collectUnitsFromNode($field, units, "custom");
     });
     if (found) $container.addClass("wise-jg-source-container");
+  }
+
+  // HireHop groups several visually separate fields inside layout wrappers.
+  // Split only div/section wrappers with at least two recognisable field
+  // children and no direct form control/text of their own. This keeps each
+  // real control intact while allowing mixed native rows (for example Job
+  // memo + Client reference, or Warehouse + Price structure) to separate
+  // cleanly into the requested cards.
+  function collectUnitsFromNode($node, units, source) {
+    if (!$node || !$node.length || !normaliseText($node.text())) return 0;
+
+    var $children = $node.children("div,section").filter(function () {
+      return !!normaliseText($(this).text());
+    });
+    var recognised = 0;
+    $children.each(function () {
+      if (getPlacementScores(normaliseText($(this).text())).recognised) recognised += 1;
+    });
+
+    var canSplit = $children.length >= 2 && recognised >= 2 &&
+      !$node.children("input,select,textarea,button,table").length &&
+      !hasMeaningfulDirectText($node);
+
+    if (!canSplit) {
+      units.push({ element: $node.get(0), source: source });
+      return 1;
+    }
+
+    var added = 0;
+    $node.addClass("wise-jg-source-container");
+    $children.each(function () {
+      added += collectUnitsFromNode($(this), units, source);
+    });
+    return added;
+  }
+
+  function hasMeaningfulDirectText($node) {
+    var found = false;
+    $node.contents().each(function () {
+      if (this.nodeType === 3 && normaliseText(this.nodeValue)) found = true;
+    });
+    return found;
   }
 
   function buildGroups($jobInfo, units) {
@@ -224,17 +279,57 @@
       $unit.addClass("wise-jg-field-unit")
         .attr("data-wise-job-field-source", units[n].source)
         .appendTo(bodies[group]);
-      if (group === "job-info" && FULL_WIDTH_INFO_RE.test(text)) $unit.addClass("wise-jg-span-all");
+      if (group === "job-info" && isFullWidthInfo(text)) $unit.addClass("wise-jg-span-all");
     }
+
+    orderDateProgression(bodies["job-dates-times"]);
+  }
+
+  function orderDateProgression($body) {
+    if (!$body || !$body.length) return;
+    var fields = $body.children(".wise-jg-field-unit").get().map(function (element, originalIndex) {
+      var text = normaliseText($(element).text());
+      var order = DATE_PROGRESS_RULES.length;
+      for (var i = 0; i < DATE_PROGRESS_RULES.length; i++) {
+        if (DATE_PROGRESS_RULES[i].test(text)) {
+          order = i;
+          break;
+        }
+      }
+      $(element).attr("data-wise-job-date-order", order);
+      return { element: element, order: order, originalIndex: originalIndex };
+    });
+
+    fields.sort(function (a, b) {
+      return a.order - b.order || a.originalIndex - b.originalIndex;
+    });
+    for (var n = 0; n < fields.length; n++) $body.append(fields[n].element);
+  }
+
+  function isFullWidthInfo(text) {
+    return FULL_WIDTH_INFO_RE.test(text) ||
+      (/\bjob\s*id\b/i.test(text) && /\b(technical|created\s*by)\b/i.test(text));
   }
 
   function classifyUnit(text) {
-    var commercialScore = scoreTerms(text, COMMERCIAL_TERMS);
-    var datesScore = scoreTerms(text, DATES_TERMS);
-    var infoScore = scoreTerms(text, INFO_TERMS);
-    if (commercialScore && commercialScore >= datesScore && commercialScore > infoScore) return "job-commercial-info";
-    if (datesScore > infoScore) return "job-dates-times";
+    if (EXPLICIT_INFO_RE.test(text)) return "job-info";
+    if (EXPLICIT_COMMERCIAL_RE.test(text)) return "job-commercial-info";
+    var scores = getPlacementScores(text);
+    if (scores.commercial && scores.commercial >= scores.dates && scores.commercial > scores.info) return "job-commercial-info";
+    if (scores.dates > scores.info) return "job-dates-times";
     return "job-info";
+  }
+
+  function getPlacementScores(text) {
+    var commercial = scoreTerms(text, COMMERCIAL_TERMS);
+    var dates = scoreTerms(text, DATES_TERMS);
+    var info = scoreTerms(text, INFO_TERMS);
+    return {
+      commercial: commercial,
+      dates: dates,
+      info: info,
+      recognised: commercial + dates + info > 0
+    };
   }
 
   function scoreTerms(text, terms) {
@@ -332,21 +427,25 @@
     var accentRgb = "var(--wise-job-accent-rgb," + FALLBACK_ACCENT_RGB + ")";
     var roots = ".wise-jg-active";
     var css = [
-      roots + "{display:block!important;background:#fff!important;border:0!important;outline:0!important;padding:8px!important;box-sizing:border-box;}",
-      roots + ">.wise-jg-native-separator," + roots + ">.wise-jg-source-container{display:none!important;}",
-      roots + ">.wise-jg-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;align-items:start;}",
+      roots + "{display:block!important;background:#fff!important;border:0!important;outline:0!important;padding:5px!important;box-sizing:border-box;}",
+      roots + " .wise-jg-native-separator," + roots + " .wise-jg-source-container{display:none!important;}",
+      roots + ">.wise-jg-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:start;}",
       roots + " .wise-jg-section{box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
-      roots + " [" + GROUP_ATTR + "='job-info']{grid-column:1 / -1;border-left-width:10px;}",
-      roots + " .wise-jg-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #eee;background:#fff;}",
-      roots + " .wise-jg-hdr-text{font-weight:700;font-size:.8em;letter-spacing:.03em;text-transform:uppercase;color:#1f2937;}",
-      roots + " .wise-jg-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:26px;border-radius:7px;background:rgba(" + accentRgb + ",.2);border:1px solid rgba(" + accentRgb + ",.35);color:" + accent + ";}",
-      roots + " .wise-jg-body{box-sizing:border-box;padding:12px;min-width:0;color:#111827!important;}",
-      roots + " .wise-jg-body *{color:inherit;}",
-      roots + " [" + GROUP_ATTR + "='job-info']>.wise-jg-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 16px;}",
-      roots + " [" + GROUP_ATTR + "='job-dates-times']>.wise-jg-body," + roots + " [" + GROUP_ATTR + "='job-commercial-info']>.wise-jg-body{display:flex;flex-direction:column;gap:8px;}",
-      roots + " .wise-jg-field-unit{box-sizing:border-box;width:100%!important;max-width:none!important;min-width:0!important;margin:0!important;}",
+      roots + " [" + GROUP_ATTR + "='job-info']{grid-column:1 / -1;border-left-width:8px;}",
+      roots + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:6px 10px;border-bottom:1px solid #eee;background:#fff;}",
+      roots + " .wise-jg-hdr-text{font-weight:700;font-size:.76em;letter-spacing:.025em;text-transform:uppercase;color:#1f2937;}",
+      roots + " .wise-jg-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:24px;height:24px;border-radius:6px;background:rgba(" + accentRgb + ",.18);border:1px solid rgba(" + accentRgb + ",.32);color:" + accent + ";}",
+      roots + " .wise-jg-body{box-sizing:border-box;padding:7px 9px;min-width:0;color:#111827!important;}",
+      roots + " [" + GROUP_ATTR + "='job-info']>.wise-jg-body{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 14px;align-items:start;}",
+      roots + " [" + GROUP_ATTR + "='job-dates-times']>.wise-jg-body," + roots + " [" + GROUP_ATTR + "='job-commercial-info']>.wise-jg-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px;align-items:start;}",
+      roots + " .wise-jg-field-unit{box-sizing:border-box;width:100%!important;max-width:none!important;min-width:0!important;min-height:0!important;height:auto!important;margin:0!important;padding:2px 3px!important;border:0!important;line-height:1.25!important;color:#111827!important;}",
+      roots + " .wise-jg-field-unit div," + roots + " .wise-jg-field-unit tr," + roots + " .wise-jg-field-unit td{min-height:0!important;height:auto!important;}",
+      roots + " .wise-jg-field-unit *{color:#111827!important;}",
+      roots + " .wise-jg-field-unit a{color:#d00!important;}",
+      roots + " .wise-jg-field-unit [disabled]," + roots + " .wise-jg-field-unit .ui-state-disabled{color:#9ca3af!important;}",
+      roots + " .wise-jg-field-unit textarea{box-sizing:border-box!important;width:100%!important;min-height:42px!important;height:42px!important;resize:vertical;}",
       roots + " .wise-jg-span-all{grid-column:1 / -1;}",
-      "@media (max-width:900px){" + roots + ">.wise-jg-layout{grid-template-columns:1fr;}" + roots + " [" + GROUP_ATTR + "='job-info']{grid-column:auto;}" + roots + " [" + GROUP_ATTR + "='job-info']>.wise-jg-body{grid-template-columns:1fr;}" + roots + " .wise-jg-span-all{grid-column:auto;}}"
+      "@media (max-width:900px){" + roots + ">.wise-jg-layout{grid-template-columns:1fr;}" + roots + " [" + GROUP_ATTR + "='job-info']{grid-column:auto;}" + roots + " [" + GROUP_ATTR + "='job-info']>.wise-jg-body," + roots + " [" + GROUP_ATTR + "='job-dates-times']>.wise-jg-body," + roots + " [" + GROUP_ATTR + "='job-commercial-info']>.wise-jg-body{grid-template-columns:1fr;}" + roots + " .wise-jg-span-all{grid-column:auto;}}"
     ].join("\n");
     var style = document.createElement("style");
     style.id = STYLES_ID;
