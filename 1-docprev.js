@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-14.4"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-15.1"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -42,6 +42,12 @@
   var JOB_PERFORMANCE_VARIANT_KEY = "jobtrack_gp_predictor";
   var COMMERCIAL_TERMS_ID = "wise-commercial-adjustments";
   var NATIVE_TOTALS_HIDDEN_CLASS = "wise-native-job-totals-hidden";
+  var JOB_GP_GOLDEN_PCT = 45;
+  var JOB_GP_DARK_GREEN_PCT = 65;
+  var JOB_GP_COLD_BLUE = [30, 64, 175];
+  var JOB_GP_GREEN = [22, 163, 74];
+  var JOB_GP_DARK_GREEN = [20, 83, 45];
+  var JOB_GP_DEEP_RED = [127, 29, 29];
 
   var PREVIEW_CONFIG = {
     minPreviewWidth: 360,
@@ -853,9 +859,9 @@
       '  color:#17212b;',
       '  overflow:hidden;',
       '}',
-      '#' + JOB_PERFORMANCE_ID + '.is-strong { --wjp-tone:#15803d; --wjp-tint:#f0fdf4; --wjp-soft:#bbf7d0; }',
-      '#' + JOB_PERFORMANCE_ID + '.is-on-track { --wjp-tone:#a16207; --wjp-tint:#fffbeb; --wjp-soft:#fde68a; }',
-      '#' + JOB_PERFORMANCE_ID + '.is-review { --wjp-tone:#b42318; --wjp-tint:#fff1f0; --wjp-soft:#fecaca; }',
+      '#' + JOB_PERFORMANCE_ID + '.is-cold { --wjp-tone:#1e40af; --wjp-tint:#eff6ff; --wjp-soft:#bfdbfe; }',
+      '#' + JOB_PERFORMANCE_ID + '.is-golden { --wjp-tone:#16a34a; --wjp-tint:#f0fdf4; --wjp-soft:#bbf7d0; }',
+      '#' + JOB_PERFORMANCE_ID + '.is-hot { --wjp-tone:#7f1d1d; --wjp-tint:#fff1f2; --wjp-soft:#fecdd3; }',
       '#' + JOB_PERFORMANCE_ID + '.is-unavailable { --wjp-tone:#64748b; --wjp-tint:#f8fafc; --wjp-soft:#cbd5e1; }',
       '#' + JOB_PERFORMANCE_ID + ' .wjp-head {',
       '  display:flex;',
@@ -895,8 +901,8 @@
       '#' + JOB_PERFORMANCE_ID + ' .wjp-value { display:block; margin-top:3px; color:#17212b; font-size:17px; line-height:1.15; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }',
       '#' + JOB_PERFORMANCE_ID + ' .wjp-metric.is-gp .wjp-value,#' + JOB_PERFORMANCE_ID + ' .wjp-metric.is-gp-pct .wjp-value { color:var(--wjp-tone); }',
       '#' + JOB_PERFORMANCE_ID + ' .wjp-health { display:grid; grid-template-columns:minmax(150px,1fr) auto; align-items:center; gap:12px; padding:8px 12px 10px; }',
-      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail { position:relative; height:7px; border-radius:999px; background:#e4e9ee; overflow:hidden; }',
-      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail-fill { height:100%; width:0; border-radius:inherit; background:var(--wjp-tone); transition:width .25s ease; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail { position:relative; height:7px; border-radius:999px; background:linear-gradient(90deg,#1e40af 0%,#16a34a 45%,#14532d 65%,#7f1d1d 100%); }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail-marker { position:absolute; top:50%; left:0; width:5px; height:13px; border:2px solid #fff; border-radius:999px; background:#17212b; box-shadow:0 1px 4px rgba(15,23,42,.45); transform:translate(-50%,-50%); transition:left .25s ease; }',
       '#' + JOB_PERFORMANCE_ID + ' .wjp-health-note { color:#667085; font-size:10px; white-space:nowrap; }',
       '#' + JOB_PERFORMANCE_IFRAME_ID + ' { display:none!important; width:0; height:0; border:0; }',
       '#items_tab .' + NATIVE_TOTALS_HIDDEN_CLASS + ' { display:none!important; }',
@@ -1019,7 +1025,7 @@
           jobPerformanceMetricHtml("gp-pct", "GP%", "is-gp-pct") +
         '</div>' +
         '<div class="wjp-health">' +
-          '<div class="wjp-rail" aria-hidden="true"><div class="wjp-rail-fill"></div></div>' +
+          '<div class="wjp-rail" aria-hidden="true"><div class="wjp-rail-marker"></div></div>' +
           '<div class="wjp-health-note" data-wjp-health-note>Loading live Job Track calculation</div>' +
         '</div>' +
         '<iframe id="' + JOB_PERFORMANCE_IFRAME_ID + '" title="Job Track calculation source" tabindex="-1" aria-hidden="true"></iframe>' +
@@ -1120,6 +1126,7 @@
     }
 
     setJobPerformanceTone("is-unavailable");
+    clearJobPerformanceColor();
     $strip.find("[data-wjp-status]").text(reason === "manual" ? "Refreshing..." : "Calculating...");
     $strip.find("[data-wjp-health-note]").text("Loading live Job Track calculation");
     document.getElementById(JOB_PERFORMANCE_IFRAME_ID).src = url;
@@ -1160,12 +1167,6 @@
       sourceStatus: normaliseWhitespace(cells[6].textContent || "")
     };
     metrics.gpPct = parseJobPerformancePercent(metrics.gpPctText);
-    metrics.thresholdPct = readJobPerformancePercent(doc, [
-      "[name='job:gp_threshold_percent']",
-      "[name='project:gp_threshold_percent']",
-      "[name='gp_threshold_percent']"
-    ], 46);
-    metrics.targetPct = 50;
     metrics.discountPct = readJobPerformancePercent(doc, [
       "[name='job:_Discount']",
       "[name='_Discount']",
@@ -1213,21 +1214,17 @@
     setCommercialTerm("venue", metrics.venueCommissionPct);
     setCommercialTerm("client", metrics.clientCommissionPct);
 
-    var needsReview = /review|low/i.test(metrics.sourceStatus || "") ||
-      (metrics.gpPct != null && metrics.gpPct < metrics.thresholdPct);
-    var strong = !needsReview && metrics.gpPct != null && metrics.gpPct >= metrics.targetPct;
-    var tone = needsReview ? "is-review" : (strong ? "is-strong" : "is-on-track");
-    var label = needsReview ? "Needs review" : (strong ? "Strong" : "On track");
-    var scaleMax = 60;
-    var railWidth = metrics.gpPct == null ? 0 : Math.max(0, Math.min(100, (metrics.gpPct / scaleMax) * 100));
+    var gpPct = metrics.gpPct == null ? 0 : Math.max(0, Math.min(100, metrics.gpPct));
+    var tone = gpPct < JOB_GP_GOLDEN_PCT ? "is-cold" : (gpPct <= JOB_GP_DARK_GREEN_PCT ? "is-golden" : "is-hot");
+    var label = gpPct < JOB_GP_GOLDEN_PCT ? "Cold · below 45%" : (gpPct <= JOB_GP_DARK_GREEN_PCT ? "Healthy" : "Hot");
+    var color = jobPerformanceColorForGp(gpPct);
 
     setJobPerformanceTone(tone);
+    applyJobPerformanceColor(color);
     $strip.find("[data-wjp-status]").text(label);
-    $strip.find(".wjp-rail-fill").css("width", railWidth.toFixed(1) + "%");
-    $strip.find("[data-wjp-health-note]").text(
-      "Threshold " + formatJobPerformancePercent(metrics.thresholdPct) + " · Target " + formatJobPerformancePercent(metrics.targetPct)
-    );
-    $strip.attr("title", "Worst-case after realised assumptions. Job Track status: " + (metrics.sourceStatus || label) + ".");
+    $strip.find(".wjp-rail-marker").css({ left: gpPct.toFixed(2) + "%", opacity: 1 });
+    $strip.find("[data-wjp-health-note]").text("0% cold · 45% golden · 65% dark green · 100% hot");
+    $strip.attr("title", "Overall post-assumption GP " + (metrics.gpPctText || formatJobPerformancePercent(gpPct)) + ". Full Job Track flag: " + (metrics.sourceStatus || "not set") + ".");
     releaseJobPerformanceFrame(jobPerformanceLoadToken);
   }
 
@@ -1241,6 +1238,7 @@
 
   function renderJobPerformanceUnavailable(status, note) {
     setJobPerformanceTone("is-unavailable");
+    clearJobPerformanceColor();
     setJobPerformanceMetric("revenue", "—");
     setJobPerformanceMetric("cos", "—");
     setJobPerformanceMetric("gp", "—");
@@ -1250,7 +1248,7 @@
     setCommercialTerm("client", null);
     $("#" + JOB_PERFORMANCE_ID).find("[data-wjp-status]").text(status || "Unavailable");
     $("#" + JOB_PERFORMANCE_ID).find("[data-wjp-health-note]").text(note || "Live Job Track calculation unavailable");
-    $("#" + JOB_PERFORMANCE_ID).find(".wjp-rail-fill").css("width", "0");
+    $("#" + JOB_PERFORMANCE_ID).find(".wjp-rail-marker").css({ left: "0", opacity: .35 });
     releaseJobPerformanceFrame(jobPerformanceLoadToken);
   }
 
@@ -1266,8 +1264,56 @@
 
   function setJobPerformanceTone(tone) {
     $("#" + JOB_PERFORMANCE_ID)
-      .removeClass("is-strong is-on-track is-review is-unavailable")
+      .removeClass("is-cold is-golden is-hot is-unavailable")
       .addClass(tone || "is-unavailable");
+  }
+
+  function jobPerformanceColorForGp(value) {
+    var gp = Math.max(0, Math.min(100, Number(value) || 0));
+    if (gp <= JOB_GP_GOLDEN_PCT) {
+      return mixJobPerformanceRgb(JOB_GP_COLD_BLUE, JOB_GP_GREEN, gp / JOB_GP_GOLDEN_PCT);
+    }
+    if (gp <= JOB_GP_DARK_GREEN_PCT) {
+      return mixJobPerformanceRgb(
+        JOB_GP_GREEN,
+        JOB_GP_DARK_GREEN,
+        (gp - JOB_GP_GOLDEN_PCT) / (JOB_GP_DARK_GREEN_PCT - JOB_GP_GOLDEN_PCT)
+      );
+    }
+    return mixJobPerformanceRgb(
+      JOB_GP_DARK_GREEN,
+      JOB_GP_DEEP_RED,
+      (gp - JOB_GP_DARK_GREEN_PCT) / (100 - JOB_GP_DARK_GREEN_PCT)
+    );
+  }
+
+  function mixJobPerformanceRgb(from, to, amount) {
+    var t = Math.max(0, Math.min(1, Number(amount) || 0));
+    return [
+      Math.round(from[0] + ((to[0] - from[0]) * t)),
+      Math.round(from[1] + ((to[1] - from[1]) * t)),
+      Math.round(from[2] + ((to[2] - from[2]) * t))
+    ];
+  }
+
+  function jobPerformanceRgbCss(color) {
+    return "rgb(" + color[0] + "," + color[1] + "," + color[2] + ")";
+  }
+
+  function applyJobPerformanceColor(color) {
+    var element = document.getElementById(JOB_PERFORMANCE_ID);
+    if (!element || !color) return;
+    element.style.setProperty("--wjp-tone", jobPerformanceRgbCss(color));
+    element.style.setProperty("--wjp-tint", jobPerformanceRgbCss(mixJobPerformanceRgb(color, [255, 255, 255], .9)));
+    element.style.setProperty("--wjp-soft", jobPerformanceRgbCss(mixJobPerformanceRgb(color, [255, 255, 255], .72)));
+  }
+
+  function clearJobPerformanceColor() {
+    var element = document.getElementById(JOB_PERFORMANCE_ID);
+    if (!element) return;
+    element.style.removeProperty("--wjp-tone");
+    element.style.removeProperty("--wjp-tint");
+    element.style.removeProperty("--wjp-soft");
   }
 
   function formatJobPerformancePercent(value) {
