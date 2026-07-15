@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-15.1"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-15.2"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -901,8 +901,8 @@
       '#' + JOB_PERFORMANCE_ID + ' .wjp-value { display:block; margin-top:3px; color:#17212b; font-size:17px; line-height:1.15; font-weight:750; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }',
       '#' + JOB_PERFORMANCE_ID + ' .wjp-metric.is-gp .wjp-value,#' + JOB_PERFORMANCE_ID + ' .wjp-metric.is-gp-pct .wjp-value { color:var(--wjp-tone); }',
       '#' + JOB_PERFORMANCE_ID + ' .wjp-health { display:grid; grid-template-columns:minmax(150px,1fr) auto; align-items:center; gap:12px; padding:8px 12px 10px; }',
-      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail { position:relative; height:7px; border-radius:999px; background:linear-gradient(90deg,#1e40af 0%,#16a34a 45%,#14532d 65%,#7f1d1d 100%); }',
-      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail-marker { position:absolute; top:50%; left:0; width:5px; height:13px; border:2px solid #fff; border-radius:999px; background:#17212b; box-shadow:0 1px 4px rgba(15,23,42,.45); transform:translate(-50%,-50%); transition:left .25s ease; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail { position:relative; height:7px; overflow:hidden; border-radius:999px; background:#e4e9ee; }',
+      '#' + JOB_PERFORMANCE_ID + ' .wjp-rail-fill { height:100%; width:0; border-radius:inherit; background:var(--wjp-tone); transition:width .25s ease,background-color .25s ease; }',
       '#' + JOB_PERFORMANCE_ID + ' .wjp-health-note { color:#667085; font-size:10px; white-space:nowrap; }',
       '#' + JOB_PERFORMANCE_IFRAME_ID + ' { display:none!important; width:0; height:0; border:0; }',
       '#items_tab .' + NATIVE_TOTALS_HIDDEN_CLASS + ' { display:none!important; }',
@@ -1025,7 +1025,7 @@
           jobPerformanceMetricHtml("gp-pct", "GP%", "is-gp-pct") +
         '</div>' +
         '<div class="wjp-health">' +
-          '<div class="wjp-rail" aria-hidden="true"><div class="wjp-rail-marker"></div></div>' +
+          '<div class="wjp-rail" role="progressbar" aria-label="Progress towards the 45 percent GP target" aria-valuemin="0" aria-valuemax="45" aria-valuenow="0"><div class="wjp-rail-fill"></div></div>' +
           '<div class="wjp-health-note" data-wjp-health-note>Loading live Job Track calculation</div>' +
         '</div>' +
         '<iframe id="' + JOB_PERFORMANCE_IFRAME_ID + '" title="Job Track calculation source" tabindex="-1" aria-hidden="true"></iframe>' +
@@ -1129,6 +1129,8 @@
     clearJobPerformanceColor();
     $strip.find("[data-wjp-status]").text(reason === "manual" ? "Refreshing..." : "Calculating...");
     $strip.find("[data-wjp-health-note]").text("Loading live Job Track calculation");
+    $strip.find(".wjp-rail").attr({ "aria-valuenow": "0", "aria-valuetext": "Loading" });
+    $strip.find(".wjp-rail-fill").css({ width: "0", opacity: .35 });
     document.getElementById(JOB_PERFORMANCE_IFRAME_ID).src = url;
   }
 
@@ -1218,12 +1220,20 @@
     var tone = gpPct < JOB_GP_GOLDEN_PCT ? "is-cold" : (gpPct <= JOB_GP_DARK_GREEN_PCT ? "is-golden" : "is-hot");
     var label = gpPct < JOB_GP_GOLDEN_PCT ? "Cold · below 45%" : (gpPct <= JOB_GP_DARK_GREEN_PCT ? "Healthy" : "Hot");
     var color = jobPerformanceColorForGp(gpPct);
+    var targetProgress = Math.max(0, Math.min(100, (gpPct / JOB_GP_GOLDEN_PCT) * 100));
+    var currentGpText = metrics.gpPctText || formatJobPerformancePercent(gpPct);
+    var targetNote = gpPct >= JOB_GP_GOLDEN_PCT
+      ? "45% GP target achieved · current " + currentGpText
+      : currentGpText + " GP · " + Math.round(targetProgress) + "% of 45% target";
 
     setJobPerformanceTone(tone);
     applyJobPerformanceColor(color);
     $strip.find("[data-wjp-status]").text(label);
-    $strip.find(".wjp-rail-marker").css({ left: gpPct.toFixed(2) + "%", opacity: 1 });
-    $strip.find("[data-wjp-health-note]").text("0% cold · 45% golden · 65% dark green · 100% hot");
+    $strip.find(".wjp-rail")
+      .attr("aria-valuenow", Math.min(JOB_GP_GOLDEN_PCT, gpPct).toFixed(2))
+      .attr("aria-valuetext", targetNote);
+    $strip.find(".wjp-rail-fill").css({ width: targetProgress.toFixed(2) + "%", opacity: 1 });
+    $strip.find("[data-wjp-health-note]").text(targetNote);
     $strip.attr("title", "Overall post-assumption GP " + (metrics.gpPctText || formatJobPerformancePercent(gpPct)) + ". Full Job Track flag: " + (metrics.sourceStatus || "not set") + ".");
     releaseJobPerformanceFrame(jobPerformanceLoadToken);
   }
@@ -1248,7 +1258,8 @@
     setCommercialTerm("client", null);
     $("#" + JOB_PERFORMANCE_ID).find("[data-wjp-status]").text(status || "Unavailable");
     $("#" + JOB_PERFORMANCE_ID).find("[data-wjp-health-note]").text(note || "Live Job Track calculation unavailable");
-    $("#" + JOB_PERFORMANCE_ID).find(".wjp-rail-marker").css({ left: "0", opacity: .35 });
+    $("#" + JOB_PERFORMANCE_ID).find(".wjp-rail").attr({ "aria-valuenow": "0", "aria-valuetext": "Unavailable" });
+    $("#" + JOB_PERFORMANCE_ID).find(".wjp-rail-fill").css({ width: "0", opacity: .35 });
     releaseJobPerformanceFrame(jobPerformanceLoadToken);
   }
 

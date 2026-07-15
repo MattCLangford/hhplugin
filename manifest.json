@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-15.1",
+  "version": "2026-07-15.2",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -28,8 +28,8 @@
     {
       "file": "1-docprev.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "1.1",
-      "role": "Document preview panel used by power users on the supplying list. It opens docked by default after the toolbar entry point mounts, remains user-closable, and does not reopen automatically after the user closes it during that page session. Directly below the native buttons and above the list, a compact Commercial adjustments reminder and Job Performance strip reuse the live Job Track render to show the three job inputs plus final post-assumption Revenue, COS, GP£, GP%, and a continuous overall-GP heat scale: 0% blue, 45% green, 65% dark green, and 100% deep red. The misleading native Replacement cost/Weight/Volume/Discount-Markup/Quoted net total footer is hidden presentation-only.",
+      "cacheVersion": "1.2",
+      "role": "Document preview panel used by power users on the supplying list. It opens docked by default after the toolbar entry point mounts, remains user-closable, and does not reopen automatically after the user closes it during that page session. Directly below the native buttons and above the list, a compact Commercial adjustments reminder and Job Performance strip reuse the live Job Track render to show the three job inputs plus final post-assumption Revenue, COS, GP£ and GP%. The solid-colour performance totaliser fills from 0% to the required 45% GP target and uses the current overall-GP heat colour: 0% blue, 45% green, 65% dark green, and 100% deep red. The misleading native Replacement cost/Weight/Volume/Discount-Markup/Quoted net total footer is hidden presentation-only.",
       "recommendedLoadOrder": 2
     },
     {
