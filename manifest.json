@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-15.8",
+  "version": "2026-07-15.9",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "1.5",
+      "cacheVersion": "1.6",
       "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
       "recommendedLoadOrder": 1
     }
@@ -113,7 +113,7 @@
     {
       "file": "14-jobgroups.js",
       "status": "lazy-job-details",
-      "cacheVersion": "0.5",
+      "cacheVersion": "0.6",
       "role": "Proposal Creation depot only: restyles the native job details information area into three responsive cards — Job Info, Job Dates and Times, and Job Commercial Info — using the same white-card, live-colour accent rail, and icon-badge language as the project page. Native field elements are moved intact rather than cloned or replaced, and unrecognised fields safely default to Job Info.",
       "recommendedLoadOrder": 14
     }

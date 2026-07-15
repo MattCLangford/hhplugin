@@ -1,6 +1,7 @@
-/* Wise Job Field Groups
- * Proposal Creation-only presentation layer for the native job details page.
- * Fields are moved intact into three cards; nothing is cloned or renamed.
+/* Wise Job Details Layout
+ * Proposal Creation-only canonical presentation for the read-only job page.
+ * HireHop's native DOM remains in place but hidden; this module reads its live
+ * values and renders a clean, deterministic three-card layout.
  */
 (function () {
   "use strict";
@@ -9,56 +10,10 @@
   if (!$) return;
 
   var LOG_PREFIX = "[Wise Job Groups]";
-  var GROUP_ATTR = "data-wise-job-group";
   var ROOT_CLASS = "wise-jg-active";
   var STYLES_ID = "wise-job-groups-styles";
   var FALLBACK_ACCENT = "#f97316";
   var FALLBACK_ACCENT_RGB = "249,115,22";
-  var GROUP_ORDER = ["job-info", "job-dates-times", "job-commercial-info"];
-  var GROUP_TITLES = {
-    "job-info": "Job Info",
-    "job-dates-times": "Job Dates and Times",
-    "job-commercial-info": "Job Commercial Info"
-  };
-  var ICONS = {
-    "job-info": '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><rect x="2" y="4" width="16" height="13" rx="2"/><path d="M6 4V2h8v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="5" y="8" width="10" height="2" rx="1" fill="#fff"/><rect x="5" y="12" width="7" height="2" rx="1" fill="#fff"/></svg>',
-    "job-dates-times": '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3.5" width="16" height="14" rx="2"/><path d="M6 1.5v4M14 1.5v4M2 7.5h16"/><circle cx="10" cy="12" r="3"/><path d="M10 10.5V12l1.3.9" stroke-linecap="round"/></svg>',
-    "job-commercial-info": '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M2 7h16M5 12h4M12 12h3" stroke-linecap="round"/></svg>'
-  };
-
-  var COMMERCIAL_TERMS = [
-    /\bclient\s*reference\b/i, /\bcredit\s*period\b/i, /\bdiscount\b/i, /\bmarkup\b/i,
-    /\bprice\s*group\b/i, /\bprice\s*structure\b/i, /\blate\s*fees?\b/i,
-    /\bearly\s*returns?\b/i, /\bcommission\b/i, /\bcommercial\b/i
-  ];
-  var DATES_TERMS = [
-    /\bkit\s*booking\b/i, /\bproject\s*\/\s*onsite\b/i, /\bproject\s+onsite\b/i,
-    /\bgoods\s*out\b/i, /\bgoods\s*in\b/i, /\bcharge\s*period\b/i, /\bwise\s*prep\b/i,
-    /\bvehicle\s*load\b/i, /\bvehicle\s*onsite\b/i, /\bvehicle\s*tip\b/i,
-    /\bstart\s*(date|time)\b/i, /\bend\s*(date|time)\b/i,
-    /\bfinish\s*(date|time)\b/i, /\bdelivery\s*(date|time)\b/i, /\bcollection\s*(date|time)\b/i
-  ];
-  var INFO_TERMS = [
-    /\bjob\s*id\b/i, /\bjob\s*type\b/i, /\bjob\s*memo\b/i, /\bjob\s*name\b/i, /\bversion\b/i,
-    /\bcontact\s*name\b/i, /\bcompany\b/i, /\btelephone\b/i, /\bmobile\b/i, /\bemail\b/i,
-    /\bvenue\b/i, /\bdelivery\s*address\b/i, /\bcollection\s*address\b/i,
-    /\buse\s*at\s*address\b/i, /\bwarehouse\s*name\b/i, /\bcreated\s*by\b/i,
-    /\bempties\s*stored(?:\s*on\s*truck)?\b/i
-  ];
-  var EXPLICIT_INFO_RE = /\b(job\s*memo|version|empties\s*stored(?:\s*on\s*truck)?|goods\s*out|goods\s*in)\b/i;
-  var EXPLICIT_COMMERCIAL_RE = /\b(price\s*structure|discretionary\s*discount|(?:client|venue)\s*commission|commission|charge\s*period)\b/i;
-  var DATE_PROGRESS_RULES = [
-    /\bkit\s*booking\s*start\b/i,
-    /\bwise\s*prep\s*start\b/i,
-    /\bvehicle\s*load\b/i,
-    /\bvehicle\s*onsite\s*[-–—:]?\s*install\b/i,
-    /\bproject\s*\/\s*onsite\s*start\b/i,
-    /\bvehicle\s*onsite\s*[-–—:]?\s*derig\b/i,
-    /\bproject\s*\/\s*onsite\s*end\b/i,
-    /\bvehicle\s*tip\b/i,
-    /\bkit\s*booking\s*end\b/i
-  ];
-  var FULL_WIDTH_INFO_RE = /\b(job\s*memo|job\s*name)\b/i;
   var USER_DEPOT_KEYS = [
     "DEPOT_ID", "depot_id", "DEFAULT_DEPOT_ID", "default_depot_id",
     "BRANCH_ID", "branch_id", "WAREHOUSE_ID", "warehouse_id",
@@ -66,18 +21,96 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-07-15.5", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-07-15.6", maintainRecoveryMs: 5000 };
+
+  var GROUPS = [
+    {
+      key: "job-info",
+      title: "Job Info",
+      icon: '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><rect x="2" y="4" width="16" height="13" rx="2"/><path d="M6 4V2h8v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="5" y="8" width="10" height="2" rx="1" fill="#fff"/><rect x="5" y="12" width="7" height="2" rx="1" fill="#fff"/></svg>',
+      fields: [
+        field("job-id", "Job ID", ["Job ID", "Job ID#"], { always: true }),
+        field("job-name", "Job name", ["Job name"], { span: 2 }),
+        field("job-type", "Job type", ["Job type"]),
+        field("venue", "Venue", ["Venue"]),
+        field("contact-name", "Contact name", ["Contact name"], { span: 2 }),
+        field("company", "Company", ["Company"]),
+        field("warehouse", "Warehouse", ["Warehouse Name", "Warehouse"]),
+        field("technical", "Technical", ["Technical"]),
+        field("created-by", "Created by", ["Created by"], { span: 2 }),
+        field("version", "Version", ["Version"], { always: true }),
+        field("empties", "Empties stored on truck?", ["Empties stored on truck?", "Empties stored on truck"], { always: true }),
+        field("address", "Address", ["Address"], { span: 2 }),
+        field("delivery-address", "Delivery address", ["Delivery address"], { span: 2 }),
+        field("collection-address", "Collection address", ["Collection address"], { span: 2 }),
+        field("use-at-address", "Use at address", ["Use at address"], { span: 2 }),
+        field("contact-telephone", "Contact telephone", ["Telephone"], { occurrence: 0 }),
+        field("venue-telephone", "Venue telephone", ["Telephone"], { occurrence: 1 }),
+        field("mobile", "Mobile", ["Mobile"]),
+        field("email", "Email", ["Email"]),
+        field("goods-out", "Goods out", ["Goods out"]),
+        field("goods-in", "Goods in", ["Goods in"]),
+        field("job-memo", "Job memo", ["Job memo"], { span: 4 })
+      ]
+    },
+    {
+      key: "job-dates-times",
+      title: "Job Dates and Times",
+      icon: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3.5" width="16" height="14" rx="2"/><path d="M6 1.5v4M14 1.5v4M2 7.5h16"/><circle cx="10" cy="12" r="3"/><path d="M10 10.5V12l1.3.9" stroke-linecap="round"/></svg>',
+      fields: [
+        field("kit-booking-start", "Kit Booking Start", ["Kit Booking Start"], { always: true }),
+        field("wise-prep-start", "Wise Prep Start", ["Wise Prep Start"], { always: true }),
+        field("vehicle-load", "Vehicle Load", ["Vehicle Load"], { always: true }),
+        field("vehicle-install", "Vehicle Onsite - Install", ["Vehicle Onsite - Install", "Vehicle Onsite Install"], { always: true }),
+        field("project-start", "Project/Onsite Start", ["Project/Onsite Start", "Project Onsite Start"], { always: true }),
+        field("vehicle-derig", "Vehicle Onsite - Derig", ["Vehicle Onsite - Derig", "Vehicle Onsite Derig"], { always: true }),
+        field("project-end", "Project/Onsite End", ["Project/Onsite End", "Project Onsite End"], { always: true }),
+        field("vehicle-tip", "Vehicle Tip", ["Vehicle Tip"], { always: true }),
+        field("kit-booking-end", "Kit Booking End", ["Kit Booking End"], { always: true })
+      ]
+    },
+    {
+      key: "job-commercial-info",
+      title: "Job Commercial Info",
+      icon: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M2 7h16M5 12h4M12 12h3" stroke-linecap="round"/></svg>',
+      fields: [
+        field("client-reference", "Client reference", ["Client reference"]),
+        field("credit-period", "Credit period", ["Credit period"]),
+        field("default-discount", "Default discount/markup", ["Default discount/markup"]),
+        field("price-group", "Price group", ["Price group"]),
+        field("late-fees", "Calculate late fees", ["Calculate late fees"]),
+        field("early-returns", "Allow early returns", ["Allow early returns"]),
+        field("charge-period", "Charge period", ["Charge period"]),
+        field("price-structure", "Price structure", ["Price structure"]),
+        field("discretionary-discount", "Discretionary Discount", ["Discretionary Discount", "Discretionary discount"], { always: true }),
+        field("venue-commission", "Venue Commission", ["Venue Commission", "Venue commission"], { always: true }),
+        field("client-commission", "Client Commission", ["Client Commission", "Client commission"], { always: true })
+      ]
+    }
+  ];
+
+  var ALL_LABELS = buildAllLabels();
   var state = { maintainTimer: null, maintainScheduled: null, lastRoot: null };
 
   bootstrap();
+
+  function field(key, label, aliases, options) {
+    options = options || {};
+    return {
+      key: key,
+      label: label,
+      aliases: aliases,
+      occurrence: Number(options.occurrence) || 0,
+      span: Number(options.span) || 1,
+      always: !!options.always
+    };
+  }
 
   function bootstrap() {
     installStyles();
     scheduleMaintain(0);
     state.maintainTimer = setInterval(function () { scheduleMaintain(0); }, CFG.maintainRecoveryMs);
-    $(window).on("load.wiseJobGroups focus.wiseJobGroups resize.wiseJobGroups hashchange.wiseJobGroups", function () {
-      scheduleMaintain(60);
-    });
+    $(window).on("load.wiseJobGroups focus.wiseJobGroups hashchange.wiseJobGroups", function () { scheduleMaintain(60); });
     $(document).on("ajaxComplete.wiseJobGroups", function () { scheduleMaintain(80); });
   }
 
@@ -90,343 +123,266 @@
   }
 
   function maintain() {
-    var $jobInfo = findJobInfoRoot();
-    if (!$jobInfo.length || $jobInfo.hasClass(ROOT_CLASS) || !isProposalCreationDepot()) return;
+    var $root = findJobInfoRoot();
+    if (!$root.length || !isProposalCreationDepot()) return;
+    if ($root.hasClass(ROOT_CLASS)) return;
 
-    var units = collectGroupableUnits($jobInfo);
-    if (units.length < 3) {
-      log("Job details structure was not recognised safely; native layout left unchanged.");
+    applyAccentColour($root);
+    var $nativeNodes = $root.children().not(".wise-jg-layout");
+    var $layout = renderLayout($root);
+    if (!$layout.find(".wise-jg-field").length) {
+      log("No canonical job fields were found; native screen left visible.");
       return;
     }
 
-    applyAccentColour($jobInfo);
-    buildGroups($jobInfo, units);
-    $jobInfo.addClass(ROOT_CLASS);
-    state.lastRoot = $jobInfo.get(0);
+    $nativeNodes.addClass("wise-jg-native-source-node").attr("aria-hidden", "true");
+    $root.append($layout).addClass(ROOT_CLASS);
+    state.lastRoot = $root.get(0);
   }
 
-  function findJobInfoRoot() {
-    if (state.lastRoot && document.documentElement.contains(state.lastRoot)) return $(state.lastRoot);
+  function renderLayout($root) {
+    var $layout = $("<div></div>").addClass("wise-jg-layout");
+    for (var g = 0; g < GROUPS.length; g++) {
+      var group = GROUPS[g];
+      var $section = makeGroup(group);
+      var $body = $section.children(".wise-jg-body");
 
-    var selectors = [
-      "#job_info", "#job_details", "#job_detail", "#job_info_container",
-      "[data-page='job-details']", "[data-page='job_detail']"
-    ];
-    for (var i = 0; i < selectors.length; i++) {
-      var $candidate = $(selectors[i]).first();
-      var $safeCandidate = findBestGroupingContainer($candidate);
-      if ($safeCandidate.length) return $safeCandidate;
+      for (var f = 0; f < group.fields.length; f++) {
+        var spec = group.fields[f];
+        var value = readFieldValue($root, spec);
+        if (!value && !spec.always) continue;
+        renderField($body, spec, value);
+      }
+      $layout.append($section);
     }
-
-    return findJobInfoFromLabel();
+    return $layout;
   }
 
-  function looksLikeJobInfo($candidate) {
-    if (!$candidate || !$candidate.length || $candidate.is("#proj_info") || $candidate.closest("#proj_info,#items_tab").length) return false;
-    if ($candidate.find("#proj_info,#gbox_jobs_grid").length) return false;
-    var text = normaliseText($candidate.text());
-    return /\bjob\s*id\b/.test(text) &&
-      (/\bkit\s*booking\b/.test(text) || /\bjob\s*memo\b/.test(text) || /\bclient\s*reference\b/.test(text));
+  function makeGroup(group) {
+    var $section = $("<section></section>").attr("data-wise-job-group", group.key).addClass("wise-jg-section");
+    var $header = $("<div></div>").addClass("wise-jg-hdr");
+    $("<span></span>").addClass("wise-jg-icon").html(group.icon).appendTo($header);
+    $("<span></span>").addClass("wise-jg-hdr-text").text(group.title).appendTo($header);
+    $section.append($header, $("<div></div>").addClass("wise-jg-body"));
+    return $section;
   }
 
-  function findJobInfoFromLabel() {
-    var $best = $();
-    var bestSize = Infinity;
-
-    $("label,td,th,span,b,strong,div").each(function () {
-      var ownText = normaliseText($(this).clone().children().remove().end().text());
-      if (!/^job\s*id\s*#?\s*:?(?:\s*\d+)?$/i.test(ownText)) return;
-
-      var node = this;
-      for (var depth = 0; node && node !== document.body && depth < 12; depth += 1, node = node.parentNode) {
-        var $candidate = findBestGroupingContainer($(node));
-        if (!$candidate.length) continue;
-        var size = $candidate.find("*").length;
-        if (size < bestSize) {
-          $best = $candidate;
-          bestSize = size;
-        }
-      }
-    });
-
-    return $best;
+  function renderField($body, spec, value) {
+    var $field = $("<div></div>")
+      .addClass("wise-jg-field")
+      .attr("data-wise-job-field", spec.key)
+      .attr("data-wise-span", spec.span);
+    $("<span></span>").addClass("wise-jg-field-label").text(spec.label).appendTo($field);
+    $("<span></span>")
+      .addClass("wise-jg-field-value")
+      .toggleClass("wise-jg-empty", !value)
+      .text(value || "—")
+      .appendTo($field);
+    $body.append($field);
   }
 
-  function findBestGroupingContainer($candidate) {
-    if (!$candidate || !$candidate.length) return $();
-    var $best = $();
-    var bestSize = Infinity;
-    var $pool = $candidate.add($candidate.find("div,section,form"));
+  function readFieldValue($root, spec) {
+    var customValue = readCustomFieldValue($root, spec);
+    if (customValue.found) return customValue.value;
 
-    $pool.each(function () {
-      var $item = $(this);
-      if (!looksLikeJobInfo($item) || countPotentialUnits($item) < 3) return;
-      var size = $item.find("*").length;
-      if (size < bestSize) {
-        $best = $item;
-        bestSize = size;
-      }
-    });
-
-    return $best;
+    var matches = findLabelMatches($root, spec);
+    if (!matches.length) return "";
+    var $label = $(matches[Math.min(spec.occurrence, matches.length - 1)]);
+    return readValueFromLabel($label, spec);
   }
 
-  function countPotentialUnits($container) {
-    var count = 0;
-    $container.children().each(function () {
-      var $child = $(this);
-      if ($child.is("script,style,link,hr")) return;
-      if ($child.is("#custom_fields_container")) {
-        count += $child.children().filter(function () {
-          return !$(this).is("hr") && !!normaliseText($(this).text());
-        }).length;
-        return;
-      }
-      if (normaliseText($child.text())) count += 1;
-    });
-    return count;
-  }
-
-  function collectGroupableUnits($jobInfo) {
-    var units = [];
-    collectAllCustomFieldUnits($jobInfo, units);
-
-    $jobInfo.children().each(function () {
-      var $child = $(this);
-      if ($child.is("script,style,link") || $child.is("[" + GROUP_ATTR + "]") ||
-          $child.hasClass("wise-jg-layout") || $child.hasClass("wise-jg-source-container")) return;
-      if ($child.is("hr")) {
-        $child.addClass("wise-jg-native-separator");
-        return;
-      }
-      collectUnitsFromNode($child, units, "native");
-    });
-    return units;
-  }
-
-  // HireHop's job page uses the custom_fields widget's real runtime shape:
-  // .hh_custom_fields > .custom_field_container. This is intentionally
-  // broader than the project page's #custom_fields_container selector.
-  function collectAllCustomFieldUnits($jobInfo, units) {
-    var $containers = $jobInfo.find(".hh_custom_fields,#custom_fields_container").addBack(".hh_custom_fields,#custom_fields_container");
-    $containers.each(function () {
+  function readCustomFieldValue($root, spec) {
+    var found = { found: false, value: "" };
+    $root.find(".custom_field_container").each(function () {
+      if (found.found) return;
       var $container = $(this);
-      var found = 0;
-      $container.children(".custom_field_container").each(function () {
-        if (!normaliseText($(this).text())) return;
-        units.push({ element: this, source: "custom" });
-        found += 1;
-      });
-      $container.children("hr").addClass("wise-jg-native-separator");
-      if (found) $container.addClass("wise-jg-source-container");
-    });
-  }
-
-  // HireHop groups several visually separate fields inside layout wrappers.
-  // Split only div/section wrappers with at least two recognisable field
-  // children and no direct form control/text of their own. This keeps each
-  // real control intact while allowing mixed native rows (for example Job
-  // memo + Client reference, or Warehouse + Price structure) to separate
-  // cleanly into the requested cards.
-  function collectUnitsFromNode($node, units, source) {
-    if (!$node || !$node.length || !normaliseText($node.text())) return 0;
-
-    var tableFragments = extractTableFragments($node);
-    if (tableFragments.length >= 2) {
-      $node.addClass("wise-jg-source-container");
-      for (var t = 0; t < tableFragments.length; t++) {
-        units.push({ element: tableFragments[t], source: source + "-table" });
-      }
-      return tableFragments.length;
-    }
-
-    var $children = $node.children("div,section").filter(function () {
-      return !!normaliseText($(this).text());
-    });
-    var recognised = 0;
-    $children.each(function () {
-      if (getPlacementScores(normaliseText($(this).text())).recognised) recognised += 1;
-    });
-
-    var canSplit = $children.length >= 2 && recognised >= 2 &&
-      !$node.children("input,select,textarea,button,table").length &&
-      !hasMeaningfulDirectText($node);
-
-    if (!canSplit) {
-      units.push({ element: $node.get(0), source: source });
-      return 1;
-    }
-
-    var added = 0;
-    $node.addClass("wise-jg-source-container");
-    $children.each(function () {
-      added += collectUnitsFromNode($(this), units, source);
-    });
-    return added;
-  }
-
-  // Native job details are table-driven. Extract either meaningful rows or,
-  // for one-row layout tables, their meaningful cells. Each extracted row or
-  // cell is moved intact into a small standalone table so ids, classes,
-  // controls and event handlers remain attached to the original DOM nodes.
-  function extractTableFragments($node) {
-    var $table = $node.is("table") ? $node : $node.children("table").first();
-    if (!$table.length) $table = $node.find("table").first();
-    if (!$table.length) return [];
-    if (!$node.is("table") && hasMeaningfulTextOutsideTables($node)) return [];
-
-    var $rows = $table.find("tr").filter(function () {
-      return $(this).closest("table").get(0) === $table.get(0) && !!normaliseText($(this).text());
-    });
-    var recognisedRows = countRecognisedElements($rows);
-    var fragments = [];
-
-    if ($rows.length >= 2 && recognisedRows >= 2) {
-      $rows.each(function () {
-        fragments.push(makeTableRowFragment($(this)).get(0));
-      });
-      return fragments;
-    }
-
-    if ($rows.length === 1) {
-      var $cells = $rows.first().children("td,th").filter(function () {
-        return !!normaliseText($(this).text());
-      });
-      if ($cells.length >= 2 && countRecognisedElements($cells) >= 2) {
-        $cells.each(function () {
-          fragments.push(makeTableCellFragment($(this)).get(0));
-        });
-      }
-    }
-
-    return fragments;
-  }
-
-  function hasMeaningfulTextOutsideTables($node) {
-    var $clone = $node.clone();
-    $clone.find("table").remove();
-    return !!normaliseText($clone.text());
-  }
-
-  function countRecognisedElements($elements) {
-    var count = 0;
-    $elements.each(function () {
-      var text = normaliseText($(this).text());
-      if (getPlacementScores(text).recognised || EXPLICIT_INFO_RE.test(text) || EXPLICIT_COMMERCIAL_RE.test(text)) count += 1;
-    });
-    return count;
-  }
-
-  function makeTableRowFragment($row) {
-    var $fragment = $("<div></div>").addClass("wise-jg-table-fragment");
-    var $table = $("<table><tbody></tbody></table>").addClass("wise-jg-fragment-table").appendTo($fragment);
-    $row.appendTo($table.children("tbody"));
-    return $fragment;
-  }
-
-  function makeTableCellFragment($cell) {
-    var $fragment = $("<div></div>").addClass("wise-jg-table-fragment");
-    var $table = $("<table><tbody><tr></tr></tbody></table>").addClass("wise-jg-fragment-table").appendTo($fragment);
-    $cell.appendTo($table.find("tr"));
-    return $fragment;
-  }
-
-  function hasMeaningfulDirectText($node) {
-    var found = false;
-    $node.contents().each(function () {
-      if (this.nodeType === 3 && normaliseText(this.nodeValue)) found = true;
+      var labelText = $container.children("label").first().clone().children().remove().end().text();
+      if (!matchesSpecLabel(labelText, spec, true)) return;
+      var $value = $container.find(".custom_field").first();
+      found.found = true;
+      found.value = cleanValue($value.is("input,select,textarea") ? $value.val() : $value.text());
     });
     return found;
   }
 
-  function buildGroups($jobInfo, units) {
-    var $layout = $("<div></div>").addClass("wise-jg-layout");
-    var bodies = {};
-    for (var i = 0; i < GROUP_ORDER.length; i++) {
-      var key = GROUP_ORDER[i];
-      var $section = makeGroup(key);
-      bodies[key] = $section.children(".wise-jg-body").first();
-      $layout.append($section);
-    }
-    $jobInfo.append($layout);
-
-    for (var n = 0; n < units.length; n++) {
-      var $unit = $(units[n].element);
-      var text = normaliseText($unit.text());
-      var group = classifyUnit(text);
-      $unit.addClass("wise-jg-field-unit")
-        .attr("data-wise-job-field-source", units[n].source)
-        .appendTo(bodies[group]);
-      if (group === "job-info" && isFullWidthInfo(text)) $unit.addClass("wise-jg-span-all");
-    }
-
-    orderDateProgression(bodies["job-dates-times"]);
-  }
-
-  function orderDateProgression($body) {
-    if (!$body || !$body.length) return;
-    var fields = $body.children(".wise-jg-field-unit").get().map(function (element, originalIndex) {
-      var text = normaliseText($(element).text());
-      var order = getDateProgressOrder(text);
-      $(element).attr("data-wise-job-date-order", order);
-      return { element: element, order: order, originalIndex: originalIndex };
+  function findLabelMatches($root, spec) {
+    var matches = [];
+    $root.find("label,b,strong,th,td,span,div").each(function () {
+      var $element = $(this);
+      if ($element.hasClass("wise-jg-layout") || $element.closest(".wise-jg-layout").length) return;
+      if (this.tagName && this.tagName.toLowerCase() === "div" && $element.children().length) return;
+      var ownText = getOwnText(this);
+      if (matchesSpecLabel(ownText, spec, false)) matches.push(this);
     });
 
-    fields.sort(function (a, b) {
-      return a.order - b.order || a.originalIndex - b.originalIndex;
+    matches.sort(function (a, b) {
+      return normaliseText($(a).text()).length - normaliseText($(b).text()).length;
     });
-    for (var n = 0; n < fields.length; n++) $body.append(fields[n].element);
+    return matches;
   }
 
-  function getDateProgressOrder(text) {
-    for (var i = 0; i < DATE_PROGRESS_RULES.length; i++) {
-      if (DATE_PROGRESS_RULES[i].test(text)) return i;
+  function readValueFromLabel($label, spec) {
+    var inline = stripLeadingLabel(getOwnText($label.get(0)), spec);
+    if (inline) return cleanValue(inline);
+
+    var siblingValue = readFollowingSiblings($label.get(0));
+    if (siblingValue) return siblingValue;
+
+    var $cell = $label.closest("td,th");
+    if ($cell.length) {
+      var cellInline = stripLeadingLabel(getOwnText($cell.get(0)), spec);
+      if (cellInline) return cleanValue(cellInline);
+      var tableValue = readFollowingCells($cell);
+      if (tableValue) return tableValue;
     }
-    return DATE_PROGRESS_RULES.length;
-  }
 
-  function isFullWidthInfo(text) {
-    return FULL_WIDTH_INFO_RE.test(text) ||
-      (/\bjob\s*id\b/i.test(text) && /\b(technical|created\s*by)\b/i.test(text));
-  }
-
-  function classifyUnit(text) {
-    if (getDateProgressOrder(text) < DATE_PROGRESS_RULES.length) return "job-dates-times";
-    if (EXPLICIT_INFO_RE.test(text)) return "job-info";
-    if (EXPLICIT_COMMERCIAL_RE.test(text)) return "job-commercial-info";
-    var scores = getPlacementScores(text);
-    if (scores.commercial && scores.commercial >= scores.dates && scores.commercial > scores.info) return "job-commercial-info";
-    if (scores.dates > scores.info) return "job-dates-times";
-    return "job-info";
-  }
-
-  function getPlacementScores(text) {
-    var commercial = scoreTerms(text, COMMERCIAL_TERMS);
-    var dates = scoreTerms(text, DATES_TERMS);
-    var info = scoreTerms(text, INFO_TERMS);
-    return {
-      commercial: commercial,
-      dates: dates,
-      info: info,
-      recognised: commercial + dates + info > 0
-    };
-  }
-
-  function scoreTerms(text, terms) {
-    var score = 0;
-    for (var i = 0; i < terms.length; i++) {
-      if (terms[i].test(text)) score += 1;
+    var $parent = $label.parent();
+    if ($parent.length) {
+      var parentText = cleanValue(stripLeadingLabel($parent.text(), spec));
+      if (parentText && countKnownLabels(parentText) <= 1 && parentText.length < 180) return parentText;
     }
-    return score;
+    return "";
   }
 
-  function makeGroup(key) {
-    var $section = $("<section></section>").attr(GROUP_ATTR, key).addClass("wise-jg-section");
-    var $header = $("<div></div>").addClass("wise-jg-hdr");
-    $("<span></span>").addClass("wise-jg-icon").html(ICONS[key] || "").appendTo($header);
-    $("<span></span>").addClass("wise-jg-hdr-text").text(GROUP_TITLES[key] || "").appendTo($header);
-    $section.append($header, $("<div></div>").addClass("wise-jg-body"));
-    return $section;
+  function readFollowingSiblings(label) {
+    var parts = [];
+    var node = label.nextSibling;
+    while (node) {
+      if (node.nodeType === 1 && elementStartsWithKnownLabel($(node))) break;
+      var text = node.nodeType === 3 ? node.nodeValue : $(node).text();
+      text = cleanValue(text);
+      if (text) parts.push(text);
+      node = node.nextSibling;
+    }
+    return cleanValue(parts.join(" "));
+  }
+
+  function readFollowingCells($cell) {
+    var parts = [];
+    $cell.nextAll("td,th").each(function () {
+      var text = cleanValue($(this).text());
+      if (!text) return;
+      if (startsWithKnownLabel(text)) return false;
+      parts.push(text);
+    });
+    return cleanValue(parts.join(" "));
+  }
+
+  function matchesSpecLabel(value, spec, exactOnly) {
+    var normalised = normaliseLabel(value);
+    for (var i = 0; i < spec.aliases.length; i++) {
+      var alias = normaliseLabel(spec.aliases[i]);
+      if (normalised === alias) return true;
+      if (!exactOnly && normalised.indexOf(alias + " ") === 0) return true;
+    }
+    return false;
+  }
+
+  function stripLeadingLabel(value, spec) {
+    value = String(value || "");
+    var aliases = spec.aliases.slice().sort(function (a, b) { return b.length - a.length; });
+    for (var i = 0; i < aliases.length; i++) {
+      var alias = escapeRegExp(aliases[i]).replace(/\\ /g, "\\s+");
+      var re = new RegExp("^\\s*" + alias.replace(/\\#$/, "#?") + "\\s*:?[?]?\\s*", "i");
+      var stripped = value.replace(re, "");
+      if (stripped !== value) return stripped;
+    }
+    return "";
+  }
+
+  function getOwnText(element) {
+    var out = "";
+    if (!element || !element.childNodes) return out;
+    for (var i = 0; i < element.childNodes.length; i++) {
+      if (element.childNodes[i].nodeType === 3) out += " " + element.childNodes[i].nodeValue;
+    }
+    return cleanValue(out);
+  }
+
+  function elementStartsWithKnownLabel($element) {
+    return startsWithKnownLabel(getOwnText($element.get(0)) || $element.text());
+  }
+
+  function startsWithKnownLabel(value) {
+    var text = normaliseLabel(value);
+    for (var i = 0; i < ALL_LABELS.length; i++) {
+      if (text === ALL_LABELS[i] || text.indexOf(ALL_LABELS[i] + " ") === 0) return true;
+    }
+    return false;
+  }
+
+  function countKnownLabels(value) {
+    var text = normaliseLabel(value);
+    var count = 0;
+    for (var i = 0; i < ALL_LABELS.length; i++) {
+      if (text.indexOf(ALL_LABELS[i]) !== -1) count += 1;
+    }
+    return count;
+  }
+
+  function buildAllLabels() {
+    var labels = [];
+    for (var g = 0; g < GROUPS.length; g++) {
+      for (var f = 0; f < GROUPS[g].fields.length; f++) {
+        var aliases = GROUPS[g].fields[f].aliases;
+        for (var a = 0; a < aliases.length; a++) {
+          var label = normaliseLabel(aliases[a]);
+          if (labels.indexOf(label) === -1) labels.push(label);
+        }
+      }
+    }
+    labels.sort(function (a, b) { return b.length - a.length; });
+    return labels;
+  }
+
+  function cleanValue(value) {
+    return String(value == null ? "" : value)
+      .replace(/\s+/g, " ")
+      .replace(/^\s*:\s*/, "")
+      .replace(/^\s+|\s+$/g, "");
+  }
+
+  function normaliseText(value) {
+    return cleanValue(value).toLowerCase();
+  }
+
+  function normaliseLabel(value) {
+    return normaliseText(value).replace(/[#:?]+/g, " ").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+  }
+
+  function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function findJobInfoRoot() {
+    if (state.lastRoot && document.documentElement.contains(state.lastRoot)) return $(state.lastRoot);
+    var selectors = ["#job_info", "#job_details", "#job_detail", "#job_info_container", "#details_tab", "[data-page='job-details']"];
+    for (var i = 0; i < selectors.length; i++) {
+      var $candidate = $(selectors[i]).first();
+      if (looksLikeJobInfo($candidate)) return $candidate;
+    }
+
+    var $best = $();
+    var bestSize = Infinity;
+    $("label,b,strong,td,th,span").each(function () {
+      if (normaliseLabel(getOwnText(this)) !== "job id") return;
+      var node = this.parentNode;
+      for (var depth = 0; node && node !== document.body && depth < 12; depth += 1, node = node.parentNode) {
+        var $candidate = $(node);
+        if (!looksLikeJobInfo($candidate)) continue;
+        var size = $candidate.find("*").length;
+        if (size < bestSize) { $best = $candidate; bestSize = size; }
+      }
+    });
+    return $best;
+  }
+
+  function looksLikeJobInfo($candidate) {
+    if (!$candidate || !$candidate.length || $candidate.closest("#proj_info,#items_tab").length) return false;
+    if ($candidate.find("#proj_info,#gbox_jobs_grid").length) return false;
+    var text = normaliseText($candidate.text());
+    return text.indexOf("job id") !== -1 &&
+      (text.indexOf("kit booking") !== -1 || text.indexOf("job memo") !== -1 || text.indexOf("client reference") !== -1);
   }
 
   function isProposalCreationDepot() {
@@ -438,10 +394,10 @@
       var rawId = shared.depot.normaliseId ? shared.depot.normaliseId(raw) : "";
       var allowedId = (typeof shared.depot.resolveId === "function" && shared.depot.resolveId("Proposal Creation")) || KNOWN_PROPOSAL_CREATION_DEPOT_ID;
       if (rawId && allowedId && rawId === allowedId) return true;
-      var rawText = shared.depot.normaliseText ? shared.depot.normaliseText(raw) : String(raw).trim().toLowerCase();
+      var rawText = shared.depot.normaliseText ? shared.depot.normaliseText(raw) : normaliseText(raw);
       return rawText === "proposal creation";
     } catch (err) {
-      log("depot check failed, grouping left inactive as a precaution", err);
+      log("depot check failed; native screen retained", err);
       return false;
     }
   }
@@ -455,30 +411,24 @@
     return "";
   }
 
-  function applyAccentColour($jobInfo) {
-    var element = $jobInfo.get(0);
+  function applyAccentColour($root) {
+    var element = $root.get(0);
     if (!element) return;
-    var rgb = parseRgb(element.style.backgroundColor) || findVisibleAccent($jobInfo);
+    var rgb = parseRgb(element.style.backgroundColor) || findVisibleAccent($root);
     element.style.setProperty("--wise-job-accent", rgb ? rgbToHex(rgb) : FALLBACK_ACCENT);
     element.style.setProperty("--wise-job-accent-rgb", rgb ? rgb.join(",") : FALLBACK_ACCENT_RGB);
   }
 
-  function findVisibleAccent($jobInfo) {
+  function findVisibleAccent($root) {
     var found = null;
-    $jobInfo.find("div,header,section,table,tr").slice(0, 20).each(function () {
+    $root.find("div,header,table,tr").slice(0, 24).each(function () {
       if (found) return;
       var value = this.style && this.style.backgroundColor;
       if (!value && window.getComputedStyle) value = window.getComputedStyle(this).backgroundColor;
       var rgb = parseRgb(value);
-      if (rgb && isUsefulAccent(rgb)) found = rgb;
+      if (rgb && Math.max.apply(Math, rgb) - Math.min.apply(Math, rgb) > 35 && Math.max.apply(Math, rgb) < 250) found = rgb;
     });
     return found;
-  }
-
-  function isUsefulAccent(rgb) {
-    var max = Math.max(rgb[0], rgb[1], rgb[2]);
-    var min = Math.min(rgb[0], rgb[1], rgb[2]);
-    return max - min > 35 && max < 250;
   }
 
   function parseRgb(value) {
@@ -497,37 +447,30 @@
       ("0" + rgb[1].toString(16)).slice(-2) + ("0" + rgb[2].toString(16)).slice(-2);
   }
 
-  function normaliseText(value) {
-    return String(value || "").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "").toLowerCase();
-  }
-
   function installStyles() {
     if (document.getElementById(STYLES_ID)) return;
     var accent = "var(--wise-job-accent," + FALLBACK_ACCENT + ")";
     var accentRgb = "var(--wise-job-accent-rgb," + FALLBACK_ACCENT_RGB + ")";
-    var roots = ".wise-jg-active";
+    var root = ".wise-jg-active";
     var css = [
-      roots + "{display:block!important;background:#fff!important;border:0!important;outline:0!important;padding:5px!important;box-sizing:border-box;}",
-      roots + " .wise-jg-native-separator," + roots + " .wise-jg-source-container{display:none!important;}",
-      roots + ">.wise-jg-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:start;}",
-      roots + " .wise-jg-section{box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
-      roots + " [" + GROUP_ATTR + "='job-info']{grid-column:1 / -1;border-left-width:8px;}",
-      roots + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:6px 10px;border-bottom:1px solid #eee;background:#fff;}",
-      roots + " .wise-jg-hdr-text{font-weight:700;font-size:.76em;letter-spacing:.025em;text-transform:uppercase;color:#1f2937;}",
-      roots + " .wise-jg-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:24px;height:24px;border-radius:6px;background:rgba(" + accentRgb + ",.18);border:1px solid rgba(" + accentRgb + ",.32);color:" + accent + ";}",
-      roots + " .wise-jg-body{box-sizing:border-box;padding:7px 9px;min-width:0;color:#111827!important;}",
-      roots + " [" + GROUP_ATTR + "='job-info']>.wise-jg-body{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:2px 14px;align-items:start;}",
-      roots + " [" + GROUP_ATTR + "='job-dates-times']>.wise-jg-body," + roots + " [" + GROUP_ATTR + "='job-commercial-info']>.wise-jg-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px 12px;align-items:start;}",
-      roots + " .wise-jg-field-unit{box-sizing:border-box;width:100%!important;max-width:none!important;min-width:0!important;min-height:0!important;height:auto!important;margin:0!important;padding:2px 3px!important;border:0!important;line-height:1.25!important;color:#111827!important;}",
-      roots + " .wise-jg-field-unit div," + roots + " .wise-jg-field-unit tr," + roots + " .wise-jg-field-unit td{min-height:0!important;height:auto!important;}",
-      roots + " .wise-jg-field-unit *{color:#111827!important;}",
-      roots + " .wise-jg-field-unit a{color:#d00!important;}",
-      roots + " .wise-jg-field-unit [disabled]," + roots + " .wise-jg-field-unit .ui-state-disabled{color:#9ca3af!important;}",
-      roots + " .wise-jg-field-unit textarea{box-sizing:border-box!important;width:100%!important;min-height:42px!important;height:42px!important;resize:vertical;}",
-      roots + " .wise-jg-fragment-table{width:100%!important;border-collapse:collapse!important;border-spacing:0!important;}",
-      roots + " .wise-jg-fragment-table>tbody>tr>td," + roots + " .wise-jg-fragment-table>tbody>tr>th{width:auto!important;padding:1px 2px!important;border:0!important;vertical-align:top!important;}",
-      roots + " .wise-jg-span-all{grid-column:1 / -1;}",
-      "@media (max-width:900px){" + roots + ">.wise-jg-layout{grid-template-columns:1fr;}" + roots + " [" + GROUP_ATTR + "='job-info']{grid-column:auto;}" + roots + " [" + GROUP_ATTR + "='job-info']>.wise-jg-body," + roots + " [" + GROUP_ATTR + "='job-dates-times']>.wise-jg-body," + roots + " [" + GROUP_ATTR + "='job-commercial-info']>.wise-jg-body{grid-template-columns:1fr;}" + roots + " .wise-jg-span-all{grid-column:auto;}}"
+      root + "{display:block!important;background:#fff!important;border:0!important;outline:0!important;padding:5px!important;box-sizing:border-box;}",
+      root + ">.wise-jg-native-source-node{display:none!important;}",
+      root + ">.wise-jg-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:start;}",
+      root + " .wise-jg-section{box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
+      root + " [data-wise-job-group='job-info']{grid-column:1 / -1;border-left-width:8px;}",
+      root + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:6px 10px;border-bottom:1px solid #eee;background:#fff;}",
+      root + " .wise-jg-hdr-text{font-weight:700;font-size:.76em;letter-spacing:.025em;text-transform:uppercase;color:#1f2937;}",
+      root + " .wise-jg-icon{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:rgba(" + accentRgb + ",.18);border:1px solid rgba(" + accentRgb + ",.32);color:" + accent + ";}",
+      root + " .wise-jg-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px;padding:7px 10px;box-sizing:border-box;}",
+      root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:repeat(4,minmax(0,1fr));}",
+      root + " .wise-jg-field{display:flex;align-items:baseline;gap:7px;min-width:0;min-height:24px;padding:3px 2px;border-bottom:1px solid #f0f1f3;box-sizing:border-box;}",
+      root + " .wise-jg-field[data-wise-span='2']{grid-column:span 2;}",
+      root + " .wise-jg-field[data-wise-span='4']{grid-column:1 / -1;}",
+      root + " .wise-jg-field-label{flex:0 0 auto;font-weight:700;color:#111827;white-space:nowrap;}",
+      root + " .wise-jg-field-value{min-width:0;color:#1f2937;overflow-wrap:anywhere;}",
+      root + " .wise-jg-field-value.wise-jg-empty{color:#9ca3af;}",
+      "@media (max-width:1100px){" + root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " .wise-jg-field[data-wise-span='4']{grid-column:1 / -1;}}",
+      "@media (max-width:760px){" + root + ">.wise-jg-layout{grid-template-columns:1fr;}" + root + " [data-wise-job-group='job-info']{grid-column:auto;}" + root + " .wise-jg-body," + root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:1fr;}" + root + " .wise-jg-field[data-wise-span]{grid-column:auto;}}"
     ].join("\n");
     var style = document.createElement("style");
     style.id = STYLES_ID;
@@ -546,20 +489,14 @@
     version: CFG.version,
     refresh: function () { scheduleMaintain(0); },
     describe: function () {
-      var $jobInfo = findJobInfoRoot();
-      var counts = {};
-      for (var i = 0; i < GROUP_ORDER.length; i++) {
-        counts[GROUP_ORDER[i]] = $jobInfo.find("[" + GROUP_ATTR + "='" + GROUP_ORDER[i] + "']>.wise-jg-body>.wise-jg-field-unit").length;
-      }
+      var $root = findJobInfoRoot();
       return {
         version: CFG.version,
-        jobInfoFound: !!$jobInfo.length,
-        rootTag: $jobInfo.length ? String($jobInfo.get(0).tagName || "").toLowerCase() : "",
-        rootId: $jobInfo.attr("id") || "",
+        jobInfoFound: !!$root.length,
         depotAllowed: isProposalCreationDepot(),
-        grouped: $jobInfo.hasClass(ROOT_CLASS),
-        accentColour: $jobInfo.length ? $jobInfo.get(0).style.getPropertyValue("--wise-job-accent") : "",
-        fieldCounts: counts
+        grouped: $root.hasClass(ROOT_CLASS),
+        renderedFields: $root.find(".wise-jg-field").length,
+        renderedValues: $root.find(".wise-jg-field-value").map(function () { return $(this).text(); }).get()
       };
     }
   };
