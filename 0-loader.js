@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-15.2",
+    version: "2026-07-15.3",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -13,7 +13,7 @@
     recoveryChecks: 12,
     scripts: {
       hirehop: { file: "5-hirehop.js", version: "0.7" },
-      docprev: { file: "1-docprev.js", version: "1.2" },
+      docprev: { file: "1-docprev.js", version: "1.3" },
       autopull: { file: "2-apselall.js", version: "0.5" },
       meta: { file: "3-meta.js", version: "0.1" },
       layout: { file: "4-layout.js", version: "0.1" },

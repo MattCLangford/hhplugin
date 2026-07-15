@@ -23,7 +23,7 @@ These files are not included directly in the HireHop company config string. `0-l
 | Order | File | Cache version | Trigger | Enabled |
 | --- | --- | --- | --- | --- |
 | 1 | `5-hirehop.js` | `0.7` | `lazy-shared-module` | yes |
-| 2 | `1-docprev.js` | `1.2` | `lazy-supplying-list` | yes |
+| 2 | `1-docprev.js` | `1.3` | `lazy-supplying-list` | yes |
 | 3 | `2-apselall.js` | `0.5` | `lazy-autopull-dialog` | yes |
 | 4 | `3-meta.js` | `0.1` | `lazy-supplying-list-module` | yes |
 | 5 | `4-layout.js` | `0.1` | `lazy-supplying-list-module` | yes |

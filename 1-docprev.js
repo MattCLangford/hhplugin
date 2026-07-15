@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-15.2"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-15.3"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -44,9 +44,14 @@
   var NATIVE_TOTALS_HIDDEN_CLASS = "wise-native-job-totals-hidden";
   var JOB_GP_GOLDEN_PCT = 45;
   var JOB_GP_DARK_GREEN_PCT = 65;
-  var JOB_GP_COLD_BLUE = [30, 64, 175];
+  var JOB_GP_AMBER_PCT = 75;
+  var JOB_GP_RED_PCT = 90;
+  var JOB_GP_COLD_CURVE = 8;
+  var JOB_GP_COLD_BLUE = [8, 28, 112];
   var JOB_GP_GREEN = [22, 163, 74];
   var JOB_GP_DARK_GREEN = [20, 83, 45];
+  var JOB_GP_AMBER = [217, 119, 6];
+  var JOB_GP_RED = [220, 38, 38];
   var JOB_GP_DEEP_RED = [127, 29, 29];
 
   var PREVIEW_CONFIG = {
@@ -1282,7 +1287,11 @@
   function jobPerformanceColorForGp(value) {
     var gp = Math.max(0, Math.min(100, Number(value) || 0));
     if (gp <= JOB_GP_GOLDEN_PCT) {
-      return mixJobPerformanceRgb(JOB_GP_COLD_BLUE, JOB_GP_GREEN, gp / JOB_GP_GOLDEN_PCT);
+      return mixJobPerformanceRgb(
+        JOB_GP_COLD_BLUE,
+        JOB_GP_GREEN,
+        Math.pow(gp / JOB_GP_GOLDEN_PCT, JOB_GP_COLD_CURVE)
+      );
     }
     if (gp <= JOB_GP_DARK_GREEN_PCT) {
       return mixJobPerformanceRgb(
@@ -1291,10 +1300,24 @@
         (gp - JOB_GP_GOLDEN_PCT) / (JOB_GP_DARK_GREEN_PCT - JOB_GP_GOLDEN_PCT)
       );
     }
+    if (gp <= JOB_GP_AMBER_PCT) {
+      return mixJobPerformanceRgb(
+        JOB_GP_DARK_GREEN,
+        JOB_GP_AMBER,
+        (gp - JOB_GP_DARK_GREEN_PCT) / (JOB_GP_AMBER_PCT - JOB_GP_DARK_GREEN_PCT)
+      );
+    }
+    if (gp <= JOB_GP_RED_PCT) {
+      return mixJobPerformanceRgb(
+        JOB_GP_AMBER,
+        JOB_GP_RED,
+        (gp - JOB_GP_AMBER_PCT) / (JOB_GP_RED_PCT - JOB_GP_AMBER_PCT)
+      );
+    }
     return mixJobPerformanceRgb(
-      JOB_GP_DARK_GREEN,
+      JOB_GP_RED,
       JOB_GP_DEEP_RED,
-      (gp - JOB_GP_DARK_GREEN_PCT) / (100 - JOB_GP_DARK_GREEN_PCT)
+      (gp - JOB_GP_RED_PCT) / (100 - JOB_GP_RED_PCT)
     );
   }
 
