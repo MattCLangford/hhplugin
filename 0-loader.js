@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-15.4",
+    version: "2026-07-15.5",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -25,7 +25,7 @@
       projectJourney: { file: "11-projectjourney.js", version: "0.6" },
       projectGroups: { file: "12-projectgroups.js", version: "0.5" },
       proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.4" },
-      jobGroups: { file: "14-jobgroups.js", version: "0.1" }
+      jobGroups: { file: "14-jobgroups.js", version: "0.2" }
     }
   };
 
@@ -136,7 +136,7 @@
 
     if (hasSupplyingList()) loadProposalSupplyingBundle();
     if (isHomePage()) loadSequence(["hirehop", "captrack"]);
-    if (hasProjectOrJobTabs()) loadSequence(["checklist", "projectJourney"]);
+    if (hasProjectOrJobTabs()) loadSequence(["hirehop", "checklist", "projectJourney", "jobGroups"]);
     if (hasProjectJobsPage()) loadSequence(["hirehop", "projectJobs", "projectGroups"]);
     if (hasJobDetailsPage()) loadSequence(["hirehop", "jobGroups"]);
     if (hasAutopullDialog()) loadSequence(["autopull"]);

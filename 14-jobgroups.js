@@ -52,8 +52,8 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-07-15.1", maintainRecoveryMs: 5000 };
-  var state = { maintainTimer: null, maintainScheduled: null };
+  var CFG = { version: "2026-07-15.2", maintainRecoveryMs: 5000 };
+  var state = { maintainTimer: null, maintainScheduled: null, lastRoot: null };
 
   bootstrap();
 
@@ -88,25 +88,89 @@
     applyAccentColour($jobInfo);
     buildGroups($jobInfo, units);
     $jobInfo.addClass(ROOT_CLASS);
+    state.lastRoot = $jobInfo.get(0);
   }
 
   function findJobInfoRoot() {
-    var selectors = ["#job_info", "#job_details", "[data-page='job-details']", "[data-page='job_detail']"];
+    if (state.lastRoot && document.documentElement.contains(state.lastRoot)) return $(state.lastRoot);
+
+    var selectors = [
+      "#job_info", "#job_details", "#job_detail", "#job_info_container",
+      "[data-page='job-details']", "[data-page='job_detail']"
+    ];
     for (var i = 0; i < selectors.length; i++) {
       var $candidate = $(selectors[i]).first();
-      if ($candidate.length && looksLikeJobInfo($candidate)) return $candidate;
+      var $safeCandidate = findBestGroupingContainer($candidate);
+      if ($safeCandidate.length) return $safeCandidate;
     }
 
-    var $details = $("#details_tab").first();
-    if ($details.length && !$("#proj_info").length && looksLikeJobInfo($details)) return $details;
-    return $();
+    return findJobInfoFromLabel();
   }
 
   function looksLikeJobInfo($candidate) {
     if (!$candidate || !$candidate.length || $candidate.is("#proj_info") || $candidate.closest("#proj_info,#items_tab").length) return false;
+    if ($candidate.find("#proj_info,#gbox_jobs_grid").length) return false;
     var text = normaliseText($candidate.text());
     return /\bjob\s*id\b/.test(text) &&
       (/\bkit\s*booking\b/.test(text) || /\bjob\s*memo\b/.test(text) || /\bclient\s*reference\b/.test(text));
+  }
+
+  function findJobInfoFromLabel() {
+    var $best = $();
+    var bestSize = Infinity;
+
+    $("label,td,th,span,b,strong,div").each(function () {
+      var ownText = normaliseText($(this).clone().children().remove().end().text());
+      if (!/^job\s*id\s*#?\s*:?(?:\s*\d+)?$/i.test(ownText)) return;
+
+      var node = this;
+      for (var depth = 0; node && node !== document.body && depth < 12; depth += 1, node = node.parentNode) {
+        var $candidate = findBestGroupingContainer($(node));
+        if (!$candidate.length) continue;
+        var size = $candidate.find("*").length;
+        if (size < bestSize) {
+          $best = $candidate;
+          bestSize = size;
+        }
+      }
+    });
+
+    return $best;
+  }
+
+  function findBestGroupingContainer($candidate) {
+    if (!$candidate || !$candidate.length) return $();
+    var $best = $();
+    var bestSize = Infinity;
+    var $pool = $candidate.add($candidate.find("div,section,form"));
+
+    $pool.each(function () {
+      var $item = $(this);
+      if (!looksLikeJobInfo($item) || countPotentialUnits($item) < 3) return;
+      var size = $item.find("*").length;
+      if (size < bestSize) {
+        $best = $item;
+        bestSize = size;
+      }
+    });
+
+    return $best;
+  }
+
+  function countPotentialUnits($container) {
+    var count = 0;
+    $container.children().each(function () {
+      var $child = $(this);
+      if ($child.is("script,style,link,hr")) return;
+      if ($child.is("#custom_fields_container")) {
+        count += $child.children().filter(function () {
+          return !$(this).is("hr") && !!normaliseText($(this).text());
+        }).length;
+        return;
+      }
+      if (normaliseText($child.text())) count += 1;
+    });
+    return count;
   }
 
   function collectGroupableUnits($jobInfo) {
@@ -309,6 +373,8 @@
       return {
         version: CFG.version,
         jobInfoFound: !!$jobInfo.length,
+        rootTag: $jobInfo.length ? String($jobInfo.get(0).tagName || "").toLowerCase() : "",
+        rootId: $jobInfo.attr("id") || "",
         depotAllowed: isProposalCreationDepot(),
         grouped: $jobInfo.hasClass(ROOT_CLASS),
         accentColour: $jobInfo.length ? $jobInfo.get(0).style.getPropertyValue("--wise-job-accent") : "",
