@@ -69,6 +69,16 @@ It owns:
 - Operational Journey milestone rendering, critical path filtering, readiness scoring, department readiness, and issues/exceptions.
 - Mock journey data and the `WiseProjectJourneyConfig.getData` hook for later HireHop project/job data mapping.
 
+`12-projectgroups.js` owns:
+
+- Proposal Creation-only project details card grouping and project-colour visual accents.
+
+`14-jobgroups.js` owns:
+
+- Proposal Creation-only job details card grouping.
+- The Job Info, Job Dates and Times, and Job Commercial Info presentation groups.
+- Label-based placement of current native/custom job fields while preserving the original HireHop controls.
+
 ## Next Extractions
 
 1. `wise-sectionbuilder-preview-ui.js`
@@ -96,6 +106,7 @@ Recommended HireHop script set:
 - Home page: `5-hirehop.js` and `7-captrack.js`.
 - Project or job tab set: `9-jobchecklist.js` and `11-projectjourney.js` (`11-projectjourney.js` only installs its tab on project pages).
 - Project details jobs grid: `10-projectjobs-qol.js`.
+- Job details information: `5-hirehop.js` and `14-jobgroups.js` (Proposal Creation depot only).
 
 Do not load `wise-headingedit-ui.js` or `wise-sectionbuilder-ui.js` in normal production.
 
@@ -112,5 +123,7 @@ If the job checklist module causes issues, disable `9-jobchecklist.js`. It is st
 If the project jobs quality-of-life module causes issues, disable `10-projectjobs-qol.js`. It is standalone and only affects project details page scrolling and the compact project-information toggle.
 
 If the project Journey module causes issues, disable `11-projectjourney.js`. It is standalone and only affects the custom Journey tab on project pages.
+
+If the job details grouping module causes issues, disable `14-jobgroups.js`. It is standalone and only changes the Proposal Creation job details presentation.
 
 `6-editor2.js` is currently disabled. To restore it, set its `enabled` flag to `true` in `0-loader.js`, mirror the state in `manifest.json`, bump the loader cache version, regenerate the plugin string, and deploy the updated string. The older `wise-sectionbuilder-ui.js` remains an optional fallback snapshot and must not run alongside it.

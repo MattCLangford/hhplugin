@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-15.3",
+    version: "2026-07-15.4",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -24,7 +24,8 @@
       projectJobs: { file: "10-projectjobs-qol.js", version: "0.9" },
       projectJourney: { file: "11-projectjourney.js", version: "0.6" },
       projectGroups: { file: "12-projectgroups.js", version: "0.5" },
-      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.4" }
+      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.4" },
+      jobGroups: { file: "14-jobgroups.js", version: "0.1" }
     }
   };
 
@@ -137,6 +138,7 @@
     if (isHomePage()) loadSequence(["hirehop", "captrack"]);
     if (hasProjectOrJobTabs()) loadSequence(["checklist", "projectJourney"]);
     if (hasProjectJobsPage()) loadSequence(["hirehop", "projectJobs", "projectGroups"]);
+    if (hasJobDetailsPage()) loadSequence(["hirehop", "jobGroups"]);
     if (hasAutopullDialog()) loadSequence(["autopull"]);
   }
 
@@ -195,6 +197,26 @@
       document.getElementById("gbox_jobs_grid"));
   }
 
+  function hasJobDetailsPage() {
+    var candidates = [
+      document.getElementById("job_info"),
+      document.getElementById("job_details"),
+      document.getElementById("details_tab")
+    ];
+
+    for (var i = 0; i < candidates.length; i++) {
+      var candidate = candidates[i];
+      if (!candidate || closest(candidate, "#items_tab") || closest(candidate, "#proj_info")) continue;
+      if (query(candidate, "#proj_info") || query(candidate, "#gbox_jobs_grid")) continue;
+      var text = normaliseText(candidate.textContent || "");
+      if (text.indexOf("job id") !== -1 &&
+          (text.indexOf("kit booking") !== -1 || text.indexOf("job memo") !== -1 || text.indexOf("client reference") !== -1)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   function hasProjectOrJobTabs() {
     var hosts = document.querySelectorAll("#tabs > ul, .hh-framework_tabs > ul, .ui-tabs > ul.ui-tabs-nav, ul.ui-tabs-nav");
     for (var i = 0; i < hosts.length; i++) {
@@ -243,8 +265,8 @@
 
   function nodeMayAffectRoutes(node) {
     if (!node || node.nodeType !== 1) return false;
-    return matches(node, "#items_tab,#details_tab,#proj_info,#gbox_jobs_grid,#tabs,.hh-framework_tabs,.ui-tabs,.ui-tabs-nav,.ui-dialog,.ui-dialog-content,.auto_add_check") ||
-      !!query(node, "#items_tab,#details_tab,#proj_info,#gbox_jobs_grid,#tabs,.hh-framework_tabs,.ui-tabs,.ui-tabs-nav,.ui-dialog,.ui-dialog-content,.auto_add_check");
+    return matches(node, "#items_tab,#details_tab,#proj_info,#job_info,#job_details,#gbox_jobs_grid,#tabs,.hh-framework_tabs,.ui-tabs,.ui-tabs-nav,.ui-dialog,.ui-dialog-content,.auto_add_check") ||
+      !!query(node, "#items_tab,#details_tab,#proj_info,#job_info,#job_details,#gbox_jobs_grid,#tabs,.hh-framework_tabs,.ui-tabs,.ui-tabs-nav,.ui-dialog,.ui-dialog-content,.auto_add_check");
   }
 
   function countContains(text, needles) {

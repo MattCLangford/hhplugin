@@ -40,6 +40,8 @@ Load this in HireHop:
 
 `13-proposalpageicons.js` is a Proposal Creation depot-only supplying-list visual guide. It replaces native folder icons with compact landscape page thumbnails styled to sit alongside HireHop's native tree icons: `Section:` uses a hero-image page with a centred title, and `Dept:` uses a half-image/half-table page. Their `// Section:` and `// Dept:` forms keep the matching layout with a muted slash. The exact `Technical Summary` support heading uses a visually separate eye-and-revenue medallion for the client-visible line items and revenue it contains; it deliberately resembles neither a page nor a folder. The module reads the logged-in user's active depot from `window.user`, fails closed when that depot cannot be confirmed, and only changes rendered icon classes—the supplying-list names, records, hierarchy, and unmatched native icons are not modified.
 
+`14-jobgroups.js` is the matching Proposal Creation-only visual treatment for the native job details page. It keeps HireHop's real controls and save behavior intact, but moves the existing field blocks into three responsive cards: Job Info leads full-width, followed by Job Dates and Times and Job Commercial Info side by side. Timing, vehicle-movement, pricing, credit, discount, and commission labels are routed to their operational cards; unknown future fields remain visible under Job Info. The same active-depot gate and live HireHop colour accent pattern used by the project cards is retained.
+
 ## Reference And Legacy Files
 
 `QTC-V2.html` is reference-only in this folder. The real renderer is already deployed in HireHop, but keeping a local copy is useful when checking that editor metadata and renderer expectations still match.
