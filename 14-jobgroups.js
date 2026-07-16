@@ -21,7 +21,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-07-15.6", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-07-16.1", maintainRecoveryMs: 5000 };
 
   var GROUPS = [
     {
@@ -29,27 +29,25 @@
       title: "Job Info",
       icon: '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><rect x="2" y="4" width="16" height="13" rx="2"/><path d="M6 4V2h8v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="5" y="8" width="10" height="2" rx="1" fill="#fff"/><rect x="5" y="12" width="7" height="2" rx="1" fill="#fff"/></svg>',
       fields: [
-        field("job-id", "Job ID", ["Job ID", "Job ID#"], { always: true }),
+        field("job-id", "Job ID", ["Job ID", "Job ID#"], { always: true, section: "Job" }),
         field("job-name", "Job name", ["Job name"], { span: 2 }),
         field("job-type", "Job type", ["Job type"]),
-        field("venue", "Venue", ["Venue"]),
+        field("company", "Company", ["Company"], { section: "Client & venue" }),
         field("contact-name", "Contact name", ["Contact name"], { span: 2 }),
-        field("company", "Company", ["Company"]),
-        field("warehouse", "Warehouse", ["Warehouse Name", "Warehouse"]),
-        field("technical", "Technical", ["Technical"]),
-        field("created-by", "Created by", ["Created by"], { span: 2 }),
-        field("version", "Version", ["Version"], { always: true }),
-        field("empties", "Empties stored on truck?", ["Empties stored on truck?", "Empties stored on truck"], { always: true }),
+        field("venue", "Venue", ["Venue"]),
         field("address", "Address", ["Address"], { span: 2 }),
         field("delivery-address", "Delivery address", ["Delivery address"], { span: 2 }),
         field("collection-address", "Collection address", ["Collection address"], { span: 2 }),
         field("use-at-address", "Use at address", ["Use at address"], { span: 2 }),
         field("contact-telephone", "Contact telephone", ["Telephone"], { occurrence: 0 }),
-        field("venue-telephone", "Venue telephone", ["Telephone"], { occurrence: 1 }),
         field("mobile", "Mobile", ["Mobile"]),
         field("email", "Email", ["Email"]),
-        field("goods-out", "Goods out", ["Goods out"]),
-        field("goods-in", "Goods in", ["Goods in"]),
+        field("venue-telephone", "Venue telephone", ["Telephone"], { occurrence: 1 }),
+        field("warehouse", "Warehouse", ["Warehouse Name", "Warehouse"], { section: "Operations & record" }),
+        field("technical", "Technical", ["Technical"]),
+        field("empties", "Empties stored on truck?", ["Empties stored on truck?", "Empties stored on truck"], { always: true }),
+        field("created-by", "Created by", ["Created by"], { span: 2 }),
+        field("version", "Version", ["Version"], { always: true }),
         field("job-memo", "Job memo", ["Job memo"], { span: 4 })
       ]
     },
@@ -58,14 +56,14 @@
       title: "Job Dates and Times",
       icon: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3.5" width="16" height="14" rx="2"/><path d="M6 1.5v4M14 1.5v4M2 7.5h16"/><circle cx="10" cy="12" r="3"/><path d="M10 10.5V12l1.3.9" stroke-linecap="round"/></svg>',
       fields: [
-        field("kit-booking-start", "Kit Booking Start", ["Kit Booking Start"], { always: true }),
+        field("kit-booking-start", "Kit Booking Start", ["Kit Booking Start"], { always: true, section: "Booking & preparation" }),
         field("wise-prep-start", "Wise Prep Start", ["Wise Prep Start"], { always: true }),
         field("vehicle-load", "Vehicle Load", ["Vehicle Load"], { always: true }),
-        field("vehicle-install", "Vehicle Onsite - Install", ["Vehicle Onsite - Install", "Vehicle Onsite Install"], { always: true }),
+        field("vehicle-install", "Vehicle Onsite - Install", ["Vehicle Onsite - Install", "Vehicle Onsite Install"], { always: true, section: "On site" }),
         field("project-start", "Project/Onsite Start", ["Project/Onsite Start", "Project Onsite Start"], { always: true }),
-        field("vehicle-derig", "Vehicle Onsite - Derig", ["Vehicle Onsite - Derig", "Vehicle Onsite Derig"], { always: true }),
         field("project-end", "Project/Onsite End", ["Project/Onsite End", "Project Onsite End"], { always: true }),
-        field("vehicle-tip", "Vehicle Tip", ["Vehicle Tip"], { always: true }),
+        field("vehicle-derig", "Vehicle Onsite - Derig", ["Vehicle Onsite - Derig", "Vehicle Onsite Derig"], { always: true }),
+        field("vehicle-tip", "Vehicle Tip", ["Vehicle Tip"], { always: true, section: "Return" }),
         field("kit-booking-end", "Kit Booking End", ["Kit Booking End"], { always: true })
       ]
     },
@@ -74,17 +72,17 @@
       title: "Job Commercial Info",
       icon: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M2 7h16M5 12h4M12 12h3" stroke-linecap="round"/></svg>',
       fields: [
-        field("client-reference", "Client reference", ["Client reference"]),
+        field("price-group", "Price group", ["Price group"], { section: "Pricing" }),
+        field("price-structure", "Price structure", ["Price structure"]),
+        field("charge-period", "Charge period", ["Charge period"]),
+        field("client-reference", "Client reference", ["Client reference"], { section: "Billing & returns" }),
         field("credit-period", "Credit period", ["Credit period"]),
-        field("default-discount", "Default discount/markup", ["Default discount/markup"]),
-        field("price-group", "Price group", ["Price group"]),
         field("late-fees", "Calculate late fees", ["Calculate late fees"]),
         field("early-returns", "Allow early returns", ["Allow early returns"]),
-        field("charge-period", "Charge period", ["Charge period"]),
-        field("price-structure", "Price structure", ["Price structure"]),
-        field("discretionary-discount", "Discretionary Discount", ["Discretionary Discount", "Discretionary discount"], { always: true }),
-        field("venue-commission", "Venue Commission", ["Venue Commission", "Venue commission"], { always: true }),
-        field("client-commission", "Client Commission", ["Client Commission", "Client commission"], { always: true })
+        field("default-discount", "Default discount/markup", ["Default discount/markup"], { section: "Adjustments & commission" }),
+        field("discretionary-discount", "Discretionary discount", ["Discretionary Discount", "Discretionary discount"], { always: true }),
+        field("venue-commission", "Venue commission", ["Venue Commission", "Venue commission"], { always: true }),
+        field("client-commission", "Client commission", ["Client Commission", "Client commission"], { always: true })
       ]
     }
   ];
@@ -102,6 +100,7 @@
       aliases: aliases,
       occurrence: Number(options.occurrence) || 0,
       span: Number(options.span) || 1,
+      section: String(options.section || ""),
       always: !!options.always
     };
   }
@@ -146,11 +145,17 @@
       var group = GROUPS[g];
       var $section = makeGroup(group);
       var $body = $section.children(".wise-jg-body");
+      var pendingSubhead = "";
 
       for (var f = 0; f < group.fields.length; f++) {
         var spec = group.fields[f];
+        if (spec.section) pendingSubhead = spec.section;
         var value = readFieldValue($root, spec);
         if (!value && !spec.always) continue;
+        if (pendingSubhead) {
+          renderSubhead($body, pendingSubhead);
+          pendingSubhead = "";
+        }
         renderField($body, spec, value);
       }
       $layout.append($section);
@@ -179,6 +184,13 @@
       .text(value || "—")
       .appendTo($field);
     $body.append($field);
+  }
+
+  function renderSubhead($body, label) {
+    $("<div></div>")
+      .addClass("wise-jg-subhead")
+      .text(label)
+      .appendTo($body);
   }
 
   function readFieldValue($root, spec) {
@@ -455,22 +467,22 @@
     var css = [
       root + "{display:block!important;background:#fff!important;border:0!important;outline:0!important;padding:5px!important;box-sizing:border-box;}",
       root + ">.wise-jg-native-source-node{display:none!important;}",
-      root + ">.wise-jg-layout{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;align-items:start;}",
-      root + " .wise-jg-section{box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
-      root + " [data-wise-job-group='job-info']{grid-column:1 / -1;border-left-width:8px;}",
-      root + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:6px 10px;border-bottom:1px solid #eee;background:#fff;}",
+      root + ">.wise-jg-layout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;}",
+      root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
+      root + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid #e5e7eb;background:#fff;}",
       root + " .wise-jg-hdr-text{font-weight:700;font-size:.76em;letter-spacing:.025em;text-transform:uppercase;color:#1f2937;}",
       root + " .wise-jg-icon{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:rgba(" + accentRgb + ",.18);border:1px solid rgba(" + accentRgb + ",.32);color:" + accent + ";}",
-      root + " .wise-jg-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px;padding:7px 10px;box-sizing:border-box;}",
-      root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:repeat(4,minmax(0,1fr));}",
-      root + " .wise-jg-field{display:flex;align-items:baseline;gap:7px;min-width:0;min-height:24px;padding:3px 2px;border-bottom:1px solid #f0f1f3;box-sizing:border-box;}",
-      root + " .wise-jg-field[data-wise-span='2']{grid-column:span 2;}",
-      root + " .wise-jg-field[data-wise-span='4']{grid-column:1 / -1;}",
+      root + " .wise-jg-body{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;padding:4px 11px 9px;box-sizing:border-box;}",
+      root + " .wise-jg-subhead{margin-top:6px;padding:7px 2px 4px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:.69em;font-weight:750;letter-spacing:.055em;line-height:1;text-transform:uppercase;}",
+      root + " .wise-jg-subhead:first-child{margin-top:0;border-top:0;}",
+      root + " .wise-jg-field{display:grid;grid-template-columns:minmax(132px,auto) minmax(0,1fr);align-items:baseline;gap:8px;min-width:0;min-height:25px;padding:4px 2px;border-bottom:1px solid #f0f1f3;box-sizing:border-box;}",
+      root + " .wise-jg-field[data-wise-span]{grid-column:auto;}",
       root + " .wise-jg-field-label{flex:0 0 auto;font-weight:700;color:#111827;white-space:nowrap;}",
       root + " .wise-jg-field-value{min-width:0;color:#1f2937;overflow-wrap:anywhere;}",
       root + " .wise-jg-field-value.wise-jg-empty{color:#9ca3af;}",
-      "@media (max-width:1100px){" + root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " .wise-jg-field[data-wise-span='4']{grid-column:1 / -1;}}",
-      "@media (max-width:760px){" + root + ">.wise-jg-layout{grid-template-columns:1fr;}" + root + " [data-wise-job-group='job-info']{grid-column:auto;}" + root + " .wise-jg-body," + root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:1fr;}" + root + " .wise-jg-field[data-wise-span]{grid-column:auto;}}"
+      "@media (max-width:1280px){" + root + ">.wise-jg-layout{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " [data-wise-job-group='job-info']{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;}" + root + " [data-wise-job-group='job-info'] .wise-jg-subhead{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-info'] .wise-jg-field[data-wise-span='2']," + root + " [data-wise-job-group='job-info'] .wise-jg-field[data-wise-span='4']{grid-column:1 / -1;}}",
+      "@media (max-width:760px){" + root + ">.wise-jg-layout{grid-template-columns:1fr;}" + root + " [data-wise-job-group='job-info']{grid-column:auto;}" + root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:1fr;gap:0;}" + root + " [data-wise-job-group='job-info'] .wise-jg-field[data-wise-span]{grid-column:auto;}" + root + " .wise-jg-field{grid-template-columns:minmax(118px,auto) minmax(0,1fr);}}",
+      "@media (max-width:480px){" + root + " .wise-jg-field{grid-template-columns:1fr;gap:1px;}" + root + " .wise-jg-field-label{white-space:normal;} }"
     ].join("\n");
     var style = document.createElement("style");
     style.id = STYLES_ID;
