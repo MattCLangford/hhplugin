@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-20.7",
+  "version": "2026-07-20.8",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "2.4",
+      "cacheVersion": "2.5",
       "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
       "recommendedLoadOrder": 1
     }
@@ -28,7 +28,7 @@
     {
       "file": "1-docprev.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "1.4",
+      "cacheVersion": "1.5",
       "role": "Document preview panel used by power users on the supplying list. It opens docked by default after the toolbar entry point mounts, remains user-closable, and does not reopen automatically after the user closes it during that page session. Directly below the native buttons and above the list, a compact Commercial adjustments reminder and Job Performance strip show the three Job Track inputs for reference while calculating Revenue from the sum of supplying-line Revenue custom fields, CoS from the sum of native line Totals, GP£ as Revenue minus CoS, and GP% as GP£ divided by Revenue. The solid-colour performance totaliser fills from 0% to the required 45% GP target and uses the current supplying-line GP heat colour: an accelerated below-target gradient to dark blue at 0%, green at 45%, dark green at 65%, amber at 75%, red at 90%, and deep red at 100%. The misleading native Replacement cost/Weight/Volume/Discount-Markup/Quoted net total footer is hidden presentation-only.",
       "recommendedLoadOrder": 2
     },

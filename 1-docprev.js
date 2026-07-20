@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.7"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.8"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -1383,33 +1383,66 @@
       }
     }
 
-    if (totalColumn && typeof totalColumn.value === "function") {
-      try {
-        var calculated = unwrapJobPerformanceValue(totalColumn.value(node));
-        if (parseJobPerformanceMoney(calculated) != null) return calculated;
-      } catch (err) {}
-    } else if (totalColumn && typeof totalColumn.value === "string") {
-      var configured = readJobPerformanceSourceValue(sources, totalColumn.value);
-      if (parseJobPerformanceMoney(configured) != null) return configured;
-    }
+    var rendered = readJobPerformanceRenderedTotal(node, tree, totalColumn, columns);
+    if (parseJobPerformanceMoney(rendered) != null) return rendered;
 
     var direct = readJobPerformanceSourceValue(sources, "TOTAL");
     if (parseJobPerformanceMoney(direct) != null) return direct;
 
+    if (totalColumn && typeof totalColumn.value === "string") {
+      var configured = readJobPerformanceSourceValue(sources, totalColumn.value);
+      if (parseJobPerformanceMoney(configured) != null) return configured;
+    }
+
+    var calculated = null;
+    if (totalColumn && typeof totalColumn.value === "function") {
+      try {
+        calculated = unwrapJobPerformanceValue(totalColumn.value(node));
+      } catch (err) {}
+    }
+
+    // Some HireHop supplying payloads expose the native line Total internally
+    // as PRICE. Prefer a non-zero raw value when a detached column callback
+    // returns zero, as that callback may rely on live grid state.
+    var rawPrice = readJobPerformanceSourceValue(sources, "PRICE");
+    var calculatedMoney = parseJobPerformanceMoney(calculated);
+    var rawPriceMoney = parseJobPerformanceMoney(rawPrice);
+    if (calculatedMoney != null && (calculatedMoney !== 0 || rawPriceMoney == null || rawPriceMoney === 0)) return calculated;
+    if (rawPriceMoney != null) return rawPrice;
+    return calculatedMoney == null ? "" : calculated;
+  }
+
+  function readJobPerformanceRenderedTotal(node, tree, totalColumn, columns) {
     var nodeId = String(node && node.id || "");
     if (!nodeId) return "";
-    var $wrapper = tree && tree.gridWrapper ? $(tree.gridWrapper).first() : $("#items_tab .jstree-grid-wrapper").first();
-    var $column = $wrapper.find(".jstree-grid-column[data-wise-commercial-column='cos']").first();
-    if (!$column.length) {
-      $column = $wrapper.find(".jstree-grid-column").filter(function () {
-        var text = normaliseJobPerformanceFieldName($(this).children(".jstree-grid-header,.jstree-grid-header-cell").first().text());
-        return text === "total" || text === "cos";
+    var $wrappers = tree && tree.gridWrapper ? $(tree.gridWrapper) : $();
+    $wrappers = $wrappers.add($("#items_tab .jstree-grid-wrapper"));
+    var configuredIndex = totalColumn && columns ? columns.indexOf(totalColumn) : -1;
+
+    for (var i = 0; i < $wrappers.length; i++) {
+      var $wrapper = $($wrappers[i]);
+      var $column = $wrapper.find(".jstree-grid-column[data-wise-commercial-column='cos']").first();
+      if (!$column.length && configuredIndex >= 0) {
+        $column = $wrapper.find(".jstree-grid-column-" + configuredIndex).first();
+      }
+      if (!$column.length) {
+        $column = $wrapper.find(".jstree-grid-column").filter(function () {
+          var $header = $(this).children(".jstree-grid-header,.jstree-grid-header-cell").first();
+          if (!$header.length) $header = $(this).find(".jstree-grid-header,.jstree-grid-header-cell").first();
+          var text = normaliseJobPerformanceFieldName($header.clone().children(".jstree-grid-separator").remove().end().text());
+          return text === "total" || text === "cos";
+        }).first();
+      }
+      if (!$column.length) continue;
+
+      var $cell = $column.find(".jstree-grid-cell").filter(function () {
+        return String($(this).attr("data-jstreegrid") || "") === nodeId;
       }).first();
+      if (!$cell.length) continue;
+      var value = $cell.text();
+      if (parseJobPerformanceMoney(value) != null) return value;
     }
-    var $cell = $column.find(".jstree-grid-cell").filter(function () {
-      return String($(this).attr("data-jstreegrid") || "") === nodeId;
-    }).first();
-    return $cell.length ? $cell.text() : "";
+    return "";
   }
 
   function getJobPerformanceGridColumns(tree) {
