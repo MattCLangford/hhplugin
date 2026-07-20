@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.11"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.12"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -1008,16 +1008,16 @@
 
     var $terms = $(
       '<aside id="' + COMMERCIAL_TERMS_ID + '" aria-label="Commercial adjustment inputs">' +
-        '<div class="wca-intro"><span class="wca-title">Commercial adjustments</span><span class="wca-note">Job Track inputs shown for reference</span></div>' +
+        '<div class="wca-intro"><span class="wca-title">Commercial adjustments</span><span class="wca-note">Job Track inputs applied to line totals</span></div>' +
         commercialTermHtml("discount", "Discretionary discount") +
         commercialTermHtml("venue", "Venue commission") +
         commercialTermHtml("client", "Client commission") +
       '</aside>'
     );
     var $strip = $(
-      '<section id="' + JOB_PERFORMANCE_ID + '" class="is-unavailable" aria-label="Supplying-line job performance">' +
+      '<section id="' + JOB_PERFORMANCE_ID + '" class="is-unavailable" aria-label="Post-adjustment supplying-line job performance">' +
         '<div class="wjp-head">' +
-          '<div><span class="wjp-title">Job Performance</span><span class="wjp-kicker">Supplying-line totals</span></div>' +
+          '<div><span class="wjp-title">Job Performance</span><span class="wjp-kicker">Post-adjustment line totals</span></div>' +
           '<div class="wjp-actions">' +
             '<span class="wjp-status" aria-live="polite"><span class="wjp-status-dot"></span><span data-wjp-status>Calculating...</span></span>' +
             '<button class="wjp-refresh" type="button">Refresh</button>' +
@@ -1217,23 +1217,59 @@
     if (!totals.available) return false;
 
     var metrics = $.extend({}, jobTrackMetrics || {});
-    var gp = totals.revenue - totals.cos;
-    var gpPct = totals.revenue === 0 ? null : (gp / totals.revenue) * 100;
-
-    metrics.revenue = formatJobPerformanceMoney(totals.revenue);
-    metrics.cos = formatJobPerformanceMoney(totals.cos);
-    metrics.gp = formatJobPerformanceMoney(gp);
-    metrics.gpPct = gpPct;
-    metrics.gpPctText = gpPct == null ? "—" : formatJobPerformancePercent(gpPct);
     metrics.discountPct = metrics.discountPct == null ? null : metrics.discountPct;
     metrics.venueCommissionPct = metrics.venueCommissionPct == null ? null : metrics.venueCommissionPct;
     metrics.clientCommissionPct = metrics.clientCommissionPct == null ? null : metrics.clientCommissionPct;
+    var adjusted = calculateAdjustedJobPerformance(totals, metrics);
+
+    metrics.revenue = formatJobPerformanceMoney(adjusted.revenue);
+    metrics.cos = formatJobPerformanceMoney(adjusted.cos);
+    metrics.gp = formatJobPerformanceMoney(adjusted.gp);
+    metrics.gpPct = adjusted.gpPct;
+    metrics.gpPctText = adjusted.gpPct == null ? "—" : formatJobPerformancePercent(adjusted.gpPct);
+    metrics.baseRevenue = formatJobPerformanceMoney(adjusted.baseRevenue);
+    metrics.baseCos = formatJobPerformanceMoney(adjusted.baseCos);
+    metrics.discountAmount = formatJobPerformanceMoney(adjusted.discountAmount);
+    metrics.venueCommissionAmount = formatJobPerformanceMoney(adjusted.venueCommissionAmount);
+    metrics.clientCommissionAmount = formatJobPerformanceMoney(adjusted.clientCommissionAmount);
     metrics.sourceStatus = metrics.sourceStatus || "Job Track inputs unavailable";
     metrics.lineCount = totals.lineCount;
     metrics.revenueLineCount = totals.revenueLineCount;
 
     renderJobPerformanceMetrics(metrics);
     return true;
+  }
+
+  function calculateAdjustedJobPerformance(totals, commercialTerms) {
+    var baseRevenue = roundJobPerformanceMoney(Number(totals && totals.revenue) || 0);
+    var baseCos = roundJobPerformanceMoney(Number(totals && totals.cos) || 0);
+    var discountPct = normaliseJobPerformanceAdjustmentPercent(commercialTerms && commercialTerms.discountPct);
+    var venueCommissionPct = normaliseJobPerformanceAdjustmentPercent(commercialTerms && commercialTerms.venueCommissionPct);
+    var clientCommissionPct = normaliseJobPerformanceAdjustmentPercent(commercialTerms && commercialTerms.clientCommissionPct);
+    var discountAmount = roundJobPerformanceMoney(baseRevenue * discountPct / 100);
+    var revenue = roundJobPerformanceMoney(baseRevenue - discountAmount);
+    var venueCommissionAmount = roundJobPerformanceMoney(revenue * venueCommissionPct / 100);
+    var clientCommissionAmount = roundJobPerformanceMoney(revenue * clientCommissionPct / 100);
+    var cos = roundJobPerformanceMoney(baseCos + venueCommissionAmount + clientCommissionAmount);
+    var gp = roundJobPerformanceMoney(revenue - cos);
+
+    return {
+      baseRevenue: baseRevenue,
+      baseCos: baseCos,
+      discountAmount: discountAmount,
+      venueCommissionAmount: venueCommissionAmount,
+      clientCommissionAmount: clientCommissionAmount,
+      revenue: revenue,
+      cos: cos,
+      gp: gp,
+      gpPct: revenue === 0 ? null : (gp / revenue) * 100
+    };
+  }
+
+  function normaliseJobPerformanceAdjustmentPercent(value) {
+    var parsed = Number(value);
+    if (!isFinite(parsed)) return 0;
+    return Math.max(0, Math.min(100, parsed));
   }
 
   function readSupplyingLineCommercialTotals() {
@@ -1587,7 +1623,7 @@
     var targetProgress = hasGpPct ? Math.max(0, Math.min(100, (gpPct / JOB_GP_GOLDEN_PCT) * 100)) : 0;
     var currentGpText = hasGpPct ? (metrics.gpPctText || formatJobPerformancePercent(gpPct)) : "—";
     var targetNote = !hasGpPct
-      ? "GP% unavailable while supplying-line Revenue is zero"
+      ? "GP% unavailable while post-adjustment Revenue is zero"
       : (gpPct >= JOB_GP_GOLDEN_PCT
         ? "45% GP target achieved · current " + currentGpText
         : currentGpText + " GP · " + Math.round(targetProgress) + "% of 45% target");
@@ -1603,7 +1639,12 @@
     $strip.find("[data-wjp-health-note]").text(targetNote);
     $strip.attr(
       "title",
-      "Supplying-line Revenue " + metrics.revenue + ", CoS " + metrics.cos + ", GP " + metrics.gp +
+      "Base supplying-line Revenue " + (metrics.baseRevenue || metrics.revenue) +
+      " and CoS " + (metrics.baseCos || metrics.cos) +
+      ". Discount " + (metrics.discountAmount || formatJobPerformanceMoney(0)) +
+      ", venue commission " + (metrics.venueCommissionAmount || formatJobPerformanceMoney(0)) +
+      ", client commission " + (metrics.clientCommissionAmount || formatJobPerformanceMoney(0)) +
+      ". Final Revenue " + metrics.revenue + ", CoS " + metrics.cos + ", GP " + metrics.gp +
       " (" + currentGpText + "). " + (metrics.lineCount == null ? "" : metrics.lineCount + " inventory lines. ") +
       "Job Track flag: " + (metrics.sourceStatus || "not set") + "."
     );
