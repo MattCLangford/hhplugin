@@ -20,7 +20,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-20.6",
+    version: "2026-07-20.9",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -156,6 +156,13 @@
 
   function projectSupplyingGrid() {
     var tree = getTree();
+    var $nativeHeaderTable = getNativeSupplyingHeaderTable();
+    if ($nativeHeaderTable.length) {
+      state.gridFound = true;
+      projectNativeSupplyingGrid(tree, $nativeHeaderTable);
+      return;
+    }
+
     var $wrapper = getGridWrapper(tree);
     state.gridFound = !!$wrapper.length;
     if (!$wrapper.length) return;
@@ -194,6 +201,197 @@
       projected += 1;
     }
     state.projectedRows = projected;
+  }
+
+  function getNativeSupplyingHeaderTable() {
+    return $("#items_tab table.supplying_list_heads").filter(function () {
+      var text = normaliseText($(this).text());
+      var alreadyMapped = $(this).find("[data-wise-commercial-column='cos']").length > 0;
+      return text.indexOf("unit price") !== -1 && (text.indexOf("total") !== -1 || text.indexOf("cos") !== -1 || alreadyMapped);
+    }).first();
+  }
+
+  function projectNativeSupplyingGrid(tree, $headerTable) {
+    var $headerRow = $headerTable.find("tr").first();
+    var $headers = $headerRow.children("th,td");
+    if (!$headers.length) return;
+
+    rememberNativeCellOrder($headers);
+    var columns = {
+      unit: findNativeSupplyingHeader($headers, "unit", "UNIT_PRICE", ["unit price", "unit cost"]),
+      cos: findNativeSupplyingHeader($headers, "cos", "TOTAL", ["total", "cos"]),
+      markup: findNativeSupplyingHeader($headers, "markup", "DISCOUNT", ["discount", "discount/markup", "discount / markup", "markup"]),
+      revenue: findNativeSupplyingHeader($headers, "revenue", "FLAG", ["flag", "revenue"])
+    };
+
+    var complete = Object.keys(columns).every(function (key) {
+      return columns[key] && columns[key].$header && columns[key].$header.length;
+    });
+    if (!complete) {
+      state.projectedColumns = Object.keys(columns).filter(function (key) {
+        return columns[key] && columns[key].$header && columns[key].$header.length;
+      });
+      return;
+    }
+
+    var $rowTables = $("#items_tab table.cust_node");
+    markNativeSupplyingBodyCells($rowTables, $headers.length, columns);
+    renameNativeSupplyingHeader(columns.cos, "CoS");
+    renameNativeSupplyingHeader(columns.markup, "Markup");
+    renameNativeSupplyingHeader(columns.revenue, "Revenue");
+    columns.unit.$header.addClass("wise-supplying-commercial-hidden-column");
+    $rowTables.find("[data-wise-commercial-column='unit']").addClass("wise-supplying-commercial-hidden-column");
+    reorderNativeSupplyingColumns($headerRow, $rowTables, columns);
+
+    var nodes = getAllTreeNodes(tree);
+    var projected = 0;
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (!isInventoryLine(node)) {
+        setNativeSupplyingCellValue(node, "markup", "—");
+        setNativeSupplyingCellValue(node, "revenue", "—");
+        continue;
+      }
+      var commercial = readCommercialFields(node);
+      setNativeSupplyingCellValue(node, "markup", formatMarkup(commercial.markup));
+      setNativeSupplyingCellValue(node, "revenue", formatSterling(commercial.revenue));
+      projected += 1;
+    }
+    state.projectedRows = projected;
+    state.projectedColumns = ["unit", "cos", "markup", "revenue"];
+  }
+
+  function findNativeSupplyingHeader($headers, key, classSuffix, labels) {
+    var $header = $headers.filter('[data-wise-commercial-column="' + key + '"]').first();
+    if (!$header.length) $header = $headers.filter(".column_" + classSuffix).first();
+    if (!$header.length) {
+      var wanted = labels.map(normaliseText);
+      $header = $headers.filter(function () {
+        return wanted.indexOf(readNativeSupplyingHeaderLabel($(this))) !== -1;
+      }).first();
+    }
+    if (!$header.length) return { key: key, $header: $() };
+    $header.attr("data-wise-commercial-column", key);
+    return {
+      key: key,
+      classSuffix: classSuffix,
+      originalIndex: Number($header.attr("data-wise-native-original-index")),
+      $header: $header,
+      $label: getNativeSupplyingHeaderLabelElement($header)
+    };
+  }
+
+  function getNativeSupplyingHeaderLabelElement($header) {
+    var $label = $header.children("div").first();
+    return $label.length ? $label : $header;
+  }
+
+  function readNativeSupplyingHeaderLabel($header) {
+    return normaliseText(getNativeSupplyingHeaderLabelElement($header).text());
+  }
+
+  function renameNativeSupplyingHeader(column, label) {
+    if (!column || !column.$label || !column.$label.length) return;
+    var $label = column.$label;
+    if ($label.attr("data-wise-commercial-original-label") == null) {
+      $label.attr("data-wise-commercial-original-label", $.trim($label.text()));
+    }
+    if ($.trim($label.text()) !== label) $label.text(label);
+  }
+
+  function rememberNativeCellOrder($cells) {
+    $cells.each(function (index) {
+      var $cell = $(this);
+      if ($cell.attr("data-wise-native-original-index") == null) {
+        $cell.attr("data-wise-native-original-index", String(index));
+      }
+    });
+  }
+
+  function markNativeSupplyingBodyCells($tables, headerCount, columns) {
+    $tables.each(function () {
+      var $row = $(this).find("tr").first();
+      var $cells = $row.children("td,th");
+      if (!$cells.length) return;
+      rememberNativeCellOrder($cells);
+      var offset = Math.max(0, $cells.length - headerCount);
+
+      Object.keys(columns).forEach(function (key) {
+        var column = columns[key];
+        if (!column || !column.$header || !column.$header.length) return;
+        var $cell = findNativeSupplyingBodyCell($cells, key, column.classSuffix, column.originalIndex, offset);
+        if ($cell.length) $cell.attr("data-wise-commercial-column", key);
+      });
+    });
+  }
+
+  function findNativeSupplyingBodyCell($cells, key, classSuffix, headerIndex, offset) {
+    var $existing = $cells.filter('[data-wise-commercial-column="' + key + '"]').first();
+    if ($existing.length) return $existing;
+    var suffix = String(classSuffix || "");
+    var lower = suffix.toLowerCase();
+    var selectors = [
+      ".column_" + suffix,
+      "." + lower + "_cell",
+      "[data-column='" + suffix + "']",
+      "[data-field='" + suffix + "']"
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+      var $matched = $cells.filter(selectors[i]).first();
+      if ($matched.length) return $matched;
+    }
+    var bodyIndex = Number(headerIndex) + offset;
+    return bodyIndex >= 0 && bodyIndex < $cells.length ? $cells.eq(bodyIndex) : $();
+  }
+
+  function reorderNativeSupplyingColumns($headerRow, $tables, columns) {
+    var $nameHeader = $headerRow.children("th,td").filter(".name_cell").first();
+    if (!$nameHeader.length) $nameHeader = $headerRow.children("th,td").first();
+    placeColumnAfter(columns.cos.$header, $nameHeader);
+    placeColumnAfter(columns.markup.$header, columns.cos.$header);
+    placeColumnAfter(columns.revenue.$header, columns.markup.$header);
+
+    $tables.each(function () {
+      var $row = $(this).find("tr").first();
+      var $cells = $row.children("td,th");
+      var $item = $cells.filter(".name_cell,.item_cell.node_desc").last();
+      if (!$item.length) {
+        var offset = Math.max(0, $cells.length - $headerRow.children("th,td").length);
+        $item = $cells.eq(offset);
+      }
+      var $cos = $cells.filter("[data-wise-commercial-column='cos']").first();
+      var $markup = $cells.filter("[data-wise-commercial-column='markup']").first();
+      var $revenue = $cells.filter("[data-wise-commercial-column='revenue']").first();
+      placeColumnAfter($cos, $item);
+      placeColumnAfter($markup, $cos);
+      placeColumnAfter($revenue, $markup);
+    });
+  }
+
+  function setNativeSupplyingCellValue(node, key, value) {
+    if (!node || !node.id) return;
+    var element = document.getElementById(String(node.id));
+    if (!element) return;
+    var $cell = $(element).find("table.cust_node tr").first().children("td,th")
+      .filter('[data-wise-commercial-column="' + key + '"]').first();
+    if (!$cell.length) return;
+    if ($cell.data("wiseCommercialOriginalHtml") == null) {
+      $cell.data("wiseCommercialOriginalHtml", $cell.html());
+    }
+    var next = value || "—";
+    var $value = $cell.find(".wise-commercial-projected-value").first();
+    if (!$value.length) {
+      var $host = $cell.children("div").first();
+      if ($host.length) {
+        $host.empty();
+        $value = $("<span class='wise-commercial-projected-value'></span>").appendTo($host);
+      } else {
+        $cell.empty();
+        $value = $("<span class='wise-commercial-projected-value'></span>").appendTo($cell);
+      }
+    }
+    if ($value.text() !== next) $value.text(next);
+    $cell.attr("title", next === "—" ? "No proposal value set" : next);
   }
 
   function reorderCommercialColumns($wrapper, columns) {
@@ -1418,6 +1616,7 @@
       if (separator.length) $label.append(separator);
       $label.removeAttr("data-wise-commercial-original-label title");
     });
+    restoreNativeSupplyingGrid();
     var tree = getTree();
     var $wrapper = getGridWrapper(tree);
     var $columns = $wrapper.find(".jstree-grid-column[data-wise-commercial-original-index]");
@@ -1438,10 +1637,34 @@
     state.projectedColumns = [];
   }
 
+  function restoreNativeSupplyingGrid() {
+    $("#items_tab table.cust_node [data-wise-commercial-column]").each(function () {
+      var $cell = $(this);
+      var originalHtml = $cell.data("wiseCommercialOriginalHtml");
+      if (originalHtml != null) $cell.html(originalHtml);
+      $cell.removeData("wiseCommercialOriginalHtml");
+    });
+
+    $("#items_tab table.supplying_list_heads tr,#items_tab table.cust_node tr").each(function () {
+      var $row = $(this);
+      var $cells = $row.children("th[data-wise-native-original-index],td[data-wise-native-original-index]");
+      if (!$cells.length) return;
+      $cells.sort(function (a, b) {
+        return Number($(a).attr("data-wise-native-original-index")) - Number($(b).attr("data-wise-native-original-index"));
+      }).appendTo($row);
+    });
+
+    $("#items_tab [data-wise-native-original-index]")
+      .removeClass("wise-supplying-commercial-hidden-column")
+      .removeAttr("data-wise-commercial-column data-wise-native-original-index title");
+  }
+
   function installStyles() {
     if (document.getElementById(CFG.styleId)) return;
     var css = [
       ".wise-supplying-commercial-active .jstree-grid-column.wise-supplying-commercial-hidden-column,.wise-supplying-commercial-active .jstree-grid-column[data-wise-commercial-column='unit']{display:none!important;}",
+      ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='unit'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='unit'],.wise-supplying-commercial-active table.supplying_list_heads .wise-supplying-commercial-hidden-column,.wise-supplying-commercial-active table.cust_node .wise-supplying-commercial-hidden-column{display:none!important;}",
+      ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='revenue'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='revenue']{text-align:right;}",
       "." + CFG.panelClass + "{display:grid;grid-template-columns:minmax(190px,1fr) minmax(150px,.55fr) minmax(180px,.7fr);align-items:end;gap:12px;margin:12px 0;padding:12px 14px;border:1px solid #ccd8e5;border-left:4px solid #d4b455;border-radius:8px;background:linear-gradient(135deg,#fffdf8 0%,#f4f7fa 100%);box-sizing:border-box;}",
       "." + CFG.panelClass + ".has-error{border-color:#b42318;}",
       ".wise-line-commercial-heading{display:flex;flex-direction:column;gap:2px;align-self:center;}",
@@ -1530,6 +1753,8 @@
   function inspectCommercialContext() {
     var tree = getTree();
     var $wrapper = getGridWrapper(tree);
+    var $nativeHeaderTable = getNativeSupplyingHeaderTable();
+    var $nativeHeaders = $nativeHeaderTable.find("tr").first().children("th,td");
     var node = null;
     try {
       var selected = tree && tree.get_selected ? (tree.get_selected(true) || []) : [];
@@ -1546,9 +1771,12 @@
     return {
       depotAllowed: isProposalCreationDepot(),
       treeFound: !!tree,
-      gridFound: !!$wrapper.length,
-      gridHeaders: getGridHeaders($wrapper).map(function () { return $.trim($(this).text()); }).get(),
-      renderedGridColumns: getGridColumns($wrapper).length,
+      gridFound: !!($nativeHeaderTable.length || $wrapper.length),
+      gridMode: $nativeHeaderTable.length ? "hirehop-native-tables" : ($wrapper.length ? "jstree-grid" : "not-found"),
+      gridHeaders: $nativeHeaderTable.length
+        ? $nativeHeaders.map(function () { return $.trim($(this).text()); }).get()
+        : getGridHeaders($wrapper).map(function () { return $.trim($(this).text()); }).get(),
+      renderedGridColumns: $nativeHeaderTable.length ? $nativeHeaders.length : getGridColumns($wrapper).length,
       configuredGridHeaders: getConfiguredGridColumns(tree).map(function (column) {
         return $.trim(String(column && column.header || ""));
       }),

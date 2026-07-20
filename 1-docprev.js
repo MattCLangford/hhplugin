@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.8"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.9"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -1415,6 +1415,29 @@
   function readJobPerformanceRenderedTotal(node, tree, totalColumn, columns) {
     var nodeId = String(node && node.id || "");
     if (!nodeId) return "";
+
+    var nodeElement = document.getElementById(nodeId);
+    if (nodeElement) {
+      var $nativeRow = $(nodeElement).find("table.cust_node tr").first();
+      var $nativeCells = $nativeRow.children("td,th");
+      var $nativeTotal = $nativeCells.filter("[data-wise-commercial-column='cos'],.column_TOTAL,.total_cell").first();
+      if (!$nativeTotal.length) {
+        var $nativeHeaders = $("#items_tab table.supplying_list_heads tr").first().children("th,td");
+        var $totalHeader = $nativeHeaders.filter(".column_TOTAL,[data-wise-commercial-column='cos']").first();
+        if ($totalHeader.length) {
+          var originalHeaderIndex = Number($totalHeader.attr("data-wise-native-original-index"));
+          if (!isFinite(originalHeaderIndex)) originalHeaderIndex = $nativeHeaders.index($totalHeader);
+          var nativeOffset = Math.max(0, $nativeCells.length - $nativeHeaders.length);
+          var nativeIndex = originalHeaderIndex + nativeOffset;
+          if (nativeIndex >= 0 && nativeIndex < $nativeCells.length) $nativeTotal = $nativeCells.eq(nativeIndex);
+        }
+      }
+      if ($nativeTotal.length) {
+        var nativeValue = $nativeTotal.text();
+        if (parseJobPerformanceMoney(nativeValue) != null) return nativeValue;
+      }
+    }
+
     var $wrappers = tree && tree.gridWrapper ? $(tree.gridWrapper) : $();
     $wrappers = $wrappers.add($("#items_tab .jstree-grid-wrapper"));
     var configuredIndex = totalColumn && columns ? columns.indexOf(totalColumn) : -1;

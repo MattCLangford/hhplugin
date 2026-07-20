@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-20.8",
+  "version": "2026-07-20.9",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "2.5",
+      "cacheVersion": "2.6",
       "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
       "recommendedLoadOrder": 1
     }
@@ -120,7 +120,7 @@
     {
       "file": "15-supplyingcommercial.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "0.5",
+      "cacheVersion": "0.6",
       "role": "Proposal Creation depot only: adds line-level Revenue and Markup custom-field inputs to native supplying item edit dialogs, reads only supplying-line custom fields (never inventory-master values), recalculates Revenue when native Qty changes while preserving Markup, saves both through HireHop's native item request, and presents the supplying grid as CoS (native line Total), Markup, Revenue while preserving native commercial data.",
       "recommendedLoadOrder": 15
     }
