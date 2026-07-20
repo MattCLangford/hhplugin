@@ -20,7 +20,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-20.9",
+    version: "2026-07-20.10",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -964,11 +964,15 @@
 
   function scheduleQuantityRecalculation($dialog, $panel) {
     $panel.attr("data-wise-commercial-dirty", "1");
-    $panel.attr("data-wise-commercial-last-edited", CFG.markupField);
     [0, 60, 180].forEach(function (delay) {
       setTimeout(function () {
         if (!$panel.closest("html").length || !$dialog.is(":visible")) return;
-        syncCommercialCalculations($panel, CFG.markupField, false);
+        refreshPanelCos($panel);
+        var cosText = $.trim(String($panel.attr("data-wise-commercial-cos") || ""));
+        var hasRevenue = $.trim(String($panel.find('[data-wise-commercial-field="Revenue"]').val() || ""));
+        var driver = hasRevenue && (cosText === "" || Number(cosText) === 0) ? CFG.revenueField : CFG.markupField;
+        $panel.attr("data-wise-commercial-last-edited", driver);
+        syncCommercialCalculations($panel, driver, false);
       }, delay);
     });
   }
@@ -995,8 +999,10 @@
       if (!currentCos || currentCos === previousCos) return;
       $currentPanel.attr("data-wise-commercial-last-observed-cos", currentCos);
       $currentPanel.attr("data-wise-commercial-dirty", "1");
-      $currentPanel.attr("data-wise-commercial-last-edited", CFG.markupField);
-      syncCommercialCalculations($currentPanel, CFG.markupField, false);
+      var hasRevenue = $.trim(String($currentPanel.find('[data-wise-commercial-field="Revenue"]').val() || ""));
+      var driver = hasRevenue && Number(currentCos) === 0 ? CFG.revenueField : CFG.markupField;
+      $currentPanel.attr("data-wise-commercial-last-edited", driver);
+      syncCommercialCalculations($currentPanel, driver, false);
     }, 150);
   }
 
@@ -1009,7 +1015,10 @@
   function initialiseCommercialCalculations($panel) {
     var revenue = $.trim(String($panel.find('[data-wise-commercial-field="Revenue"]').val() || ""));
     var markup = $.trim(String($panel.find('[data-wise-commercial-field="Markup"]').val() || ""));
-    if (markup) syncCommercialCalculations($panel, CFG.markupField, false);
+    var cosText = $.trim(String($panel.attr("data-wise-commercial-cos") || ""));
+    var hasUsableCos = cosText !== "" && isFinite(Number(cosText)) && Number(cosText) !== 0;
+    if (revenue && !hasUsableCos) syncCommercialCalculations($panel, CFG.revenueField, false);
+    else if (markup) syncCommercialCalculations($panel, CFG.markupField, false);
     else if (revenue && !markup) syncCommercialCalculations($panel, CFG.revenueField, false);
   }
 
@@ -1020,8 +1029,34 @@
     var $revenue = $panel.find('[data-wise-commercial-field="Revenue"]').first();
     var $markup = $panel.find('[data-wise-commercial-field="Markup"]').first();
 
+    if (sourceField === CFG.revenueField) {
+      var revenue = normaliseMoneyInput($revenue.val());
+      if (revenue == null || revenue === "") {
+        setCalculationStatus(
+          $panel,
+          (hasCos ? "CoS: " + formatSterling(cos) : "No CoS") + " · enter a revenue value",
+          revenue == null
+        );
+        return revenue !== null || !forSave;
+      }
+      if (!hasCos || cos === 0) {
+        $markup.val("").removeAttr("aria-invalid");
+        $revenue.removeAttr("aria-invalid");
+        setCalculationStatus(
+          $panel,
+          formatSterling(revenue) + " revenue with no CoS · " + (Number(revenue) === 0 ? "markup not applicable" : "100% GP · markup not applicable"),
+          false
+        );
+        return true;
+      }
+      var calculatedMarkup = calculateMarkup(cos, revenue);
+      $markup.val(String(calculatedMarkup)).removeAttr("aria-invalid");
+      setCalculationStatus($panel, formatSterling(revenue) + " revenue = " + calculatedMarkup + "% markup on " + formatSterling(cos), false);
+      return true;
+    }
+
     if (!hasCos) {
-      setCalculationStatus($panel, "CoS unavailable · values can be saved but not calculated", true);
+      setCalculationStatus($panel, "CoS unavailable · enter Revenue directly; markup cannot be calculated", true);
       return !forSave;
     }
 
@@ -1034,22 +1069,6 @@
       var calculatedRevenue = calculateRevenue(cos, markup);
       $revenue.val(calculatedRevenue.toFixed(2)).removeAttr("aria-invalid");
       setCalculationStatus($panel, "CoS " + formatSterling(cos) + " + " + markup + "% = " + formatSterling(calculatedRevenue), false);
-      return true;
-    }
-
-    if (sourceField === CFG.revenueField) {
-      var revenue = normaliseMoneyInput($revenue.val());
-      if (revenue == null || revenue === "") {
-        setCalculationStatus($panel, "CoS: " + formatSterling(cos) + " · enter a revenue value", revenue == null);
-        return revenue !== null || !forSave;
-      }
-      if (cos === 0) {
-        setCalculationStatus($panel, "Markup cannot be calculated while CoS is zero", true);
-        return !forSave;
-      }
-      var calculatedMarkup = calculateMarkup(cos, revenue);
-      $markup.val(String(calculatedMarkup)).removeAttr("aria-invalid");
-      setCalculationStatus($panel, formatSterling(revenue) + " revenue = " + calculatedMarkup + "% markup on " + formatSterling(cos), false);
       return true;
     }
     return true;
@@ -1185,7 +1204,13 @@
       else if (hasRevenue && !hasMarkup) lastEdited = CFG.revenueField;
     }
     if (lastEdited && !syncCommercialCalculations($panel, lastEdited, true)) {
-      showValidationError($dialog, lastEdited === CFG.revenueField ? "Markup cannot be calculated because CoS is zero or unavailable." : "Revenue could not be calculated from the supplied markup.", lastEdited);
+      showValidationError(
+        $dialog,
+        lastEdited === CFG.revenueField
+          ? "Revenue must be a valid money value. Markup is not required when there is no CoS."
+          : "Revenue could not be calculated from the supplied markup.",
+        lastEdited
+      );
       return false;
     }
     var revenueText = String($dialog.find('[data-wise-commercial-field="Revenue"]').val() || "");
