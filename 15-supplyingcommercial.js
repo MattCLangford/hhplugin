@@ -20,7 +20,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-20.2",
+    version: "2026-07-20.3",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -48,7 +48,9 @@
     recoveryCount: 0,
     pendingSave: null,
     activeDialog: null,
-    projectedRows: 0
+    projectedRows: 0,
+    gridFound: false,
+    projectedColumns: []
   };
 
   boot();
@@ -108,6 +110,7 @@
       return;
     }
 
+    $(document.body).addClass("wise-supplying-commercial-active");
     projectSupplyingGrid();
     enhanceOpenItemDialog();
   }
@@ -133,16 +136,20 @@
   /* --------------------------- Supplying grid --------------------------- */
 
   function projectSupplyingGrid() {
-    var $wrapper = $("#items_tab .jstree-grid-wrapper").first();
     var tree = getTree();
+    var $wrapper = getGridWrapper(tree);
+    state.gridFound = !!$wrapper.length;
     if (!$wrapper.length || !tree) return;
 
     var columns = {
-      unit: findGridColumn($wrapper, "unit", ["unit price", "unit cost"]),
-      cos: findGridColumn($wrapper, "cos", ["total", "cos"]),
-      markup: findGridColumn($wrapper, "markup", ["discount/markup", "discount / markup", "markup"]),
-      revenue: findGridColumn($wrapper, "revenue", ["flag", "revenue"])
+      unit: findGridColumn($wrapper, tree, "unit", ["unit price", "unit cost"]),
+      cos: findGridColumn($wrapper, tree, "cos", ["total", "cos"]),
+      markup: findGridColumn($wrapper, tree, "markup", ["discount/markup", "discount / markup", "markup"]),
+      revenue: findGridColumn($wrapper, tree, "revenue", ["flag", "revenue"])
     };
+    state.projectedColumns = Object.keys(columns).filter(function (key) {
+      return columns[key] && columns[key].$column && columns[key].$column.length;
+    });
 
     renameGridHeader(columns.cos, "CoS");
     renameGridHeader(columns.markup, "Markup");
@@ -183,7 +190,7 @@
     $column.insertAfter($anchor);
   }
 
-  function findGridColumn($wrapper, key, labels) {
+  function findGridColumn($wrapper, tree, key, labels) {
     var $marked = $wrapper.find('.jstree-grid-column[data-wise-commercial-column="' + key + '"]').first();
     if ($marked.length) {
       return { key: key, $column: $marked, $header: $marked.children(".jstree-grid-header").first() };
@@ -193,6 +200,14 @@
     var $header = $wrapper.find(".jstree-grid-header-cell").filter(function () {
       return wanted.indexOf(normaliseText($(this).text())) !== -1;
     }).first();
+    if (!$header.length) {
+      var configured = tree && tree.settings && tree.settings.grid && tree.settings.grid.columns;
+      for (var i = 0; Array.isArray(configured) && i < configured.length; i++) {
+        if (wanted.indexOf(normaliseText(configured[i] && configured[i].header)) === -1) continue;
+        $header = $wrapper.find(".jstree-grid-column-" + i + " > .jstree-grid-header").first();
+        break;
+      }
+    }
     var $column = $header.closest(".jstree-grid-column");
     if ($column.length) {
       $column.attr("data-wise-commercial-column", key);
@@ -202,8 +217,9 @@
   }
 
   function rememberOriginalGridColumn($wrapper, $column, $header) {
+    var $host = $column.parent();
     if ($column.attr("data-wise-commercial-original-index") == null) {
-      $column.attr("data-wise-commercial-original-index", String($wrapper.children(".jstree-grid-column").index($column)));
+      $column.attr("data-wise-commercial-original-index", String($host.children(".jstree-grid-column").index($column)));
     }
     if ($header.length && $header.attr("data-wise-commercial-original-label") == null) {
       $header.attr("data-wise-commercial-original-label", $.trim($header.clone().children().remove().end().text()));
@@ -224,15 +240,52 @@
       return String($(this).attr("data-jstreegrid") || "") === String(nodeId);
     }).first();
     if (!$cell.length) return;
-    var $value = $cell.children("span").first();
-    if (!$value.length) $value = $("<span></span>").appendTo($cell);
     var next = value || "—";
+    var $value = $cell.children(".wise-commercial-projected-value").first();
+    if (!$value.length) {
+      $cell.empty();
+      $value = $("<span class='wise-commercial-projected-value'></span>").appendTo($cell);
+    }
     if ($value.text() !== next) $value.text(next);
     $cell.attr("title", next === "—" ? "No proposal value set" : next);
   }
 
   function getTree() {
-    try { return $(CFG.tree).first().jstree(true) || null; } catch (err) { return null; }
+    var $candidates = $(CFG.tree)
+      .add($("#items_tab").filter(".jstree"))
+      .add($("#items_tab").find(".jstree"))
+      .add($(".jstree-grid-wrapper .jstree"));
+    var fallback = null;
+    for (var i = 0; i < $candidates.length; i++) {
+      try {
+        var tree = $($candidates[i]).jstree(true);
+        if (!tree) continue;
+        if (!fallback) fallback = tree;
+        if (treeLooksLikeSupplyingGrid(tree)) return tree;
+      } catch (err) {}
+    }
+    return fallback;
+  }
+
+  function treeLooksLikeSupplyingGrid(tree) {
+    var columns = tree && tree.settings && tree.settings.grid && tree.settings.grid.columns;
+    if (!Array.isArray(columns)) return false;
+    var labels = columns.map(function (column) { return normaliseText(column && column.header); });
+    return labels.indexOf("unit price") !== -1 && labels.indexOf("total") !== -1;
+  }
+
+  function getGridWrapper(tree) {
+    var $wrapper = tree && tree.gridWrapper ? $(tree.gridWrapper).first() : $();
+    if ($wrapper.length) return $wrapper;
+    var $tree = tree && tree.element ? $(tree.element).first() : $(CFG.tree).first();
+    $wrapper = $tree.closest(".jstree-grid-wrapper").first();
+    if ($wrapper.length) return $wrapper;
+    $wrapper = $tree.parent().closest(".jstree-grid-wrapper").first();
+    if ($wrapper.length) return $wrapper;
+    return $("#items_tab .jstree-grid-wrapper,.jstree-grid-wrapper").filter(function () {
+      var text = normaliseText($(this).find(".jstree-grid-header-cell").text());
+      return text.indexOf("unit price") !== -1 && text.indexOf("total") !== -1;
+    }).first();
   }
 
   function getAllTreeNodes(tree) {
@@ -255,7 +308,8 @@
     var kind = node.data.kind;
     if (kind == null) kind = node.data.KIND;
     kind = Number(kind);
-    return kind === 1 || kind === 2;
+    if (kind === 1 || kind === 2) return true;
+    return /^[bc](?:_|-)?\d+/i.test(String(node.id || ""));
   }
 
   /* ---------------------------- Native dialog --------------------------- */
@@ -267,6 +321,7 @@
       return;
     }
     if ($dialog.find("." + CFG.panelClass).length) {
+      hydrateCommercialPanel($dialog, $dialog.find("." + CFG.panelClass).first());
       state.activeDialog = $dialog.get(0);
       return;
     }
@@ -274,6 +329,10 @@
     var node = resolveDialogNode($dialog);
     if (node && !isInventoryLine(node)) return;
     var commercial = readCommercialFields(node || { data: {} });
+    var helperRevenue = readHireHopCustomField(CFG.revenueField);
+    var helperMarkup = readHireHopCustomField(CFG.markupField);
+    if (helperRevenue != null && helperRevenue !== "") commercial.revenue = helperRevenue;
+    if (helperMarkup != null && helperMarkup !== "") commercial.markup = helperMarkup;
     commercial.cos = readLineCos($dialog, node);
     var $panel = $(commercialPanelHtml(commercial));
     insertCommercialPanel($dialog, $panel);
@@ -281,6 +340,23 @@
     initialiseCommercialCalculations($panel);
     renameDialogTotalAsCos($dialog);
     state.activeDialog = $dialog.get(0);
+  }
+
+  function hydrateCommercialPanel($dialog, $panel) {
+    if ($panel.attr("data-wise-commercial-dirty") === "1") return;
+    var commercial = readCommercialFields(resolveDialogNode($dialog) || { data: {} });
+    var helperRevenue = readHireHopCustomField(CFG.revenueField);
+    var helperMarkup = readHireHopCustomField(CFG.markupField);
+    if (helperRevenue != null && helperRevenue !== "") commercial.revenue = helperRevenue;
+    if (helperMarkup != null && helperMarkup !== "") commercial.markup = helperMarkup;
+
+    var cos = readLineCos($dialog, resolveDialogNode($dialog));
+    if (cos != null && cos !== "") $panel.attr("data-wise-commercial-cos", rawMoney(cos));
+    var $revenue = $panel.find('[data-wise-commercial-field="Revenue"]').first();
+    var $markup = $panel.find('[data-wise-commercial-field="Markup"]').first();
+    if ($.trim(String(commercial.revenue == null ? "" : commercial.revenue)) !== "") $revenue.val(rawMoney(commercial.revenue));
+    if ($.trim(String(commercial.markup == null ? "" : commercial.markup)) !== "") $markup.val(rawMarkup(commercial.markup));
+    initialiseCommercialCalculations($panel);
   }
 
   function findOpenItemDialog() {
@@ -361,6 +437,19 @@
     return null;
   }
 
+  function readHireHopCustomField(logicalName) {
+    if (typeof window._get_custom_field_value !== "function") return null;
+    var candidates = [logicalName, "_" + logicalName, "items:_" + logicalName];
+    for (var i = 0; i < candidates.length; i++) {
+      try {
+        var value = window._get_custom_field_value(candidates[i]);
+        if ($.isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, "value")) value = value.value;
+        if (value != null && value !== "") return value;
+      } catch (err) {}
+    }
+    return null;
+  }
+
   function commercialPanelHtml(commercial) {
     var cosLabel = commercial.cos === "" ? "CoS unavailable" : "CoS: " + formatSterling(commercial.cos);
     return '' +
@@ -394,9 +483,9 @@
 
     var nodeId = node && node.id ? String(node.id) : "";
     if (nodeId) {
-      var $gridValue = $('#items_tab .jstree-grid-column[data-wise-commercial-column="cos"] .jstree-grid-cell').filter(function () {
+      var $gridValue = getGridWrapper(getTree()).find('.jstree-grid-column[data-wise-commercial-column="cos"] .jstree-grid-cell').filter(function () {
         return String($(this).attr("data-jstreegrid") || "") === nodeId;
-      }).first().children("span").first();
+      }).first();
       var gridMoney = $gridValue.length ? normaliseMoneyInput($gridValue.text()) : null;
       if (gridMoney != null && gridMoney !== "") return gridMoney;
     }
@@ -415,6 +504,7 @@
   function bindCommercialCalculations($panel) {
     $panel.on("input.wiseSupplyingCommercial", ".wise-commercial-input", function () {
       var field = String($(this).attr("data-wise-commercial-field") || "");
+      $panel.attr("data-wise-commercial-dirty", "1");
       $panel.attr("data-wise-commercial-last-edited", field);
       $panel.removeClass("has-error");
       $(this).removeAttr("aria-invalid");
@@ -601,7 +691,7 @@
     }
 
     var node = resolveDialogNode($dialog);
-    var customFields = parseCustomFieldBag(node && node.data ? (node.data.CUSTOM_FIELDS || node.data.custom_fields || node.data.customFields) : "");
+    var customFields = collectNodeCustomFields(node);
     setCustomField(customFields, CFG.revenueField, revenue);
     setCustomField(customFields, CFG.markupField, markup);
     var nativeHelperUsed = stageHireHopCustomFields(revenue, markup);
@@ -688,6 +778,23 @@
   }
 
   function appendCustomFieldsToRequest(data, pending) {
+    if (isFormDataLike(data)) {
+      var scalar = data.get("custom_fields");
+      var parsedFormBag = tryParseCustomFieldBag(scalar);
+      if (scalar != null && parsedFormBag.valid) {
+        data.set("custom_fields", JSON.stringify(mergePendingCommercialFields(parsedFormBag.bag, pending)));
+        return data;
+      }
+      var keysToDelete = [];
+      data.forEach(function (value, key) {
+        if (isCommercialRequestField(key)) keysToDelete.push(key);
+      });
+      for (var f = 0; f < keysToDelete.length; f++) data.delete(keysToDelete[f]);
+      data.set("custom_fields[" + CFG.revenueField + "]", pending.revenue);
+      data.set("custom_fields[" + CFG.markupField + "]", pending.markup);
+      return data;
+    }
+
     if ($.isPlainObject(data)) {
       if ($.isPlainObject(data.custom_fields)) {
         data.custom_fields = mergePendingCommercialFields(data.custom_fields, pending);
@@ -748,6 +855,11 @@
     return parts.join("&");
   }
 
+  function isFormDataLike(value) {
+    return !!value && typeof value.get === "function" && typeof value.set === "function" &&
+      typeof value.delete === "function" && typeof value.forEach === "function";
+  }
+
   function mergePendingCommercialFields(existing, pending) {
     var bag = $.extend(true, {}, existing || pending.customFields || {});
     setCustomField(bag, CFG.revenueField, pending.revenue);
@@ -760,11 +872,11 @@
     var bag = {};
     var names = [CFG.revenueField, CFG.markupField];
     for (var i = 0; i < names.length; i++) {
-      var target = names[i].toLowerCase();
+      var target = normaliseCustomFieldName(names[i]);
       var keys = Object.keys(source);
       var found = false;
       for (var j = 0; j < keys.length; j++) {
-        if (String(keys[j]).replace(/^[_~]+/, "").toLowerCase() !== target) continue;
+        if (normaliseCustomFieldName(keys[j]) !== target) continue;
         bag[keys[j]] = cloneCustomFieldValue(source[keys[j]]);
         found = true;
         break;
@@ -782,8 +894,8 @@
   function isCommercialRequestField(key) {
     var match = String(key || "").match(/^custom_fields\[([^\]]+)\]/i);
     if (!match) return false;
-    var logical = String(match[1] || "").replace(/^[_~]+/, "").toLowerCase();
-    return logical === CFG.revenueField.toLowerCase() || logical === CFG.markupField.toLowerCase();
+    var logical = normaliseCustomFieldName(match[1]);
+    return logical === normaliseCustomFieldName(CFG.revenueField) || logical === normaliseCustomFieldName(CFG.markupField);
   }
 
   function requestMatchesItem(data, dataId) {
@@ -805,17 +917,50 @@
     setCustomField(bag, CFG.revenueField, pending.revenue);
     setCustomField(bag, CFG.markupField, pending.markup);
     node.data.CUSTOM_FIELDS = bag;
+    setDirectCustomField(node.data, CFG.revenueField, pending.revenue);
+    setDirectCustomField(node.data, CFG.markupField, pending.markup);
+    if (node.original && node.original.data) {
+      setDirectCustomField(node.original.data, CFG.revenueField, pending.revenue);
+      setDirectCustomField(node.original.data, CFG.markupField, pending.markup);
+    }
   }
 
   /* ------------------------- Custom-field codec ------------------------- */
 
   function readCommercialFields(node) {
-    var data = node && node.data ? node.data : {};
-    var bag = parseCustomFieldBag(data.CUSTOM_FIELDS || data.custom_fields || data.customFields);
+    var sources = getNodeDataSources(node);
+    var bag = {};
+    for (var i = 0; i < sources.length; i++) {
+      var parsed = parseCustomFieldBag(sources[i].CUSTOM_FIELDS || sources[i].custom_fields || sources[i].customFields);
+      bag = $.extend(true, bag, parsed);
+    }
     return {
-      revenue: readCustomField(bag, data, CFG.revenueField),
-      markup: readCustomField(bag, data, CFG.markupField)
+      revenue: readCustomField(bag, sources, CFG.revenueField),
+      markup: readCustomField(bag, sources, CFG.markupField)
     };
+  }
+
+  function collectNodeCustomFields(node) {
+    var sources = getNodeDataSources(node);
+    var bag = {};
+    for (var i = 0; i < sources.length; i++) {
+      var parsed = parseCustomFieldBag(sources[i].CUSTOM_FIELDS || sources[i].custom_fields || sources[i].customFields);
+      bag = $.extend(true, bag, parsed);
+    }
+    return bag;
+  }
+
+  function getNodeDataSources(node) {
+    var sources = [];
+    function add(source) {
+      if (!source || typeof source !== "object" || sources.indexOf(source) !== -1) return;
+      sources.push(source);
+    }
+    add(node && node.data);
+    add(node && node.original && node.original.data);
+    add(node && node.original);
+    add(node);
+    return sources.length ? sources : [{}];
   }
 
   function parseCustomFieldBag(value) {
@@ -841,12 +986,12 @@
   }
 
   function readCustomField(bag, data, logicalName) {
-    var target = String(logicalName || "").replace(/^[_~]+/, "").toLowerCase();
-    var sources = [bag || {}, data || {}];
+    var target = normaliseCustomFieldName(logicalName);
+    var sources = [bag || {}].concat(Array.isArray(data) ? data : [data || {}]);
     for (var s = 0; s < sources.length; s++) {
       var keys = Object.keys(sources[s]);
       for (var i = 0; i < keys.length; i++) {
-        if (String(keys[i]).replace(/^[_~]+/, "").toLowerCase() !== target) continue;
+        if (normaliseCustomFieldName(keys[i]) !== target) continue;
         var value = sources[s][keys[i]];
         if ($.isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, "value")) value = value.value;
         return value == null ? "" : value;
@@ -856,11 +1001,11 @@
   }
 
   function setCustomField(bag, logicalName, value) {
-    var target = String(logicalName || "").toLowerCase();
+    var target = normaliseCustomFieldName(logicalName);
     var keys = Object.keys(bag || {});
     var key = logicalName;
     for (var i = 0; i < keys.length; i++) {
-      if (String(keys[i]).replace(/^[_~]+/, "").toLowerCase() === target) {
+      if (normaliseCustomFieldName(keys[i]) === target) {
         key = keys[i];
         break;
       }
@@ -873,6 +1018,33 @@
     } else {
       bag[key] = value;
     }
+  }
+
+  function setDirectCustomField(data, logicalName, value) {
+    if (!data || typeof data !== "object") return;
+    var target = normaliseCustomFieldName(logicalName);
+    var keys = Object.keys(data);
+    var matched = false;
+    for (var i = 0; i < keys.length; i++) {
+      if (normaliseCustomFieldName(keys[i]) !== target) continue;
+      var existing = data[keys[i]];
+      if ($.isPlainObject(existing) && Object.prototype.hasOwnProperty.call(existing, "value")) {
+        existing = $.extend(true, {}, existing);
+        existing.value = value;
+        data[keys[i]] = existing;
+      } else {
+        data[keys[i]] = value;
+      }
+      matched = true;
+    }
+    if (!matched) data["items:_" + logicalName] = value;
+  }
+
+  function normaliseCustomFieldName(value) {
+    var text = $.trim(String(value == null ? "" : value));
+    var colon = text.lastIndexOf(":");
+    if (colon !== -1) text = text.slice(colon + 1);
+    return text.replace(/^[_~]+/, "").toLowerCase();
   }
 
   /* ------------------------------ Formatting ---------------------------- */
@@ -931,27 +1103,30 @@
       if (separator.length) $label.append(separator);
       $label.removeAttr("data-wise-commercial-original-label title");
     });
-    var $wrapper = $("#items_tab .jstree-grid-wrapper").first();
-    var $columns = $wrapper.children(".jstree-grid-column[data-wise-commercial-original-index]");
+    var tree = getTree();
+    var $wrapper = getGridWrapper(tree);
+    var $columns = $wrapper.find(".jstree-grid-column[data-wise-commercial-original-index]");
     $columns.sort(function (a, b) {
       return Number($(a).attr("data-wise-commercial-original-index")) - Number($(b).attr("data-wise-commercial-original-index"));
-    }).appendTo($wrapper);
+    }).appendTo($columns.first().parent());
     $columns
       .removeClass("wise-supplying-commercial-hidden-column")
       .removeAttr("data-wise-commercial-column data-wise-commercial-original-index");
-    var tree = getTree();
     if (tree && typeof tree.redraw === "function") {
       try { tree.redraw(true); } catch (err) {}
     }
     state.pendingSave = null;
+    $(document.body).removeClass("wise-supplying-commercial-active");
     state.activeDialog = null;
     state.projectedRows = 0;
+    state.gridFound = false;
+    state.projectedColumns = [];
   }
 
   function installStyles() {
     if (document.getElementById(CFG.styleId)) return;
     var css = [
-      "#items_tab .jstree-grid-column.wise-supplying-commercial-hidden-column{display:none!important;}",
+      ".wise-supplying-commercial-active .jstree-grid-column.wise-supplying-commercial-hidden-column{display:none!important;}",
       "." + CFG.panelClass + "{display:grid;grid-template-columns:minmax(190px,1fr) minmax(150px,.55fr) minmax(180px,.7fr);align-items:end;gap:12px;margin:12px 0;padding:12px 14px;border:1px solid #ccd8e5;border-left:4px solid #d4b455;border-radius:8px;background:linear-gradient(135deg,#fffdf8 0%,#f4f7fa 100%);box-sizing:border-box;}",
       "." + CFG.panelClass + ".has-error{border-color:#b42318;}",
       ".wise-line-commercial-heading{display:flex;flex-direction:column;gap:2px;align-self:center;}",
@@ -1037,17 +1212,48 @@
     return "";
   }
 
+  function inspectCommercialContext() {
+    var tree = getTree();
+    var $wrapper = getGridWrapper(tree);
+    var node = null;
+    try {
+      var selected = tree && tree.get_selected ? (tree.get_selected(true) || []) : [];
+      node = selected.length ? selected[0] : null;
+    } catch (err) {}
+    var sources = getNodeDataSources(node);
+    var matchingKeys = [];
+    for (var i = 0; i < sources.length; i++) {
+      Object.keys(sources[i]).forEach(function (key) {
+        var name = normaliseCustomFieldName(key);
+        if ((name === "revenue" || name === "markup") && matchingKeys.indexOf(key) === -1) matchingKeys.push(key);
+      });
+    }
+    return {
+      depotAllowed: isProposalCreationDepot(),
+      treeFound: !!tree,
+      gridFound: !!$wrapper.length,
+      gridHeaders: $wrapper.find(".jstree-grid-header-cell").map(function () { return $.trim($(this).text()); }).get(),
+      selectedNodeId: node && node.id ? String(node.id) : "",
+      selectedKind: node && node.data ? (node.data.kind == null ? node.data.KIND : node.data.kind) : null,
+      matchingKeys: matchingKeys,
+      commercial: readCommercialFields(node || { data: {} })
+    };
+  }
+
   window.__wiseSupplyingCommercial = {
     version: CFG.version,
     refresh: function () { scheduleRefresh(0); },
     calculateRevenue: calculateRevenue,
     calculateMarkup: calculateMarkup,
+    inspect: inspectCommercialContext,
     describe: function () {
       return {
         version: CFG.version,
         depotAllowed: isProposalCreationDepot(),
         supplyingListFound: !!document.getElementById("items_tab"),
         projectedInventoryRows: state.projectedRows,
+        gridFound: state.gridFound,
+        projectedColumns: state.projectedColumns.slice(),
         itemEditorEnhanced: !!$("." + CFG.panelClass).length,
         fields: { revenue: CFG.revenueField, markup: CFG.markupField },
         saveBridge: typeof $.ajaxPrefilter === "function" ? "ajax-prefilter-and-form-fields" : "form-fields"
