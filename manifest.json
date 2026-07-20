@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-16.1",
+  "version": "2026-07-20.1",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "1.7",
+      "cacheVersion": "1.8",
       "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
       "recommendedLoadOrder": 1
     }
@@ -42,23 +42,23 @@
     {
       "file": "3-meta.js",
       "status": "lazy-supplying-list-module",
-      "cacheVersion": "0.1",
-      "role": "Shared WisePageMeta and editor/template identifier contract consumed by the section builder and aligned to the QTC renderer.",
+      "cacheVersion": "0.2",
+      "role": "Shared QTC-V4 Heading custom-field contract, option values, and legacy WisePageMeta compatibility identifiers.",
       "recommendedLoadOrder": 4
     },
     {
       "file": "4-layout.js",
       "status": "lazy-supplying-list-module",
-      "cacheVersion": "0.1",
-      "role": "Shared proposal page/layout catalogue consumed by the section builder.",
+      "cacheVersion": "0.2",
+      "role": "Shared proposal layout catalogue plus PageTemplate and PageVariant value mappings consumed by the section builder and QTC-V4.",
       "recommendedLoadOrder": 5
     },
     {
       "file": "6-editor2.js",
       "status": "disabled-ready-to-enable",
       "enabled": false,
-      "cacheVersion": "1.6",
-      "role": "Main proposal page editor and HireHop authoring layer. Retained but currently skipped by 0-loader.js; set its loader entry to enabled: true when it is needed again.",
+      "cacheVersion": "1.7",
+      "role": "Main proposal page editor and HireHop authoring layer, updated to read and write QTC-V4 Heading custom fields with legacy prefix/suffix fallback. Retained but currently skipped by 0-loader.js; set its loader entry to enabled: true when it is needed again.",
       "recommendedLoadOrder": 6
     },
     {
@@ -106,8 +106,8 @@
     {
       "file": "13-proposalpageicons.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "0.4",
-      "role": "Proposal Creation depot only: replaces native Section:/Dept: supplying-list folder icons with distinct landscape page thumbnails—Section shows a hero image with a centred title, while Dept shows a half-image/half-table layout. Their // disabled forms keep the matching layout but add a muted slash. The exact Technical Summary support heading gets a separate eye-and-revenue medallion for its client-visible line items. Heading data and every unmatched native tree icon remain untouched.",
+      "cacheVersion": "0.5",
+      "role": "Proposal Creation depot only: uses QTC-V4 CreatePage, PageTemplate and Include Heading custom fields for proposal-page thumbnails, with legacy Section:/Dept: and // markers as read-only fallback. Heading data and every unmatched native tree icon remain untouched.",
       "recommendedLoadOrder": 13
     },
     {

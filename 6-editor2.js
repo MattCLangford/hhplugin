@@ -8,14 +8,14 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   /*
-   * HireHop proposal authoring layer for QTC-V2.html.
+   * HireHop proposal authoring layer for QTC-V4.html.
    * - Reads proposal headings and child rows from the supplying-list tree.
-   * - Writes WisePageMeta envelopes plus child folder/item structures back into HireHop.
+   * - Writes Heading custom fields plus legacy WisePageMeta compatibility envelopes back into HireHop.
    * - Provides visual editing modes for Event Overview and generic proposal pages.
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-05-18.5-native-toolbar",
+    version: "2026-07-20.1-heading-custom-fields",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -1760,6 +1760,13 @@
 
       if (!schedule.id) {
         setStatus("Creating “" + schedule.title + "”...", "info");
+        var createdScheduleCustomFields = buildEventHeadingCustomFields(
+          getSnapshotCustomFields(schedule.nodeData),
+          "17",
+          schedule.title,
+          saved.layout === LAYOUT_IMAGE && i === 0 ? saved.imageUrl : "",
+          saved.layout
+        );
         var created = await saveHeadingItemDirect({
           jobId: jobId,
           id: "",
@@ -1771,10 +1778,10 @@
           desc: schedule.intro,
           memo: "",
           flag: getSnapshotFlag(schedule.nodeData),
-          customFields: getSnapshotCustomFields(schedule.nodeData)
+          customFields: createdScheduleCustomFields
         });
         schedule.id = String(created.id || "");
-        schedule.nodeData = extendSnapshot(schedule.nodeData, { ID: schedule.id });
+        schedule.nodeData = extendSnapshot(schedule.nodeData, { ID: schedule.id, CUSTOM_FIELDS: createdScheduleCustomFields });
       }
 
       setStatus("Saving “" + schedule.title + "” times...", "info");
@@ -1786,7 +1793,9 @@
       var storageBaseMemo = getScheduleBaseMemoForSave(saved, schedule, i);
       var memo = composeStoredPageMetaText(storageBaseMemo, schedule.meta);
 
-      if (scheduleNeedsSave(schedule, originalSchedule, memo)) {
+      var scheduleImageUrl = saved.layout === LAYOUT_IMAGE && i === 0 ? saved.imageUrl : "";
+      var scheduleCustomFields = buildEventHeadingCustomFields(getSnapshotCustomFields(schedule.nodeData), "17", schedule.title, scheduleImageUrl, saved.layout);
+      if (scheduleNeedsSave(schedule, originalSchedule, memo) || eventHeadingCustomFieldsNeedSave(getSnapshotCustomFields(schedule.nodeData), "17", schedule.title, scheduleImageUrl, saved.layout)) {
         schedule.meta.updatedAt = formatLocalDateTime(new Date());
         memo = composeStoredPageMetaText(storageBaseMemo, schedule.meta);
         setStatus("Saving “" + schedule.title + "”...", "info");
@@ -1801,13 +1810,13 @@
           desc: schedule.intro,
           memo: memo,
           flag: getSnapshotFlag(schedule.nodeData),
-          customFields: getSnapshotCustomFields(schedule.nodeData)
+          customFields: scheduleCustomFields
         });
         schedule.id = String(updated.id || schedule.id || "");
       }
 
       schedule.baseMemo = storageBaseMemo;
-      schedule.nodeData = extendSnapshot(schedule.nodeData, { ID: schedule.id, TECHNICAL: memo, DESCRIPTION: schedule.intro });
+      schedule.nodeData = extendSnapshot(schedule.nodeData, { ID: schedule.id, TECHNICAL: memo, DESCRIPTION: schedule.intro, CUSTOM_FIELDS: scheduleCustomFields });
       nextIds.push(schedule.id);
     }
 
@@ -1817,7 +1826,8 @@
     saved.rootMeta = buildRootMeta(saved, nextIds, original.rootMeta && original.rootMeta.updatedAt);
     var rootMemo = composeStoredPageMetaText(saved.rootBaseMemo || "", saved.rootMeta);
 
-    if (rootNeedsSave(saved, original, rootMemo)) {
+    var rootCustomFields = buildEventHeadingCustomFields(getNodeCustomFields(rootNode), "16", CFG.sectionName, saved.imageUrl, saved.layout);
+    if (rootNeedsSave(saved, original, rootMemo) || eventHeadingCustomFieldsNeedSave(getNodeCustomFields(rootNode), "16", CFG.sectionName, saved.imageUrl, saved.layout)) {
       saved.rootMeta.updatedAt = formatLocalDateTime(new Date());
       rootMemo = composeStoredPageMetaText(saved.rootBaseMemo || "", saved.rootMeta);
       setStatus("Saving page settings...", "info");
@@ -1832,7 +1842,7 @@
         desc: saved.openingText || "",
         memo: rootMemo,
         flag: getNodeFlag(rootNode),
-        customFields: getNodeCustomFields(rootNode)
+        customFields: rootCustomFields
       });
     }
 
@@ -1963,7 +1973,39 @@
     var rootMeta = buildRootMeta(state, scheduleIds, metaInfo.meta && metaInfo.meta.updatedAt);
     var rootMemo = composeStoredPageMetaText(metaInfo.baseText || "", rootMeta);
     return normaliseWhitespace(getNodeRawTitle(rootNode)) !== normaliseWhitespace(CFG.sectionName) ||
-      String(rootMemo || "") !== String(getNodeTechnical(rootNode) || "");
+      String(rootMemo || "") !== String(getNodeTechnical(rootNode) || "") ||
+      eventHeadingCustomFieldsNeedSave(getNodeCustomFields(rootNode), "16", CFG.sectionName, state.imageUrl, state.layout);
+  }
+
+  function eventPageVariantValue(layout) {
+    var normalised = normaliseLayout(layout);
+    if (normalised === LAYOUT_NO_IMAGE) return "4";
+    if (normalised === LAYOUT_COLUMNS) return "7";
+    return "1";
+  }
+
+  function buildEventHeadingCustomFields(existing, templateValue, heading, imageUrl, layout) {
+    return mergeHeadingCustomFields(existing, {
+      imageUrl: $.trim(String(imageUrl || "")),
+      pageHeading: titleForStorage(heading || ""),
+      imageSide: "",
+      createPage: "1",
+      pageTemplate: [String(templateValue || "")],
+      pageVariant: [eventPageVariantValue(layout)],
+      includeInProposal: "1",
+      includeInProjectTotal: "0"
+    });
+  }
+
+  function eventHeadingCustomFieldsNeedSave(existing, templateValue, heading, imageUrl, layout) {
+    var fields = readHeadingCustomFields(existing);
+    return fields.templateValues.indexOf(String(templateValue || "")) === -1 ||
+      fields.variantValues.indexOf(eventPageVariantValue(layout)) === -1 ||
+      $.trim(getCustomFieldText(fields.pageHeading)) !== $.trim(titleForStorage(heading || "")) ||
+      $.trim(getCustomFieldText(fields.imageUrl)) !== $.trim(String(imageUrl || "")) ||
+      !fields.createPage.present || !truthyCustomFieldValue(fields.createPage.value) ||
+      !fields.includeInProposal.present || !truthyCustomFieldValue(fields.includeInProposal.value) ||
+      !fields.includeInProjectTotal.present || truthyCustomFieldValue(fields.includeInProjectTotal.value);
   }
 
   function buildRootMeta(state, scheduleIds, previousUpdatedAt) {
@@ -2007,6 +2049,7 @@
   function readEventOverviewState(tree, rootNode) {
     var rootMetaInfo = extractStoredPageMeta(getNodeTechnical(rootNode));
     var rootMeta = normaliseMeta(rootMetaInfo.meta) || {};
+    var rootFields = readHeadingCustomFields(rootNode);
     var childHeadings = getDirectChildHeadingNodes(tree, rootNode);
     var schedules = [];
 
@@ -2018,8 +2061,9 @@
 
     var firstScheduleMeta = normaliseMeta(schedules[0] && schedules[0].meta) || {};
     var firstMemoUrl = schedules[0] ? extractFirstUrl(schedules[0].baseMemo || getSnapshotField(schedules[0].nodeData, "TECHNICAL")) : "";
-    var imageUrl = $.trim(String(rootMeta.imageUrl || firstScheduleMeta.imageUrl || firstMemoUrl || ""));
-    var explicitLayout = rootMeta.layout || rootMeta.variant || firstScheduleMeta.layout || firstScheduleMeta.variant || "";
+    var imageUrl = $.trim(String(getCustomFieldText(rootFields.imageUrl) || rootMeta.imageUrl || firstScheduleMeta.imageUrl || firstMemoUrl || ""));
+    var customDeptLayout = deptLayoutFromPageVariants(rootFields.variantValues);
+    var explicitLayout = customDeptLayout || rootMeta.layout || rootMeta.variant || firstScheduleMeta.layout || firstScheduleMeta.variant || "";
     var layout = explicitLayout ? normaliseLayout(explicitLayout) : (imageUrl ? LAYOUT_IMAGE : LAYOUT_COLUMNS);
     if (!explicitLayout && childHeadings.length > 1) layout = LAYOUT_COLUMNS;
 
@@ -2037,12 +2081,13 @@
 
   function readScheduleState(tree, headingNode) {
     var metaInfo = extractStoredPageMeta(getNodeTechnical(headingNode));
+    var headingFields = readHeadingCustomFields(headingNode);
     var rows = getDirectChildCustomNodes(tree, headingNode).slice(0, CFG.maxRows).map(readRowState);
 
     return normaliseSchedule({
       uid: newUid("schedule"),
       id: getNodeDataId(headingNode),
-      title: getNodeTitle(headingNode),
+      title: $.trim(getCustomFieldText(headingFields.pageHeading)) || getNodeTitle(headingNode),
       intro: getNodeDescription(headingNode),
       baseMemo: metaInfo.baseText || "",
       meta: normaliseMeta(metaInfo.meta),
@@ -2087,6 +2132,8 @@
 
   function isEventOverviewSection(node) {
     if (!node || !node.data || Number(node.data.kind) !== 0) return false;
+    var headingFields = readHeadingCustomFields(node);
+    if (headingFields.templateValues.indexOf("16") !== -1) return true;
     var heading = parseHeadingBaseMeta(getNodeRawTitle(node));
     var metaInfo = extractStoredPageMeta(getNodeTechnical(node));
     var meta = normaliseMeta(metaInfo.meta);
@@ -2098,7 +2145,9 @@
 
   function isNamedEventOverviewSection(node) {
     if (!node || !node.data || Number(node.data.kind) !== 0) return false;
-    return normaliseText(getNodeTitle(node)) === normaliseText(CFG.sectionName);
+    var fields = readHeadingCustomFields(node);
+    var heading = $.trim(getCustomFieldText(fields.pageHeading)) || getNodeTitle(node);
+    return fields.templateValues.indexOf("16") !== -1 || normaliseText(heading) === normaliseText(CFG.sectionName);
   }
 
   function isEventOverviewRootMetaNode(node) {
@@ -2110,6 +2159,8 @@
 
   function isEventOverviewDeptNode(node) {
     if (!node || !node.data || Number(node.data.kind) !== 0) return false;
+
+    if (readHeadingCustomFields(node).templateValues.indexOf("17") !== -1) return true;
 
     var metaInfo = extractStoredPageMeta(getNodeTechnical(node));
     var meta = normaliseMeta(metaInfo.meta);
@@ -2772,10 +2823,16 @@
   function getNodeDescription(node) { return node && node.data ? String(node.data.DESCRIPTION || "") : ""; }
   function getNodeTechnical(node) { return node && node.data ? String(node.data.TECHNICAL || "") : ""; }
   function getNodeFlag(node) { return node && node.data && node.data.FLAG != null ? node.data.FLAG : 0; }
-  function getNodeCustomFields(node) { return node && node.data && node.data.CUSTOM_FIELDS ? node.data.CUSTOM_FIELDS : ""; }
+  function getNodeCustomFields(node) {
+    if (!node || !node.data) return "";
+    return node.data.CUSTOM_FIELDS || node.data.custom_fields || node.data.customFields || "";
+  }
   function getNodeDataId(node) { return node && node.data ? String(node.data.ID || "") : ""; }
   function getSnapshotFlag(snapshot) { return snapshot && snapshot.FLAG != null ? snapshot.FLAG : 0; }
-  function getSnapshotCustomFields(snapshot) { return snapshot && snapshot.CUSTOM_FIELDS ? snapshot.CUSTOM_FIELDS : ""; }
+  function getSnapshotCustomFields(snapshot) {
+    if (!snapshot) return "";
+    return snapshot.CUSTOM_FIELDS || snapshot.custom_fields || snapshot.customFields || "";
+  }
   function getSnapshotField(snapshot, field) { return snapshot && snapshot[field] != null ? String(snapshot[field]) : ""; }
   function cloneItemSnapshot(data) { return data ? $.extend(true, {}, data) : null; }
   function extendSnapshot(snapshot, updates) { return $.extend(true, {}, snapshot || {}, updates || {}); }
@@ -2833,6 +2890,129 @@
     if (!value) return "";
     if ($.isPlainObject(value) && $.isEmptyObject(value)) return "";
     return value;
+  }
+
+  function getHeadingCustomFieldNames() {
+    var fields = getMetaModuleSection("headingCustomFields");
+    var names = fields && fields.names;
+    return $.extend({
+      imageUrl: "ImageURL",
+      pageHeading: "PageHeading",
+      imageSide: "ImageSide",
+      createPage: "CreatePage",
+      pageTemplate: "PageTemplate",
+      pageVariant: "PageVariant",
+      includeInProposal: "Include",
+      includeInProjectTotal: "Additional"
+    }, names || {});
+  }
+
+  function parseCustomFieldBag(value) {
+    if ($.isPlainObject(value)) return $.extend(true, {}, value);
+    if (typeof value !== "string" || !$.trim(value)) return {};
+    var parsed = tryParseJson(value);
+    return $.isPlainObject(parsed) ? parsed : {};
+  }
+
+  function unwrapCustomFieldValue(value) {
+    if ($.isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, "value")) return value.value;
+    return value;
+  }
+
+  function findCustomFieldEntry(bag, logicalName) {
+    bag = bag || {};
+    var target = String(logicalName || "").replace(/^[_~]+/, "").toLowerCase();
+    var keys = Object.keys(bag);
+    for (var i = 0; i < keys.length; i++) {
+      if (String(keys[i]).replace(/^[_~]+/, "").toLowerCase() === target) {
+        return { present: true, key: keys[i], value: unwrapCustomFieldValue(bag[keys[i]]) };
+      }
+    }
+    return { present: false, key: logicalName, value: "" };
+  }
+
+  function normaliseCustomFieldSelections(value) {
+    value = unwrapCustomFieldValue(value);
+    if (Array.isArray(value)) {
+      return value.map(function (item) { return $.trim(String(unwrapCustomFieldValue(item) || "")); }).filter(Boolean);
+    }
+    if ($.isPlainObject(value)) {
+      var selected = [];
+      Object.keys(value).forEach(function (key) {
+        var optionValue = unwrapCustomFieldValue(value[key]);
+        var optionText = $.trim(String(optionValue == null ? "" : optionValue)).toLowerCase();
+        if (truthyCustomFieldValue(optionValue) || (optionText && ["0", "false", "no", "n", "off"].indexOf(optionText) === -1)) selected.push(String(key));
+      });
+      return selected;
+    }
+    var text = $.trim(String(value == null ? "" : value));
+    if (!text) return [];
+    if (/^[\[{]/.test(text)) {
+      var parsed = tryParseJson(text);
+      if (parsed != null && parsed !== text) return normaliseCustomFieldSelections(parsed);
+    }
+    return text.split(/\s*[,;|]\s*/).map(function (item) { return $.trim(item); }).filter(Boolean);
+  }
+
+  function truthyCustomFieldValue(value) {
+    value = unwrapCustomFieldValue(value);
+    if (value === true || value === 1) return true;
+    if (value === false || value === 0 || value == null) return false;
+    var text = $.trim(String(value)).toLowerCase();
+    return ["1", "true", "yes", "y", "on", "include", "included", "left"].indexOf(text) !== -1;
+  }
+
+  function readHeadingCustomFields(nodeOrFields) {
+    var source = nodeOrFields && nodeOrFields.data ? getNodeCustomFields(nodeOrFields) : nodeOrFields;
+    var bag = parseCustomFieldBag(source);
+    var names = getHeadingCustomFieldNames();
+    if (nodeOrFields && nodeOrFields.data) {
+      Object.keys(nodeOrFields.data).forEach(function (dataKey) {
+        var normalisedDataKey = String(dataKey).replace(/^[_~]+/, "").toLowerCase();
+        Object.keys(names).forEach(function (nameKey) {
+          if (normalisedDataKey === String(names[nameKey]).toLowerCase() && !findCustomFieldEntry(bag, names[nameKey]).present) {
+            bag[names[nameKey]] = nodeOrFields.data[dataKey];
+          }
+        });
+      });
+    }
+    var fields = { bag: bag };
+    Object.keys(names).forEach(function (key) {
+      fields[key] = findCustomFieldEntry(bag, names[key]);
+    });
+    fields.templateValues = normaliseCustomFieldSelections(fields.pageTemplate.value);
+    fields.variantValues = normaliseCustomFieldSelections(fields.pageVariant.value);
+    return fields;
+  }
+
+  function setCustomFieldValue(bag, logicalName, value) {
+    var entry = findCustomFieldEntry(bag, logicalName);
+    var key = entry.present ? entry.key : logicalName;
+    var existing = bag[key];
+    if ($.isPlainObject(existing) && Object.prototype.hasOwnProperty.call(existing, "value")) {
+      existing = $.extend(true, {}, existing);
+      existing.value = value;
+      bag[key] = existing;
+    } else {
+      bag[key] = value;
+    }
+  }
+
+  function mergeHeadingCustomFields(existing, values) {
+    var bag = parseCustomFieldBag(existing);
+    var names = getHeadingCustomFieldNames();
+    Object.keys(values || {}).forEach(function (key) {
+      if (!names[key] || values[key] === undefined) return;
+      setCustomFieldValue(bag, names[key], values[key]);
+    });
+    return bag;
+  }
+
+  function getCustomFieldText(entry) {
+    if (!entry || !entry.present) return "";
+    var value = unwrapCustomFieldValue(entry.value);
+    if (Array.isArray(value)) return value.length ? String(unwrapCustomFieldValue(value[0]) || "") : "";
+    return String(value == null ? "" : value);
   }
 
   function getActiveDepotContext(options) {
@@ -3623,9 +3803,13 @@
     var rawTitle = getNodeRawTitle(node);
     var headingMeta = parseHeadingBaseMeta(rawTitle);
     var technicalInfo = extractStoredPageMeta(getNodeTechnical(node));
+    var headingFields = readHeadingCustomFields(node);
     var titleInfo = splitEditableTitleSuffix(getNodeTitle(node));
+    var customPageHeading = $.trim(getCustomFieldText(headingFields.pageHeading));
+    if (customPageHeading) titleInfo = { title: customPageHeading, suffix: "" };
     var storedTitleSuffix = readGenericTitleSuffixFromMeta(technicalInfo.meta);
-    var layoutId = resolveGenericLayoutId(tree, node, titleInfo.title || headingMeta.name, readGenericLayoutIdFromMeta(technicalInfo.meta));
+    var customLayoutId = layoutIdFromPageTemplate(headingFields.templateValues);
+    var layoutId = resolveGenericLayoutId(tree, node, titleInfo.title || headingMeta.name, customLayoutId || readGenericLayoutIdFromMeta(technicalInfo.meta));
     var directRows = getDirectChildCustomNodes(tree, node);
     var directHeadings = getDirectChildHeadingNodes(tree, node);
     var totalChildItems = getDirectChildNodes(tree, node).filter(function (child) {
@@ -3639,7 +3823,10 @@
     var costingTechnicalUseId = costingTechnicalUseNode ? getNodeDataId(costingTechnicalUseNode) : "";
     var costingSummaryRows = costingTechnicalSummaryNode ? getDirectChildCustomNodes(tree, costingTechnicalSummaryNode).map(function (rowNode) { return readGenericRowState(rowNode, layoutId); }) : [];
     var costingUseRows = costingTechnicalUseNode ? getDirectChildCustomNodes(tree, costingTechnicalUseNode).map(function (rowNode) { return readGenericRowState(rowNode, layoutId); }) : [];
-    var renderType = getGenericRenderTypeForStorage(headingMeta, titleInfo.title, technicalInfo.meta);
+    var renderType = renderTypeFromPageTemplate(headingFields.templateValues) || getGenericRenderTypeForStorage(headingMeta, titleInfo.title, technicalInfo.meta);
+    if (headingFields.createPage.present && !truthyCustomFieldValue(headingFields.createPage.value)) renderType = "normal";
+    var customSuffix = titleSuffixFromPageVariants(headingFields.variantValues, headingFields.imageSide);
+    var customDeptLayout = deptLayoutFromPageVariants(headingFields.variantValues);
     var canUseDeptLayout = isLabourDeptLayoutState({ layoutId: layoutId, renderType: renderType, title: titleInfo.title, pageMeta: technicalInfo.meta });
     var labourDays = canUseDeptLayout ? readLabourDayStates(tree, node, directHeadings, technicalInfo.meta) : [];
 
@@ -3649,18 +3836,20 @@
       parentId: getParentHeadingDataId(tree, node),
       rawName: rawTitle,
       renderType: renderType,
-      hidden: !!headingMeta.hidden || isMetaHidden(technicalInfo.meta),
-      additionalOptions: !!headingMeta.additionalOptions || isMetaExcludedFromProjectTotal(technicalInfo.meta),
+      hidden: headingFields.includeInProposal.present ? !truthyCustomFieldValue(headingFields.includeInProposal.value) : (!!headingMeta.hidden || isMetaHidden(technicalInfo.meta)),
+      additionalOptions: headingFields.includeInProjectTotal.present ? !truthyCustomFieldValue(headingFields.includeInProjectTotal.value) : (!!headingMeta.additionalOptions || isMetaExcludedFromProjectTotal(technicalInfo.meta)),
       title: titleInfo.title,
-      titleSuffix: titleInfo.suffix || storedTitleSuffix,
+      titleSuffix: customSuffix || titleInfo.suffix || storedTitleSuffix,
       blurb: getNodeDescription(node),
-      technical: technicalInfo.baseText,
+      technical: headingFields.imageUrl.present ? $.trim(getCustomFieldText(headingFields.imageUrl)) : technicalInfo.baseText,
       layoutId: layoutId,
-      deptLayout: canUseDeptLayout ? (readGenericDeptLayoutFromMeta(technicalInfo.meta) || LAYOUT_IMAGE) : LAYOUT_IMAGE,
+      deptLayout: canUseDeptLayout ? (customDeptLayout || readGenericDeptLayoutFromMeta(technicalInfo.meta) || LAYOUT_IMAGE) : LAYOUT_IMAGE,
       layoutLabel: canUseDeptLayout ? "Labour day-folder page" : genericLayoutLabel(layoutId),
       sectionTitle: getNearestSectionTitleForGeneric(tree, node),
       flag: getNodeFlag(node),
       customFields: getNodeCustomFields(node),
+      pageTemplate: headingFields.templateValues,
+      pageVariant: headingFields.variantValues,
       pageMeta: technicalInfo.meta,
       nodeData: cloneItemSnapshot(node.data),
       rows: managedRows,
@@ -3870,7 +4059,18 @@
           desc: "",
           memo: composeStoredPageMetaText("", buildGenericPageMeta({ layoutId: GENERIC_LAYOUTS.DEPT_TABLE }, null)),
           flag: getNodeFlag(sectionNode),
-          customFields: getNodeCustomFields(sectionNode)
+          customFields: buildGenericHeadingCustomFields({
+            customFields: getNodeCustomFields(sectionNode),
+            layoutId: GENERIC_LAYOUTS.DEPT_TABLE,
+            renderType: "dept",
+            title: requestedTitle,
+            technical: "",
+            titleSuffix: "",
+            hidden: false,
+            additionalOptions: false,
+            pageTemplate: ["3"],
+            pageVariant: ["1"]
+          })
         });
         deptId = String(created.id || "");
       }
@@ -4057,6 +4257,125 @@
 
   function getExternalGenericLayoutModule() {
     return window[LAYOUT_MODULE_GLOBAL] || null;
+  }
+
+  function getPageTemplateDefinition(value) {
+    var external = getExternalGenericLayoutModule();
+    return external && external.pageTemplates ? (external.pageTemplates[String(value || "")] || null) : null;
+  }
+
+  function getPageVariantDefinition(value) {
+    var external = getExternalGenericLayoutModule();
+    return external && external.pageVariants ? (external.pageVariants[String(value || "")] || null) : null;
+  }
+
+  function layoutIdFromPageTemplate(values) {
+    values = Array.isArray(values) ? values : normaliseCustomFieldSelections(values);
+    for (var i = 0; i < values.length; i++) {
+      var definition = getPageTemplateDefinition(values[i]);
+      var layoutId = definition && normaliseGenericLayoutId(definition.layoutId);
+      if (layoutId) return layoutId;
+    }
+    return "";
+  }
+
+  function renderTypeFromPageTemplate(values) {
+    values = Array.isArray(values) ? values : normaliseCustomFieldSelections(values);
+    for (var i = 0; i < values.length; i++) {
+      var definition = getPageTemplateDefinition(values[i]);
+      if (!definition) continue;
+      if (definition.renderType === "section") return "section";
+      if (definition.renderType === "dept" || definition.renderType === "department") return "dept";
+    }
+    return "";
+  }
+
+  function firstPageTemplateValueForLayout(state) {
+    state = state || {};
+    var existing = normaliseCustomFieldSelections(state.pageTemplate);
+    if (existing.length) return existing[0];
+    var title = normalizeGenericMatchText(state.title || "");
+    if (state.layoutId === GENERIC_LAYOUTS.DEPT_TABLE) {
+      if (isLabourDeptLayoutState(state)) return "7";
+      if (title.indexOf("general requirements") !== -1) return "8";
+      return "3";
+    }
+    var external = getExternalGenericLayoutModule();
+    var templates = external && external.pageTemplates ? external.pageTemplates : {};
+    var keys = Object.keys(templates);
+    for (var i = 0; i < keys.length; i++) {
+      if (normaliseGenericLayoutId(templates[keys[i]] && templates[keys[i]].layoutId) === state.layoutId) return String(keys[i]);
+    }
+    return "";
+  }
+
+  function pageTemplateValuesForState(state) {
+    var existing = normaliseCustomFieldSelections(state && state.pageTemplate);
+    if (existing.length) return existing;
+    var inferred = firstPageTemplateValueForLayout(state || {});
+    return inferred ? [inferred] : [];
+  }
+
+  function titleSuffixFromPageVariants(values, imageSideEntry) {
+    values = Array.isArray(values) ? values : normaliseCustomFieldSelections(values);
+    for (var i = 0; i < values.length; i++) {
+      if (values[i] === "2") return canonicalGenericTitleSuffix("left");
+      if (values[i] === "3") return canonicalGenericTitleSuffix("right");
+      if (values[i] === "8") return canonicalGenericTitleSuffix("alt");
+    }
+    if (imageSideEntry && imageSideEntry.present) {
+      return canonicalGenericTitleSuffix(truthyCustomFieldValue(imageSideEntry.value) ? "left" : "right");
+    }
+    return "";
+  }
+
+  function deptLayoutFromPageVariants(values) {
+    values = Array.isArray(values) ? values : normaliseCustomFieldSelections(values);
+    if (values.indexOf("7") !== -1) return LAYOUT_COLUMNS;
+    if (values.indexOf("4") !== -1) return LAYOUT_NO_IMAGE;
+    return "";
+  }
+
+  function pageVariantValuesForState(state) {
+    state = state || {};
+    var values = normaliseCustomFieldSelections(state.pageVariant).filter(function (value) { return value !== "1"; });
+    function remove(group) {
+      values = values.filter(function (value) { return group.indexOf(value) === -1; });
+    }
+    function add(value) {
+      if (values.indexOf(value) === -1) values.push(value);
+    }
+    var suffix = normalizeGenericMatchText(canonicalGenericTitleSuffix(state && state.titleSuffix));
+    if (suffix === "left" || suffix === "right") {
+      remove(["2", "3"]);
+      add(suffix === "left" ? "2" : "3");
+    }
+    if (suffix === "alt") add("8");
+    if (isLabourDeptLayoutState(state)) {
+      var layout = normaliseLayout(state.deptLayout);
+      remove(["4", "5", "6", "7"]);
+      if (layout === LAYOUT_NO_IMAGE) add("4");
+      if (layout === LAYOUT_COLUMNS) add("7");
+    }
+    return values.length ? values : ["1"];
+  }
+
+  function buildGenericHeadingCustomFields(state) {
+    state = normaliseGenericState(state || {});
+    var variants = pageVariantValuesForState(state);
+    var templates = pageTemplateValuesForState(state);
+    var isSupportContainer = state.layoutId === GENERIC_LAYOUTS.DETAILS_CONTAINER || isProtectedProposalContainerSectionState(state);
+    if (isSupportContainer) templates = [];
+    return mergeHeadingCustomFields(state.customFields, {
+      imageUrl: $.trim(String(state.technical || "")),
+      pageHeading: titleForStorage(state.title || ""),
+      imageSide: variants.indexOf("2") !== -1 ? "1" : (variants.indexOf("3") !== -1 ? "0" : ""),
+      createPage: state.renderType === "normal" || isSupportContainer || !templates.length ? "0" : "1",
+      pageTemplate: templates,
+      pageVariant: variants,
+      includeInProposal: state.hidden ? "0" : "1",
+      includeInProjectTotal: state.additionalOptions ? "0" : "1"
+    });
   }
 
   function applyExternalGenericLayoutConfig(config) {
@@ -4438,7 +4757,7 @@
       return "This Section is a hidden renderer container. It cannot create costing pages, be shown in the proposal, or use Optional Items.";
     }
     if (isProjectTotalSummaryState(state)) {
-      return "Project Total is controlled by the proposal summary renderer. Use the suffix selector and image URL only; visibility and Optional Items are locked.";
+      return "Project Total is controlled by the proposal summary renderer. Use the page variant and image URL only; visibility and Optional Items are locked.";
     }
     if (state.layoutId === GENERIC_LAYOUTS.SECTION_COVER) {
       return "This title cover is the Section page. Use the Dept controls below to open an existing child costing page or create a new one inside this section.";
@@ -4450,7 +4769,7 @@
       return "People on this page are managed from HireHop's native listed-item picker, not from manual fields in this editor.";
     }
     if (state.layoutId === GENERIC_LAYOUTS.DETAILS_CONTAINER) {
-      return "Details is a locked container. Keep the heading named Details; use the suffix selector only, then select a nested page heading to edit the pages inside.";
+      return "Details is a locked container. Keep the heading named Details; use the page variant only, then select a nested page heading to edit the pages inside.";
     }
     if (isGenericLockedLayout(state.layoutId)) {
       return "This page is locked because its visible copy is controlled by the renderer.";
@@ -4587,6 +4906,8 @@
       sectionTitle: String(state.sectionTitle || ""),
       flag: state.flag == null ? 0 : state.flag,
       customFields: state.customFields || "",
+      pageTemplate: normaliseCustomFieldSelections(state.pageTemplate),
+      pageVariant: normaliseCustomFieldSelections(state.pageVariant),
       pageMeta: normaliseMeta(state.pageMeta),
       nodeData: state.nodeData || null,
       rows: rows,
@@ -4884,7 +5205,7 @@
 
   function genericSuffixSelectHtml(current, options) {
     var selected = canonicalGenericTitleSuffix(current);
-    var html = '<label class="wpe-select-pill">Suffix <select data-generic-field="titleSuffix">';
+    var html = '<label class="wpe-select-pill">Page variant <select data-generic-field="titleSuffix">';
     for (var i = 0; i < options.length; i++) {
       var value = canonicalGenericTitleSuffix(options[i][0]);
       var label = options[i][1];
@@ -5108,7 +5429,7 @@
         technicalFieldHtml(state.technical, "Project total image URL") +
         '<div class="wpe-locked-panel" style="background:rgba(13,18,38,.62);color:#fffdf9;border-color:rgba(255,255,255,.28);">' +
           '<b>Project Total</b>' +
-          '<p>The proposal summary renderer controls the visible total copy. Use the suffix selector above to choose project total only, Dept subtotal, or Section subtotal output.</p>' +
+          '<p>The proposal summary renderer controls the visible total copy. Use the page variant above to choose project total only, Dept subtotal, or Section subtotal output.</p>' +
           '<p>The image URL here is saved to this heading for the renderer.</p>' +
         '</div>' +
         proofCommonHtml(true) +
@@ -5433,7 +5754,7 @@
         '<div class="wpe-locked-panel">' +
           '<b>Details is a container</b>' +
           '<p>Do not rename this heading or add an image URL here. Select one of the nested headings inside Details to edit the actual front proposal pages.</p>' +
-          '<p>The suffix selector above controls whether the first image-led nested page starts left or right.</p>' +
+          '<p>The page variant above controls whether the first image-led nested page starts left or right.</p>' +
         '</div>' +
       '</div>';
   }
@@ -5688,7 +6009,28 @@
 
   function genericHeadingNeedsNormalise(state) {
     if (!editor.rootNode) return false;
-    return normaliseWhitespace(composeGenericStoredHeading(state)) !== normaliseWhitespace(getNodeRawTitle(editor.rootNode));
+    if (normaliseWhitespace(composeGenericStoredHeading(state)) !== normaliseWhitespace(getNodeRawTitle(editor.rootNode))) return true;
+    var expected = readHeadingCustomFields(buildGenericHeadingCustomFields(state));
+    var current = readHeadingCustomFields(editor.rootNode);
+    return JSON.stringify({
+      imageUrl: getCustomFieldText(current.imageUrl),
+      pageHeading: getCustomFieldText(current.pageHeading),
+      imageSide: getCustomFieldText(current.imageSide),
+      createPage: getCustomFieldText(current.createPage),
+      pageTemplate: current.templateValues,
+      pageVariant: current.variantValues,
+      includeInProposal: getCustomFieldText(current.includeInProposal),
+      includeInProjectTotal: getCustomFieldText(current.includeInProjectTotal)
+    }) !== JSON.stringify({
+      imageUrl: getCustomFieldText(expected.imageUrl),
+      pageHeading: getCustomFieldText(expected.pageHeading),
+      imageSide: getCustomFieldText(expected.imageSide),
+      createPage: getCustomFieldText(expected.createPage),
+      pageTemplate: expected.templateValues,
+      pageVariant: expected.variantValues,
+      includeInProposal: getCustomFieldText(expected.includeInProposal),
+      includeInProjectTotal: getCustomFieldText(expected.includeInProjectTotal)
+    });
   }
 
   function genericStateSignature(state) {
@@ -5726,6 +6068,8 @@
       renderType: state.renderType,
       title: $.trim(String(state.title || "")),
       titleSuffix: String(state.titleSuffix || ""),
+      pageTemplate: normaliseCustomFieldSelections(state.pageTemplate),
+      pageVariant: normaliseCustomFieldSelections(state.pageVariant),
       hidden: !!state.hidden,
       additionalOptions: !!state.additionalOptions,
       cascadeAdditionalOptions: !!state.cascadeAdditionalOptions,
@@ -6066,6 +6410,7 @@
     var headingName = composeGenericStoredHeading(saved);
     var technicalMeta = buildGenericPageMeta(saved, saved.pageMeta);
     var technicalMemo = composeStoredPageMetaText(saved.technical || "", technicalMeta);
+    var headingCustomFields = buildGenericHeadingCustomFields(saved);
 
     setStatus("Saving heading...", "info");
     var updated = await saveHeadingItemDirect({
@@ -6079,10 +6424,13 @@
       desc: saved.blurb,
       memo: technicalMemo,
       flag: saved.flag,
-      customFields: saved.customFields
+      customFields: headingCustomFields
     });
     saved.rootId = String(updated.id || saved.rootId || getNodeDataId(rootNode));
     saved.pageMeta = technicalMeta;
+    saved.customFields = headingCustomFields;
+    saved.pageTemplate = normaliseCustomFieldSelections(findCustomFieldEntry(headingCustomFields, getHeadingCustomFieldNames().pageTemplate).value);
+    saved.pageVariant = normaliseCustomFieldSelections(findCustomFieldEntry(headingCustomFields, getHeadingCustomFieldNames().pageVariant).value);
 
     if (isGenericManagedRowsLayout(saved.layoutId)) {
       saved.rows = await saveGenericManagedRows(jobId, saved);
@@ -6893,8 +7241,8 @@
   function describeProposalEditorArchitecture() {
     return {
       version: CFG.version,
-      role: "HireHop proposal authoring workspace that reads/writes supplying-list headings and metadata consumed by QTC-V2.html.",
-      rendererReference: "QTC-V2.html",
+      role: "HireHop proposal authoring workspace that reads/writes QTC-V4 Heading custom fields, supplying-list headings, and legacy compatibility metadata.",
+      rendererReference: "QTC-V4.html",
       modes: [
         {
           id: MODE_EVENT_OVERVIEW,
@@ -6908,6 +7256,7 @@
         }
       ],
       storageModel: {
+        headingCustomFields: getHeadingCustomFieldNames(),
         metaEnvelope: { start: CFG.metaStart, end: CFG.metaEnd },
         genericPageEditor: GENERIC_META_EDITOR,
         genericPageVersion: GENERIC_META_VERSION,
@@ -6937,7 +7286,7 @@
       sourceOfTruth: [
         "HireHop supplying-list tree headings/items",
         "Hidden WisePageMeta JSON embedded in TECHNICAL/memo fields",
-        "QTC-V2.html layout mappings and templates"
+        "QTC-V4.html PageTemplate and PageVariant mappings"
       ],
       registeredLayouts: getGenericLayoutRegistrySummary()
     };

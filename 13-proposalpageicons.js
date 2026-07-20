@@ -3,11 +3,10 @@
  * ---------------------------------------------------------------------------
  * Supplying-list-only visual helper for the Proposal Creation depot.
  *
- * Heading naming contract:
- *   Section: ...       landscape hero/title page (rendered)
- *   Dept: ...          landscape image/table page (rendered)
- *   // Section: ...    muted/prohibited hero/title page (not rendered)
- *   // Dept: ...       muted/prohibited image/table page (not rendered)
+ * QTC-V4 Heading custom-field contract:
+ *   CreatePage/PageTemplate identify proposal pages and their broad layout.
+ *   Include controls the active or muted/not-rendered icon state.
+ *   Legacy Section:/Dept: and // markers remain read-only fallbacks.
  *   Technical Summary  client-visible revenue medallion (support heading)
  *
  * Every other HireHop tree icon is left untouched. This module changes only
@@ -23,7 +22,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-14.2",
+    version: "2026-07-20.1-heading-custom-fields",
     styleId: "wise-proposal-page-icon-styles",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     refreshDelayMs: 70,
@@ -124,7 +123,7 @@
         return;
       }
 
-      var pageType = classifyHeadingTitle(getNodeRawTitle(node));
+      var pageType = classifyHeadingNode(node);
       if (!pageType) {
         clearIcon($icon);
         return;
@@ -210,6 +209,7 @@
   function getNodeRawTitle(node) {
     if (!node) return "";
     var candidates = [];
+    var fallback = "";
     if (node.data) {
       candidates.push(node.data.title, node.data.TITLE, node.data.name, node.data.NAME);
     }
@@ -220,9 +220,10 @@
 
     for (var i = 0; i < candidates.length; i++) {
       var value = $.trim(String(candidates[i] == null ? "" : candidates[i]));
+      if (!fallback && value) fallback = value;
       if (classifyHeadingTitle(value)) return value;
     }
-    return "";
+    return fallback;
   }
 
   function classifyHeadingTitle(value) {
@@ -237,6 +238,89 @@
     var match = raw.match(/^(section|dept)\s*:\s*/i);
     if (!match) return null;
     return { type: String(match[1]).toLowerCase(), disabled: disabled };
+  }
+
+  function classifyHeadingNode(node) {
+    var rawTitle = getNodeRawTitle(node);
+    var fields = readHeadingCustomFields(node);
+
+    if (!fields.hasCustomContract && /^technical\s+summary$/i.test($.trim(rawTitle))) {
+      return { type: "technical-summary", disabled: false };
+    }
+
+    if (fields.createPage.present && !isTruthyCustomField(fields.createPage.value)) return null;
+    if (fields.templateValues.length) {
+      var template = fields.templateValues[0];
+      var sectionTemplates = ["1", "2", "16"];
+      return {
+        type: sectionTemplates.indexOf(template) !== -1 ? "section" : "dept",
+        disabled: fields.include.present ? !isTruthyCustomField(fields.include.value) : false
+      };
+    }
+
+    return classifyHeadingTitle(rawTitle);
+  }
+
+  function readHeadingCustomFields(node) {
+    var data = node && node.data ? node.data : {};
+    var raw = data.CUSTOM_FIELDS || data.custom_fields || data.customFields || {};
+    var bag = raw;
+    if (typeof raw === "string") {
+      try { bag = JSON.parse(raw); } catch (err) { bag = {}; }
+    }
+    if (!bag || typeof bag !== "object" || Array.isArray(bag)) bag = {};
+
+    var template = findCustomField(bag, data, "PageTemplate");
+    var createPage = findCustomField(bag, data, "CreatePage");
+    var include = findCustomField(bag, data, "Include");
+    return {
+      templateValues: normaliseSelections(template.value),
+      createPage: createPage,
+      include: include,
+      hasCustomContract: template.present || createPage.present || include.present
+    };
+  }
+
+  function findCustomField(bag, data, logicalName) {
+    var target = String(logicalName || "").toLowerCase();
+    var sources = [bag || {}, data || {}];
+    for (var s = 0; s < sources.length; s++) {
+      var keys = Object.keys(sources[s]);
+      for (var i = 0; i < keys.length; i++) {
+        if (String(keys[i]).replace(/^[_~]+/, "").toLowerCase() !== target) continue;
+        var value = sources[s][keys[i]];
+        if (value && typeof value === "object" && !Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, "value")) value = value.value;
+        return { present: true, value: value };
+      }
+    }
+    return { present: false, value: "" };
+  }
+
+  function normaliseSelections(value) {
+    if (Array.isArray(value)) return value.map(function (item) {
+      if (item && typeof item === "object" && Object.prototype.hasOwnProperty.call(item, "value")) item = item.value;
+      return $.trim(String(item || ""));
+    }).filter(Boolean);
+    if (value && typeof value === "object") {
+      if (Object.prototype.hasOwnProperty.call(value, "value")) return normaliseSelections(value.value);
+      return Object.keys(value).filter(function (key) {
+        var optionValue = value[key];
+        var optionText = $.trim(String(optionValue == null ? "" : optionValue)).toLowerCase();
+        return isTruthyCustomField(optionValue) || (optionText && ["0", "false", "no", "n", "off"].indexOf(optionText) === -1);
+      });
+    }
+    var text = $.trim(String(value == null ? "" : value));
+    if (!text) return [];
+    if (/^[\[{]/.test(text)) {
+      try { return normaliseSelections(JSON.parse(text)); } catch (err) {}
+    }
+    return text.split(/\s*[,;|]\s*/).filter(Boolean);
+  }
+
+  function isTruthyCustomField(value) {
+    if (value && typeof value === "object" && !Array.isArray(value) && Object.prototype.hasOwnProperty.call(value, "value")) value = value.value;
+    if (value === true || value === 1) return true;
+    return ["1", "true", "yes", "y", "on", "include", "included"].indexOf($.trim(String(value == null ? "" : value)).toLowerCase()) !== -1;
   }
 
   // The depot gate intentionally reads window.user. The shared page-wide
@@ -384,6 +468,7 @@
     version: CFG.version,
     refresh: function () { scheduleRefresh(0); },
     classify: classifyHeadingTitle,
+    classifyNode: classifyHeadingNode,
     describe: function () {
       return {
         version: CFG.version,

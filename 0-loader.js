@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-16.1",
+    version: "2026-07-20.1",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -15,16 +15,16 @@
       hirehop: { file: "5-hirehop.js", version: "0.7" },
       docprev: { file: "1-docprev.js", version: "1.3" },
       autopull: { file: "2-apselall.js", version: "0.5" },
-      meta: { file: "3-meta.js", version: "0.1" },
-      layout: { file: "4-layout.js", version: "0.1" },
-      editor: { file: "6-editor2.js", version: "1.6", enabled: false },
+      meta: { file: "3-meta.js", version: "0.2" },
+      layout: { file: "4-layout.js", version: "0.2" },
+      editor: { file: "6-editor2.js", version: "1.7", enabled: false },
       captrack: { file: "7-captrack.js", version: "3.0" },
       stage: { file: "8-stagedesigner.js", version: "2.0" },
       checklist: { file: "9-jobchecklist.js", version: "1.0" },
       projectJobs: { file: "10-projectjobs-qol.js", version: "0.9" },
       projectJourney: { file: "11-projectjourney.js", version: "0.6" },
       projectGroups: { file: "12-projectgroups.js", version: "0.5" },
-      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.4" },
+      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.5" },
       jobGroups: { file: "14-jobgroups.js", version: "0.7" }
     }
   };

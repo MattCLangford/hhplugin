@@ -3,11 +3,57 @@
 
   /*
    * Shared metadata contract for the Wise HireHop proposal platform.
-   * Keep this aligned with QTC-V2.html and 6-editor2.js.
+   * Keep this aligned with QTC-V4.html and 6-editor2.js.
    */
   var meta = {
-    version: "2026-05-18.01",
-    purpose: "Names the WisePageMeta envelope and editor/template identifiers stored in HireHop technical fields.",
+    version: "2026-07-20.01",
+    purpose: "Names the Heading custom fields used by QTC-V4 plus the legacy WisePageMeta compatibility envelope.",
+
+    headingCustomFields: {
+      names: {
+        imageUrl: "ImageURL",
+        pageHeading: "PageHeading",
+        imageSide: "ImageSide",
+        createPage: "CreatePage",
+        pageTemplate: "PageTemplate",
+        pageVariant: "PageVariant",
+        includeInProposal: "Include",
+        includeInProjectTotal: "Additional"
+      },
+      pageTemplates: [
+        { value: "1", label: "Hero" },
+        { value: "2", label: "Cover" },
+        { value: "11", label: "Out Experts" },
+        { value: "12", label: "Proven Process" },
+        { value: "13", label: "Dedicated Project Manager" },
+        { value: "14", label: "Your Sepcialist Team" },
+        { value: "15", label: "Our Experts" },
+        { value: "16", label: "Event Overview" },
+        { value: "17", label: "Proposed Timings" },
+        { value: "18", label: "Critical Path" },
+        { value: "19", label: "About Us" },
+        { value: "20", label: "Sustainability" },
+        { value: "3", label: "Costing" },
+        { value: "21", label: "Thank You" },
+        { value: "4", label: "Full Page Visual" },
+        { value: "5", label: "3/4 Page Visual" },
+        { value: "6", label: "Proposal Summary" },
+        { value: "7", label: "Labour" },
+        { value: "8", label: "General Requirements" },
+        { value: "9", label: "Venue Hero" },
+        { value: "10", label: "Experience & Expertise" }
+      ],
+      pageVariants: [
+        { value: "1", label: "Auto" },
+        { value: "2", label: "Image Left" },
+        { value: "3", label: "Image Right" },
+        { value: "4", label: "No Image" },
+        { value: "5", label: "1 Column" },
+        { value: "6", label: "2 Columns" },
+        { value: "7", label: "3 Columns" },
+        { value: "8", label: "Alternative" }
+      ]
+    },
 
     envelope: {
       start: "[WisePageMeta]",
@@ -60,6 +106,7 @@
       eventOverview: meta.eventOverview,
       genericPage: meta.genericPage,
       labourDay: meta.labourDay,
+      headingCustomFields: meta.headingCustomFields,
       controlFields: meta.controlFields,
       legacyTextMarkers: meta.legacyTextMarkers
     };

@@ -7,14 +7,14 @@ Do not hand-edit the current string or source table. Update `manifest.json` firs
 ## Current String
 
 ```text
-https://mattclangford.github.io/hhplugin/0-loader.js?v=1.7;
+https://mattclangford.github.io/hhplugin/0-loader.js?v=1.8;
 ```
 
 ## Source Table
 
 | Order | File | Cache version |
 | --- | --- | --- |
-| 1 | `0-loader.js` | `1.7` |
+| 1 | `0-loader.js` | `1.8` |
 
 ## Lazy Loaded Runtime Modules
 
@@ -25,16 +25,16 @@ These files are not included directly in the HireHop company config string. `0-l
 | 1 | `5-hirehop.js` | `0.7` | `lazy-shared-module` | yes |
 | 2 | `1-docprev.js` | `1.3` | `lazy-supplying-list` | yes |
 | 3 | `2-apselall.js` | `0.5` | `lazy-autopull-dialog` | yes |
-| 4 | `3-meta.js` | `0.1` | `lazy-supplying-list-module` | yes |
-| 5 | `4-layout.js` | `0.1` | `lazy-supplying-list-module` | yes |
-| 6 | `6-editor2.js` | `1.6` | `disabled-ready-to-enable` | no |
+| 4 | `3-meta.js` | `0.2` | `lazy-supplying-list-module` | yes |
+| 5 | `4-layout.js` | `0.2` | `lazy-supplying-list-module` | yes |
+| 6 | `6-editor2.js` | `1.7` | `disabled-ready-to-enable` | no |
 | 7 | `7-captrack.js` | `3.0` | `lazy-home-page` | yes |
 | 8 | `8-stagedesigner.js` | `2.0` | `lazy-supplying-list` | yes |
 | 9 | `9-jobchecklist.js` | `1.0` | `lazy-project-job-tabs` | yes |
 | 10 | `10-projectjobs-qol.js` | `0.9` | `lazy-project-details` | yes |
 | 11 | `11-projectjourney.js` | `0.6` | `lazy-project-tabs` | yes |
 | 12 | `12-projectgroups.js` | `0.11` | `lazy-project-details` | yes |
-| 13 | `13-proposalpageicons.js` | `0.4` | `lazy-supplying-list-proposal-creation` | yes |
+| 13 | `13-proposalpageicons.js` | `0.5` | `lazy-supplying-list-proposal-creation` | yes |
 | 14 | `14-jobgroups.js` | `0.7` | `lazy-job-details` | yes |
 
 ## Maintenance Rule
