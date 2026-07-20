@@ -7,14 +7,14 @@ Do not hand-edit the current string or source table. Update `manifest.json` firs
 ## Current String
 
 ```text
-https://mattclangford.github.io/hhplugin/0-loader.js?v=2.9;
+https://mattclangford.github.io/hhplugin/0-loader.js?v=3.0;
 ```
 
 ## Source Table
 
 | Order | File | Cache version |
 | --- | --- | --- |
-| 1 | `0-loader.js` | `2.9` |
+| 1 | `0-loader.js` | `3.0` |
 
 ## Lazy Loaded Runtime Modules
 
@@ -23,7 +23,7 @@ These files are not included directly in the HireHop company config string. `0-l
 | Order | File | Cache version | Trigger | Enabled |
 | --- | --- | --- | --- | --- |
 | 1 | `5-hirehop.js` | `0.7` | `lazy-shared-module` | yes |
-| 2 | `1-docprev.js` | `1.7` | `lazy-supplying-list` | yes |
+| 2 | `1-docprev.js` | `1.8` | `lazy-supplying-list` | yes |
 | 3 | `2-apselall.js` | `0.5` | `lazy-autopull-dialog` | yes |
 | 4 | `3-meta.js` | `0.2` | `lazy-supplying-list-module` | yes |
 | 5 | `4-layout.js` | `0.2` | `lazy-supplying-list-module` | yes |

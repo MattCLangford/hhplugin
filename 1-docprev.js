@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.12"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.13"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -896,7 +896,7 @@
       '#' + JOB_PERFORMANCE_ID + ' .wjp-refresh:hover { color:#17212b; text-decoration:underline; }',
       '#' + JOB_PERFORMANCE_ID + ' .wjp-metrics {',
       '  display:grid;',
-      '  grid-template-columns:repeat(4,minmax(105px,1fr));',
+      '  grid-template-columns:repeat(5,minmax(105px,1fr));',
       '  border-top:1px solid #e5e9ed;',
       '  border-bottom:1px solid #e5e9ed;',
       '}',
@@ -932,6 +932,7 @@
       '  #' + JOB_PERFORMANCE_ID + ' .wjp-metrics { grid-template-columns:repeat(2,minmax(110px,1fr)); }',
       '  #' + JOB_PERFORMANCE_ID + ' .wjp-metric:nth-child(3) { border-left:0; border-top:1px solid #e5e9ed; }',
       '  #' + JOB_PERFORMANCE_ID + ' .wjp-metric:nth-child(4) { border-top:1px solid #e5e9ed; }',
+      '  #' + JOB_PERFORMANCE_ID + ' .wjp-metric:nth-child(5) { border-left:0; border-top:1px solid #e5e9ed; }',
       '  #' + COMMERCIAL_TERMS_ID + ' { grid-template-columns:1fr; }',
       '  #' + COMMERCIAL_TERMS_ID + ' .wca-item { border-left:0; border-top:1px solid #dde3e8; }',
       '}',
@@ -1008,7 +1009,7 @@
 
     var $terms = $(
       '<aside id="' + COMMERCIAL_TERMS_ID + '" aria-label="Commercial adjustment inputs">' +
-        '<div class="wca-intro"><span class="wca-title">Commercial adjustments</span><span class="wca-note">Job Track inputs applied to line totals</span></div>' +
+        '<div class="wca-intro"><span class="wca-title">Commercial adjustments</span><span class="wca-note">Applied separately to GP</span></div>' +
         commercialTermHtml("discount", "Discretionary discount") +
         commercialTermHtml("venue", "Venue commission") +
         commercialTermHtml("client", "Client commission") +
@@ -1026,6 +1027,7 @@
         '<div class="wjp-metrics">' +
           jobPerformanceMetricHtml("revenue", "Revenue", "") +
           jobPerformanceMetricHtml("cos", "CoS", "") +
+          jobPerformanceMetricHtml("adjustments", "Adjustments", "") +
           jobPerformanceMetricHtml("gp", "GP£", "is-gp") +
           jobPerformanceMetricHtml("gp-pct", "GP%", "is-gp-pct") +
         '</div>' +
@@ -1222,8 +1224,9 @@
     metrics.clientCommissionPct = metrics.clientCommissionPct == null ? null : metrics.clientCommissionPct;
     var adjusted = calculateAdjustedJobPerformance(totals, metrics);
 
-    metrics.revenue = formatJobPerformanceMoney(adjusted.revenue);
-    metrics.cos = formatJobPerformanceMoney(adjusted.cos);
+    metrics.revenue = formatJobPerformanceMoney(adjusted.baseRevenue);
+    metrics.cos = formatJobPerformanceMoney(adjusted.baseCos);
+    metrics.adjustments = formatJobPerformanceMoney(adjusted.adjustments);
     metrics.gp = formatJobPerformanceMoney(adjusted.gp);
     metrics.gpPct = adjusted.gpPct;
     metrics.gpPctText = adjusted.gpPct == null ? "—" : formatJobPerformancePercent(adjusted.gpPct);
@@ -1247,11 +1250,12 @@
     var venueCommissionPct = normaliseJobPerformanceAdjustmentPercent(commercialTerms && commercialTerms.venueCommissionPct);
     var clientCommissionPct = normaliseJobPerformanceAdjustmentPercent(commercialTerms && commercialTerms.clientCommissionPct);
     var discountAmount = roundJobPerformanceMoney(baseRevenue * discountPct / 100);
-    var revenue = roundJobPerformanceMoney(baseRevenue - discountAmount);
-    var venueCommissionAmount = roundJobPerformanceMoney(revenue * venueCommissionPct / 100);
-    var clientCommissionAmount = roundJobPerformanceMoney(revenue * clientCommissionPct / 100);
-    var cos = roundJobPerformanceMoney(baseCos + venueCommissionAmount + clientCommissionAmount);
-    var gp = roundJobPerformanceMoney(revenue - cos);
+    var netRevenue = roundJobPerformanceMoney(baseRevenue - discountAmount);
+    var venueCommissionAmount = roundJobPerformanceMoney(netRevenue * venueCommissionPct / 100);
+    var clientCommissionAmount = roundJobPerformanceMoney(netRevenue * clientCommissionPct / 100);
+    var commissionAmount = roundJobPerformanceMoney(venueCommissionAmount + clientCommissionAmount);
+    var adjustments = roundJobPerformanceMoney(discountAmount + commissionAmount);
+    var gp = roundJobPerformanceMoney(baseRevenue - baseCos - adjustments);
 
     return {
       baseRevenue: baseRevenue,
@@ -1259,10 +1263,11 @@
       discountAmount: discountAmount,
       venueCommissionAmount: venueCommissionAmount,
       clientCommissionAmount: clientCommissionAmount,
-      revenue: revenue,
-      cos: cos,
+      commissionAmount: commissionAmount,
+      adjustments: adjustments,
+      netRevenue: netRevenue,
       gp: gp,
-      gpPct: revenue === 0 ? null : (gp / revenue) * 100
+      gpPct: baseRevenue === 0 ? null : (gp / baseRevenue) * 100
     };
   }
 
@@ -1605,6 +1610,7 @@
 
     setJobPerformanceMetric("revenue", metrics.revenue);
     setJobPerformanceMetric("cos", metrics.cos);
+    setJobPerformanceMetric("adjustments", metrics.adjustments);
     setJobPerformanceMetric("gp", metrics.gp);
     setJobPerformanceMetric("gp-pct", metrics.gpPctText);
     setCommercialTerm("discount", metrics.discountPct);
@@ -1639,12 +1645,13 @@
     $strip.find("[data-wjp-health-note]").text(targetNote);
     $strip.attr(
       "title",
-      "Base supplying-line Revenue " + (metrics.baseRevenue || metrics.revenue) +
+      "Supplying-line Revenue " + (metrics.baseRevenue || metrics.revenue) +
       " and CoS " + (metrics.baseCos || metrics.cos) +
       ". Discount " + (metrics.discountAmount || formatJobPerformanceMoney(0)) +
       ", venue commission " + (metrics.venueCommissionAmount || formatJobPerformanceMoney(0)) +
       ", client commission " + (metrics.clientCommissionAmount || formatJobPerformanceMoney(0)) +
-      ". Final Revenue " + metrics.revenue + ", CoS " + metrics.cos + ", GP " + metrics.gp +
+      ". Total adjustments " + (metrics.adjustments || formatJobPerformanceMoney(0)) +
+      ", GP " + metrics.gp +
       " (" + currentGpText + "). " + (metrics.lineCount == null ? "" : metrics.lineCount + " inventory lines. ") +
       "Job Track flag: " + (metrics.sourceStatus || "not set") + "."
     );
@@ -1664,6 +1671,7 @@
     clearJobPerformanceColor();
     setJobPerformanceMetric("revenue", "—");
     setJobPerformanceMetric("cos", "—");
+    setJobPerformanceMetric("adjustments", "—");
     setJobPerformanceMetric("gp", "—");
     setJobPerformanceMetric("gp-pct", "—");
     setCommercialTerm("discount", null);

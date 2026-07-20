@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-20.12",
+  "version": "2026-07-20.13",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "2.9",
+      "cacheVersion": "3.0",
       "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
       "recommendedLoadOrder": 1
     }
@@ -28,8 +28,8 @@
     {
       "file": "1-docprev.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "1.7",
-      "role": "Document preview panel used by power users on the supplying list. It opens docked by default after the toolbar entry point mounts, remains user-closable, and does not reopen automatically after the user closes it during that page session. Directly below the native buttons and above the list, a compact Commercial adjustments reminder and Job Performance strip calculate base Revenue from each supplying line's explicit Revenue or its inventory-master default and base CoS from native line Totals. Job Track's discretionary discount reduces Revenue; venue and client commissions are calculated on discounted Revenue and added to CoS. GP£ and GP% are derived from those post-adjustment totals. The solid-colour performance totaliser fills from 0% to the required 45% GP target and uses the current supplying-line GP heat colour: an accelerated below-target gradient to dark blue at 0%, green at 45%, dark green at 65%, amber at 75%, red at 90%, and deep red at 100%. The misleading native Replacement cost/Weight/Volume/Discount-Markup/Quoted net total footer is hidden presentation-only.",
+      "cacheVersion": "1.8",
+      "role": "Document preview panel used by power users on the supplying list. It opens docked by default after the toolbar entry point mounts, remains user-closable, and does not reopen automatically after the user closes it during that page session. Directly below the native buttons and above the list, a compact Commercial adjustments reminder and Job Performance strip calculate Revenue from each supplying line's explicit Revenue or its inventory-master default and CoS strictly from native line Totals. Job Track's discretionary discount plus venue and client commissions are shown as a separate monetary Adjustments total and deducted when deriving GP£; they never inflate CoS. GP% remains GP£ divided by line Revenue. The solid-colour performance totaliser fills from 0% to the required 45% GP target and uses the current supplying-line GP heat colour: an accelerated below-target gradient to dark blue at 0%, green at 45%, dark green at 65%, amber at 75%, red at 90%, and deep red at 100%. The misleading native Replacement cost/Weight/Volume/Discount-Markup/Quoted net total footer is hidden presentation-only.",
       "recommendedLoadOrder": 2
     },
     {
