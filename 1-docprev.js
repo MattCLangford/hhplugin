@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.9"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.11"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -1046,6 +1046,11 @@
       $itemsTab.prepend($strip).prepend($terms);
     }
     $strip.find(".wjp-refresh").on("click", function () { refreshJobPerformanceNow("manual"); });
+    $(document)
+      .off("wise:supplying-commercial-defaults-updated.wiseJobPerformance")
+      .on("wise:supplying-commercial-defaults-updated.wiseJobPerformance", function () {
+        refreshJobPerformanceSoon("inventory-commercial-defaults");
+      });
     $("#" + JOB_PERFORMANCE_IFRAME_ID).on("load.wiseJobPerformance", function () {
       try {
         if (this.contentWindow && this.contentWindow.location.href === "about:blank") return;
@@ -1339,6 +1344,14 @@
   }
 
   function readJobPerformanceRevenueField(node) {
+    var commercialApi = window.__wiseSupplyingCommercial;
+    if (commercialApi && typeof commercialApi.getCommercialFields === "function") {
+      try {
+        var commercial = commercialApi.getCommercialFields(node);
+        if (commercial && commercial.revenue != null) return commercial.revenue;
+      } catch (err) {}
+    }
+
     var sources = getJobPerformanceNodeSources(node);
     var bag = {};
 

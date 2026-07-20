@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-20.10",
+    version: "2026-07-20.11",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -13,7 +13,7 @@
     recoveryChecks: 12,
     scripts: {
       hirehop: { file: "5-hirehop.js", version: "0.7" },
-      docprev: { file: "1-docprev.js", version: "1.5" },
+      docprev: { file: "1-docprev.js", version: "1.6" },
       autopull: { file: "2-apselall.js", version: "0.5" },
       meta: { file: "3-meta.js", version: "0.2" },
       layout: { file: "4-layout.js", version: "0.2" },
@@ -26,7 +26,7 @@
       projectGroups: { file: "12-projectgroups.js", version: "0.5" },
       proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.5" },
       jobGroups: { file: "14-jobgroups.js", version: "0.7" },
-      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "0.7" }
+      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "0.8" }
     }
   };
 

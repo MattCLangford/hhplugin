@@ -7,7 +7,7 @@
  *   hire/sales item editor without replacing the native save workflow.
  * - Uses HireHop's native line Total as CoS, then shows Markup and Revenue.
  * - Calculates either Revenue from Markup or whole-number Markup from Revenue.
- * - Projects Revenue/Markup from each supplying-line CUSTOM_FIELDS payload.
+ * - Uses inventory Revenue/Markup as defaults until a line-level field exists.
  * - Keeps legacy Unit Price/Discount/Flag/Total values intact in HireHop.
  * ======================================================================== */
 (function () {
@@ -20,11 +20,14 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-20.10",
+    version: "2026-07-20.11",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     itemsSaveEndpoint: getHireHopEndpoint("itemsSave", "/php_functions/items_save.php"),
+    availabilityEndpoint: getHireHopEndpoint("availabilityList", "/php_functions/availability_list.php"),
+    hireStockListEndpoint: getHireHopEndpoint("hireStockList", "/reports/hire_stock_list.php"),
+    salesStockListEndpoint: getHireHopEndpoint("salesStockList", "/modules/consumables/list.php"),
     revenueField: "Revenue",
     markupField: "Markup",
     refreshDelayMs: 60,
@@ -52,6 +55,8 @@
     activeDialog: null,
     activeItemKey: "",
     lastSelectedNodeId: "",
+    inheritedDefaults: {},
+    inheritedRequests: {},
     projectedRows: 0,
     gridFound: false,
     projectedColumns: []
@@ -822,6 +827,13 @@
 
     var nodeId = node && node.id ? String(node.id) : "";
     if (nodeId) {
+      var nodeElement = document.getElementById(nodeId);
+      var $nativeCos = nodeElement
+        ? $(nodeElement).find("table.cust_node [data-wise-commercial-column='cos'],table.cust_node .column_TOTAL").first()
+        : $();
+      var nativeMoney = $nativeCos.length ? normaliseMoneyInput($nativeCos.text()) : null;
+      if (nativeMoney != null && nativeMoney !== "") return nativeMoney;
+
       var $gridValue = getGridWrapper(getTree()).find('.jstree-grid-column[data-wise-commercial-column="cos"] .jstree-grid-cell').filter(function () {
         return String($(this).attr("data-jstreegrid") || "") === nodeId;
       }).first();
@@ -1471,10 +1483,251 @@
       var parsed = parseCustomFieldBag(sources[i].CUSTOM_FIELDS || sources[i].custom_fields || sources[i].customFields);
       bag = $.extend(true, bag, parsed);
     }
+    var revenueLine = readCustomFieldResult(bag, sources, CFG.revenueField);
+    var markupLine = readCustomFieldResult(bag, sources, CFG.markupField);
+    var inherited = getInheritedCommercialDefaults(node);
+    if ((!revenueLine.found || !markupLine.found) && !inherited.resolved) {
+      queueInheritedCommercialDefaults(node);
+    }
+
+    var revenue = revenueLine.found ? revenueLine.value : inherited.revenue;
+    var markup = markupLine.found ? markupLine.value : inherited.markup;
+    var revenueInherited = !revenueLine.found && inherited.revenueFound;
+    var markupInherited = !markupLine.found && inherited.markupFound;
+
+    // Inventory Markup is the durable default. For a new line, apply it to
+    // that line's current CoS so Qty is reflected before the first edit/save.
+    if (!revenueLine.found && markup !== "") {
+      var cos = normaliseMoneyInput(readLineCos($(), node));
+      if (cos != null && cos !== "" && Number(cos) !== 0) {
+        revenue = calculateRevenue(cos, markup).toFixed(2);
+        revenueInherited = true;
+      } else if (!markupLine.found) {
+        markup = "";
+        markupInherited = false;
+      }
+    }
+
     return {
-      revenue: readCustomField(bag, sources, CFG.revenueField),
-      markup: readCustomField(bag, sources, CFG.markupField)
+      revenue: revenue == null ? "" : revenue,
+      markup: markup == null ? "" : markup,
+      revenueInherited: revenueInherited,
+      markupInherited: markupInherited,
+      inheritedResolved: inherited.resolved
     };
+  }
+
+  function getInheritedCommercialDefaults(node) {
+    var key = getInventoryMasterKey(node);
+    var defaults = key && state.inheritedDefaults[key];
+    return defaults || {
+      resolved: false,
+      revenue: "",
+      markup: "",
+      revenueFound: false,
+      markupFound: false
+    };
+  }
+
+  function getInventoryMasterInfo(node) {
+    var data = node && node.data ? node.data : {};
+    var listId = firstDefinedValue(data, ["LIST_ID", "list_id", "STOCK_ID", "stock_id", "SALES_ID", "sales_id"]);
+    var categoryId = firstDefinedValue(data, ["CATEGORY_ID", "category_id", "CAT_ID", "cat_id"]);
+    var title = firstDefinedValue(data, ["alt_title", "ALT_TITLE", "title", "TITLE", "name", "NAME"]);
+    title = stripInventoryTitleMarkup(title);
+    return {
+      key: listId === "" ? "" : String(Number(node && node.data && node.data.kind) || "") + ":" + String(listId),
+      listId: String(listId || ""),
+      categoryId: String(categoryId || ""),
+      title: title,
+      kind: Number(data.kind == null ? data.KIND : data.kind) || 0
+    };
+  }
+
+  function getInventoryMasterKey(node) {
+    return getInventoryMasterInfo(node).key;
+  }
+
+  function firstDefinedValue(source, keys) {
+    for (var i = 0; source && i < keys.length; i++) {
+      if (source[keys[i]] != null && source[keys[i]] !== "") return source[keys[i]];
+    }
+    return "";
+  }
+
+  function stripInventoryTitleMarkup(value) {
+    var text = String(value == null ? "" : value);
+    if (/<[a-z][\s\S]*>/i.test(text)) text = $("<div>").html(text).text();
+    return $.trim(text.replace(/^[\s▶?*]+/, "").replace(/\u00a0/g, " "));
+  }
+
+  function queueInheritedCommercialDefaults(node) {
+    if (!window.fetch) return;
+    var info = getInventoryMasterInfo(node);
+    if (!info.key || state.inheritedDefaults[info.key] || state.inheritedRequests[info.key]) return;
+
+    state.inheritedRequests[info.key] = resolveInventoryCommercialDefaults(info)
+      .then(function (defaults) {
+        state.inheritedDefaults[info.key] = defaults;
+        delete state.inheritedRequests[info.key];
+        scheduleRefresh(0);
+        $(document).trigger("wise:supplying-commercial-defaults-updated", [info.key, defaults]);
+        return defaults;
+      })
+      .catch(function () {
+        var empty = resolvedEmptyCommercialDefaults();
+        state.inheritedDefaults[info.key] = empty;
+        delete state.inheritedRequests[info.key];
+        scheduleRefresh(0);
+        $(document).trigger("wise:supplying-commercial-defaults-updated", [info.key, empty]);
+        return empty;
+      });
+  }
+
+  function resolveInventoryCommercialDefaults(info) {
+    var requests = buildInventoryDefaultRequests(info);
+
+    function tryRequest(index) {
+      if (index >= requests.length) return Promise.resolve(resolvedEmptyCommercialDefaults());
+      return fetch(requests[index], {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
+      })
+        .then(function (response) {
+          if (!response || !response.ok) return null;
+          return response.text();
+        })
+        .then(function (text) {
+          var payload = parseInventoryResponse(text);
+          if (payload == null) return tryRequest(index + 1);
+          var result = findInventoryCommercialDefaults(payload, info);
+          if (result.foundCommercial) return result.defaults;
+          return tryRequest(index + 1);
+        })
+        .catch(function () { return tryRequest(index + 1); });
+    }
+
+    return tryRequest(0).then(function (defaults) {
+      if (defaults && defaults.resolved) return defaults;
+      return resolvedEmptyCommercialDefaults();
+    });
+  }
+
+  function buildInventoryDefaultRequests(info) {
+    var local = formatInventoryRequestDate(new Date());
+    var common = {
+      head: 0,
+      date: local,
+      date_range: 14,
+      local: local,
+      tz: getInventoryTimezone(),
+      page: 1,
+      rows: 100,
+      title: info.title,
+      depots: "",
+      show_hidden: 1,
+      shortages: 0,
+      late: 0,
+      virtual: 1,
+      version: 2,
+      stock_id: info.listId,
+      list_id: info.listId
+    };
+    var urls = [];
+    if (info.categoryId) {
+      urls.push(CFG.availabilityEndpoint + "?" + $.param($.extend({}, common, { cats: JSON.stringify([Number(info.categoryId) || info.categoryId]) })));
+      urls.push(CFG.availabilityEndpoint + "?" + $.param($.extend({}, common, { cat: info.categoryId })));
+      urls.push(CFG.hireStockListEndpoint + "?" + $.param({ cat: info.categoryId, depot: 0, local: local, tz: getInventoryTimezone(), list_id: info.listId }));
+      urls.push(CFG.salesStockListEndpoint + "?" + $.param({ head: 0, cats: JSON.stringify([Number(info.categoryId) || info.categoryId]), page: 1, rows: 100, del: 0, title: info.title, list_id: info.listId, local: local, tz: getInventoryTimezone() }));
+    } else {
+      urls.push(CFG.availabilityEndpoint + "?" + $.param(common));
+    }
+    return urls;
+  }
+
+  function formatInventoryRequestDate(date) {
+    function pad(value) { return String(value).padStart(2, "0"); }
+    return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + " " + pad(date.getHours()) + ":" + pad(date.getMinutes()) + ":" + pad(date.getSeconds());
+  }
+
+  function getInventoryTimezone() {
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/London"; }
+    catch (err) { return "Europe/London"; }
+  }
+
+  function parseInventoryResponse(text) {
+    text = $.trim(String(text == null ? "" : text));
+    if (!text) return null;
+    try { return JSON.parse(text); }
+    catch (err) { return null; }
+  }
+
+  function findInventoryCommercialDefaults(payload, info) {
+    var records = [];
+    collectInventoryRecords(payload, records, 0);
+    var exactMatchWithoutCommercialFields = null;
+
+    for (var i = 0; i < records.length; i++) {
+      var record = records[i];
+      var ids = ["LIST_ID", "list_id", "STOCK_ID", "stock_id", "SALES_ID", "sales_id", "ID", "id"];
+      var idMatched = false;
+      for (var j = 0; j < ids.length; j++) {
+        if (normaliseInventoryId(record[ids[j]]) === normaliseInventoryId(info.listId)) {
+          idMatched = true;
+          break;
+        }
+      }
+      if (!idMatched) continue;
+      var extracted = extractInventoryCommercialDefaults(record);
+      if (extracted.foundCommercial) return extracted;
+      if (!exactMatchWithoutCommercialFields) exactMatchWithoutCommercialFields = extracted;
+    }
+    return exactMatchWithoutCommercialFields || { matched: false, foundCommercial: false, defaults: resolvedEmptyCommercialDefaults() };
+  }
+
+  function collectInventoryRecords(value, out, depth) {
+    if (depth > 6 || value == null) return;
+    if (Array.isArray(value)) {
+      for (var i = 0; i < value.length; i++) collectInventoryRecords(value[i], out, depth + 1);
+      return;
+    }
+    if (typeof value !== "object") return;
+    var hasId = firstDefinedValue(value, ["LIST_ID", "list_id", "STOCK_ID", "stock_id", "SALES_ID", "sales_id", "ID", "id"]) !== "";
+    var hasTitle = firstDefinedValue(value, ["ALT_TITLE", "alt_title", "TITLE", "title", "NAME", "name"]) !== "";
+    if (hasId || hasTitle) out.push(value);
+    var keys = ["data", "items", "rows", "results", "list", "aaData", "children", "rowData", "cells"];
+    for (var k = 0; k < keys.length; k++) {
+      if (value[keys[k]] != null) collectInventoryRecords(value[keys[k]], out, depth + 1);
+    }
+  }
+
+  function extractInventoryCommercialDefaults(record) {
+    var custom = parseCustomFieldBag(record.CUSTOM_FIELDS || record.custom_fields || record.customFields);
+    var sources = [custom, record];
+    var revenue = readCustomFieldResult(custom, sources, CFG.revenueField);
+    var markup = readCustomFieldResult(custom, sources, CFG.markupField);
+    return {
+      matched: true,
+      foundCommercial: revenue.found || markup.found,
+      defaults: {
+        resolved: true,
+        revenue: revenue.found ? revenue.value : "",
+        markup: markup.found ? markup.value : "",
+        revenueFound: revenue.found,
+        markupFound: markup.found
+      }
+    };
+  }
+
+  function resolvedEmptyCommercialDefaults() {
+    return { resolved: true, revenue: "", markup: "", revenueFound: false, markupFound: false };
+  }
+
+  function normaliseInventoryId(value) {
+    var match = String(value == null ? "" : value).match(/(\d+)/);
+    return match ? match[1] : "";
   }
 
   function collectNodeCustomFields(node) {
@@ -1523,6 +1776,10 @@
   }
 
   function readCustomField(bag, data, logicalName) {
+    return readCustomFieldResult(bag, data, logicalName).value;
+  }
+
+  function readCustomFieldResult(bag, data, logicalName) {
     var target = normaliseCustomFieldName(logicalName);
     var sources = [bag || {}].concat(Array.isArray(data) ? data : [data || {}]);
     for (var s = 0; s < sources.length; s++) {
@@ -1531,10 +1788,10 @@
         if (normaliseCustomFieldName(keys[i]) !== target) continue;
         var value = sources[s][keys[i]];
         if ($.isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, "value")) value = value.value;
-        return value == null ? "" : value;
+        return { found: true, value: value == null ? "" : value };
       }
     }
-    return "";
+    return { found: false, value: "" };
   }
 
   function setCustomField(bag, logicalName, value) {
@@ -1807,6 +2064,8 @@
       }),
       selectedNodeId: node && node.id ? String(node.id) : "",
       selectedKind: node && node.data ? (node.data.kind == null ? node.data.KIND : node.data.kind) : null,
+      inventoryMaster: getInventoryMasterInfo(node || { data: {} }),
+      inheritedDefaults: getInheritedCommercialDefaults(node || { data: {} }),
       matchingKeys: matchingKeys,
       commercial: readCommercialFields(node || { data: {} })
     };
@@ -1817,6 +2076,7 @@
     refresh: function () { scheduleRefresh(0); },
     calculateRevenue: calculateRevenue,
     calculateMarkup: calculateMarkup,
+    getCommercialFields: function (node) { return readCommercialFields(node || { data: {} }); },
     inspect: inspectCommercialContext,
     describe: function () {
       return {
