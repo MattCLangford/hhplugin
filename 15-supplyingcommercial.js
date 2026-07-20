@@ -20,7 +20,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-20.3",
+    version: "2026-07-20.4",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -48,6 +48,8 @@
     recoveryCount: 0,
     pendingSave: null,
     activeDialog: null,
+    activeItemKey: "",
+    lastSelectedNodeId: "",
     projectedRows: 0,
     gridFound: false,
     projectedColumns: []
@@ -83,6 +85,15 @@
       })
       .on("dialogopen.wiseSupplyingCommercial", ".ui-dialog-content", function () {
         scheduleRefresh(0);
+      })
+      .on("dialogclose.wiseSupplyingCommercial", ".ui-dialog-content", function () {
+        $(this).closest(".ui-dialog,[role='dialog']").find("." + CFG.panelClass).remove();
+        state.activeDialog = null;
+        state.activeItemKey = "";
+      })
+      .on("select_node.jstree.wiseSupplyingCommercial changed.jstree.wiseSupplyingCommercial", CFG.tree, function (event, data) {
+        var node = data && data.node;
+        if (node && isInventoryLine(node)) state.lastSelectedNodeId = String(node.id || "");
       })
       .on(
         "ready.jstree.wiseSupplyingCommercial refresh.jstree.wiseSupplyingCommercial " +
@@ -124,13 +135,18 @@
 
     state.observer = new MutationObserver(function (mutations) {
       for (var i = 0; i < mutations.length; i++) {
-        if (mutations[i].type === "childList") {
+        if (mutations[i].type === "childList" || mutations[i].type === "attributes") {
           scheduleRefresh(CFG.refreshDelayMs);
           return;
         }
       }
     });
-    state.observer.observe(document.body || root, { childList: true, subtree: true });
+    state.observer.observe(document.body || root, {
+      childList: true,
+      attributes: true,
+      attributeFilter: ["style", "class", "aria-hidden"],
+      subtree: true
+    });
   }
 
   /* --------------------------- Supplying grid --------------------------- */
@@ -317,11 +333,15 @@
   function enhanceOpenItemDialog() {
     var $dialog = findOpenItemDialog();
     if (!$dialog.length) {
+      $("." + CFG.panelClass).remove();
       state.activeDialog = null;
+      state.activeItemKey = "";
       return;
     }
     if ($dialog.find("." + CFG.panelClass).length) {
-      hydrateCommercialPanel($dialog, $dialog.find("." + CFG.panelClass).first());
+      var $existingPanel = $dialog.find("." + CFG.panelClass).first();
+      hydrateCommercialPanel($dialog, $existingPanel);
+      bindNativeCosRecalculation($dialog, $existingPanel);
       state.activeDialog = $dialog.get(0);
       return;
     }
@@ -329,34 +349,47 @@
     var node = resolveDialogNode($dialog);
     if (node && !isInventoryLine(node)) return;
     var commercial = readCommercialFields(node || { data: {} });
-    var helperRevenue = readHireHopCustomField(CFG.revenueField);
-    var helperMarkup = readHireHopCustomField(CFG.markupField);
-    if (helperRevenue != null && helperRevenue !== "") commercial.revenue = helperRevenue;
-    if (helperMarkup != null && helperMarkup !== "") commercial.markup = helperMarkup;
     commercial.cos = readLineCos($dialog, node);
     var $panel = $(commercialPanelHtml(commercial));
+    var itemKey = getDialogItemKey($dialog, node);
+    $panel.attr("data-wise-commercial-item-key", itemKey);
     insertCommercialPanel($dialog, $panel);
     bindCommercialCalculations($panel);
+    bindNativeCosRecalculation($dialog, $panel);
     initialiseCommercialCalculations($panel);
     renameDialogTotalAsCos($dialog);
     state.activeDialog = $dialog.get(0);
+    state.activeItemKey = itemKey;
   }
 
   function hydrateCommercialPanel($dialog, $panel) {
+    var node = resolveDialogNode($dialog);
+    var itemKey = getDialogItemKey($dialog, node);
+    var previousKey = String($panel.attr("data-wise-commercial-item-key") || "");
+    if (itemKey && previousKey && itemKey !== previousKey) {
+      $panel.removeAttr("data-wise-commercial-dirty data-wise-commercial-last-edited");
+      $panel.find(".wise-commercial-input").val("").removeAttr("aria-invalid");
+    }
+    if (itemKey) $panel.attr("data-wise-commercial-item-key", itemKey);
+    state.activeItemKey = itemKey || previousKey;
     if ($panel.attr("data-wise-commercial-dirty") === "1") return;
-    var commercial = readCommercialFields(resolveDialogNode($dialog) || { data: {} });
-    var helperRevenue = readHireHopCustomField(CFG.revenueField);
-    var helperMarkup = readHireHopCustomField(CFG.markupField);
-    if (helperRevenue != null && helperRevenue !== "") commercial.revenue = helperRevenue;
-    if (helperMarkup != null && helperMarkup !== "") commercial.markup = helperMarkup;
 
-    var cos = readLineCos($dialog, resolveDialogNode($dialog));
+    var commercial = readCommercialFields(node || { data: {} });
+    var cos = readLineCos($dialog, node);
     if (cos != null && cos !== "") $panel.attr("data-wise-commercial-cos", rawMoney(cos));
     var $revenue = $panel.find('[data-wise-commercial-field="Revenue"]').first();
     var $markup = $panel.find('[data-wise-commercial-field="Markup"]').first();
-    if ($.trim(String(commercial.revenue == null ? "" : commercial.revenue)) !== "") $revenue.val(rawMoney(commercial.revenue));
-    if ($.trim(String(commercial.markup == null ? "" : commercial.markup)) !== "") $markup.val(rawMarkup(commercial.markup));
+    $revenue.val(rawMoney(commercial.revenue));
+    $markup.val(rawMarkup(commercial.markup));
+    setCalculationStatus($panel, "CoS: " + formatSterling(cos) + " · live supplying-line values", false);
     initialiseCommercialCalculations($panel);
+  }
+
+  function getDialogItemKey($dialog, node) {
+    var dataId = readDialogItemId($dialog);
+    if (dataId) return "item:" + dataId;
+    if (node && node.id) return "node:" + String(node.id);
+    return "";
   }
 
   function findOpenItemDialog() {
@@ -407,6 +440,13 @@
       }
     } catch (err) {}
 
+    if (state.lastSelectedNodeId) {
+      try {
+        var remembered = tree.get_node(state.lastSelectedNodeId);
+        if (remembered && isInventoryLine(remembered)) return remembered;
+      } catch (rememberedError) {}
+    }
+
     var $clicked = $("#items_tab .jstree-clicked").first().closest("li.jstree-node");
     if ($clicked.length) {
       try { return tree.get_node(String($clicked.attr("id") || "")); } catch (err2) {}
@@ -433,19 +473,6 @@
     for (var i = 0; i < nodes.length; i++) {
       var value = nodes[i] && nodes[i].data ? (nodes[i].data.ID || nodes[i].data.id || "") : "";
       if (String(value) === String(dataId)) return nodes[i];
-    }
-    return null;
-  }
-
-  function readHireHopCustomField(logicalName) {
-    if (typeof window._get_custom_field_value !== "function") return null;
-    var candidates = [logicalName, "_" + logicalName, "items:_" + logicalName];
-    for (var i = 0; i < candidates.length; i++) {
-      try {
-        var value = window._get_custom_field_value(candidates[i]);
-        if ($.isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, "value")) value = value.value;
-        if (value != null && value !== "") return value;
-      } catch (err) {}
     }
     return null;
   }
@@ -518,6 +545,39 @@
     });
   }
 
+  function bindNativeCosRecalculation($dialog, $panel) {
+    var selectors = [
+      "input[name='qty']", "input[name='QTY']", "input[data-field='QTY']", "input[data-field='qty']",
+      "input.qty_cell", "input[class*='qty']", "input[id*='qty']", "input[id*='QTY']"
+    ].join(",");
+    var $qtyInputs = $dialog.find(selectors);
+    var $qtyLabel = findSmallestExactText($dialog, ["qty", "quantity"]);
+    if ($qtyLabel.length) {
+      var $row = $qtyLabel.closest("tr");
+      if ($row.length) $qtyInputs = $qtyInputs.add($row.find("input").filter(":enabled").first());
+    }
+    $qtyInputs.addClass("wise-commercial-native-qty");
+
+    if ($dialog.attr("data-wise-commercial-cos-bound") === "1") return;
+    $dialog.attr("data-wise-commercial-cos-bound", "1");
+
+    $dialog.on("input.wiseSupplyingCommercialQty change.wiseSupplyingCommercialQty", selectors + ",.wise-commercial-native-qty", function () {
+      var $currentPanel = $dialog.find("." + CFG.panelClass).first();
+      if ($currentPanel.length) scheduleQuantityRecalculation($dialog, $currentPanel);
+    });
+  }
+
+  function scheduleQuantityRecalculation($dialog, $panel) {
+    $panel.attr("data-wise-commercial-dirty", "1");
+    $panel.attr("data-wise-commercial-last-edited", CFG.markupField);
+    [0, 60, 180].forEach(function (delay) {
+      setTimeout(function () {
+        if (!$panel.closest("html").length || !$dialog.is(":visible")) return;
+        syncCommercialCalculations($panel, CFG.markupField, false);
+      }, delay);
+    });
+  }
+
   function initialiseCommercialCalculations($panel) {
     var revenue = $.trim(String($panel.find('[data-wise-commercial-field="Revenue"]').val() || ""));
     var markup = $.trim(String($panel.find('[data-wise-commercial-field="Markup"]').val() || ""));
@@ -584,8 +644,9 @@
   }
 
   function setCalculationStatus($panel, message, isError) {
-    $panel.find("[data-wise-commercial-calculation]").text(message);
-    $panel.toggleClass("has-error", !!isError);
+    var $status = $panel.find("[data-wise-commercial-calculation]");
+    if ($status.text() !== message) $status.text(message);
+    if ($panel.hasClass("has-error") !== !!isError) $panel.toggleClass("has-error", !!isError);
   }
 
   function insertCommercialPanel($dialog, $panel) {
@@ -634,6 +695,11 @@
   /* ------------------------------ Save bridge --------------------------- */
 
   function installNativeSaveCapture() {
+    document.addEventListener("pointerdown", function (event) {
+      if (!isProposalCreationDepot()) return;
+      rememberSupplyingNodeFromTarget(event.target);
+    }, true);
+
     document.addEventListener("click", function (event) {
       if (!isProposalCreationDepot()) return;
       var target = closestActionElement(event.target);
@@ -643,6 +709,7 @@
       var action = normaliseText(buttonText(target));
       if (action === "cancel" || action === "close") {
         state.pendingSave = null;
+        setTimeout(function () { scheduleRefresh(0); }, 0);
         return;
       }
       if (action !== "save") return;
@@ -663,9 +730,26 @@
     }, true);
   }
 
+  function rememberSupplyingNodeFromTarget(target) {
+    var $target = $(target && target.nodeType === 1 ? target : (target && target.parentElement));
+    if (!$target.length) return;
+    var nodeId = String($target.closest("[data-jstreegrid]").attr("data-jstreegrid") || "");
+    if (!nodeId) nodeId = String($target.closest("li.jstree-node").attr("id") || "");
+    if (!nodeId) return;
+    var tree = getTree();
+    try {
+      var node = tree && tree.get_node(nodeId);
+      if (node && isInventoryLine(node)) state.lastSelectedNodeId = String(node.id || nodeId);
+    } catch (err) {}
+  }
+
   function preparePendingSave($dialog) {
     var $panel = $dialog.find("." + CFG.panelClass).first();
     var lastEdited = String($panel.attr("data-wise-commercial-last-edited") || "");
+    var previousCos = rawMoney($panel.attr("data-wise-commercial-cos"));
+    var currentCos = rawMoney(readLineCos($dialog, resolveDialogNode($dialog)));
+    var currentMarkup = $.trim(String($panel.find('[data-wise-commercial-field="Markup"]').val() || ""));
+    if (!lastEdited && currentMarkup && currentCos !== previousCos) lastEdited = CFG.markupField;
     if (!lastEdited) {
       var hasRevenue = $.trim(String($panel.find('[data-wise-commercial-field="Revenue"]').val() || ""));
       var hasMarkup = $.trim(String($panel.find('[data-wise-commercial-field="Markup"]').val() || ""));
