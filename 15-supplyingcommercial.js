@@ -20,7 +20,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-20.5",
+    version: "2026-07-20.6",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -158,7 +158,7 @@
     var tree = getTree();
     var $wrapper = getGridWrapper(tree);
     state.gridFound = !!$wrapper.length;
-    if (!$wrapper.length || !tree) return;
+    if (!$wrapper.length) return;
 
     var columns = {
       unit: findGridColumn($wrapper, tree, "unit", ["unit price", "unit cost"]),
@@ -166,6 +166,7 @@
       markup: findGridColumn($wrapper, tree, "markup", ["discount/markup", "discount / markup", "markup"]),
       revenue: findGridColumn($wrapper, tree, "revenue", ["flag", "revenue"])
     };
+    applyNativeCommercialColumnFallback($wrapper, tree, columns);
     state.projectedColumns = Object.keys(columns).filter(function (key) {
       return columns[key] && columns[key].$column && columns[key].$column.length;
     });
@@ -212,18 +213,18 @@
   function findGridColumn($wrapper, tree, key, labels) {
     var $marked = $wrapper.find('.jstree-grid-column[data-wise-commercial-column="' + key + '"]').first();
     if ($marked.length) {
-      return { key: key, $column: $marked, $header: $marked.children(".jstree-grid-header").first() };
+      return { key: key, $column: $marked, $header: getGridColumnHeader($marked) };
     }
 
     var wanted = labels.map(normaliseText);
-    var $header = $wrapper.find(".jstree-grid-header-cell").filter(function () {
-      return wanted.indexOf(normaliseText($(this).text())) !== -1;
+    var $header = getGridHeaders($wrapper).filter(function () {
+      return wanted.indexOf(readGridHeaderLabel($(this))) !== -1;
     }).first();
     if (!$header.length) {
-      var configured = tree && tree.settings && tree.settings.grid && tree.settings.grid.columns;
-      for (var i = 0; Array.isArray(configured) && i < configured.length; i++) {
+      var configured = getConfiguredGridColumns(tree);
+      for (var i = 0; i < configured.length; i++) {
         if (wanted.indexOf(normaliseText(configured[i] && configured[i].header)) === -1) continue;
-        $header = $wrapper.find(".jstree-grid-column-" + i + " > .jstree-grid-header").first();
+        $header = getGridColumnHeader(findGridColumnByIndex($wrapper, i));
         break;
       }
     }
@@ -233,6 +234,99 @@
       rememberOriginalGridColumn($wrapper, $column, $header);
     }
     return { key: key, $column: $column, $header: $header };
+  }
+
+  function applyNativeCommercialColumnFallback($wrapper, tree, columns) {
+    var configured = getConfiguredGridColumns(tree);
+    var rendered = getGridColumns($wrapper);
+    var labels = configured.length
+      ? configured.map(function (column) { return normaliseText(column && column.header); })
+      : rendered.map(function () { return readGridHeaderLabel(getGridColumnHeader($(this))); }).get();
+    var indices = {
+      unit: findLabelIndex(labels, ["unit price", "unit cost"]),
+      markup: findLabelIndex(labels, ["discount/markup", "discount / markup", "markup"]),
+      revenue: findLabelIndex(labels, ["flag", "revenue"]),
+      cos: findLabelIndex(labels, ["total", "cos"])
+    };
+
+    // HireHop's native supplying grid is Quantity & Item, Unit price,
+    // Discount/Markup, Flag, Total. Only use fixed positions after confirming
+    // that exact native commercial signature.
+    if (indices.unit < 0 || indices.markup < 0 || indices.revenue < 0 || indices.cos < 0) {
+      var signature = labels.join("|");
+      if (labels.length >= 5 &&
+          signature.indexOf("unit price") !== -1 &&
+          signature.indexOf("discount") !== -1 &&
+          signature.indexOf("flag") !== -1 &&
+          signature.indexOf("total") !== -1) {
+        indices = { unit: 1, markup: 2, revenue: 3, cos: 4 };
+      }
+    }
+
+    Object.keys(indices).forEach(function (key) {
+      if (columns[key] && columns[key].$column && columns[key].$column.length) return;
+      var index = indices[key];
+      if (index < 0) return;
+      var $column = findGridColumnByIndex($wrapper, index);
+      if (!$column.length && rendered.length > index) $column = rendered.eq(index);
+      if (!$column.length) return;
+      var $header = getGridColumnHeader($column);
+      $column.attr("data-wise-commercial-column", key);
+      rememberOriginalGridColumn($wrapper, $column, $header);
+      columns[key] = { key: key, $column: $column, $header: $header };
+    });
+  }
+
+  function getConfiguredGridColumns(tree) {
+    var candidates = [
+      tree && tree.settings && tree.settings.grid && tree.settings.grid.columns,
+      tree && tree._gridSettings && tree._gridSettings.columns,
+      tree && tree._gridSettings && tree._gridSettings.cols
+    ];
+    for (var i = 0; i < candidates.length; i++) {
+      if (Array.isArray(candidates[i])) return candidates[i];
+    }
+    return [];
+  }
+
+  function getGridColumns($wrapper) {
+    return $wrapper.find(".jstree-grid-column").filter(function () {
+      return $(this).closest(".jstree-grid-wrapper").get(0) === $wrapper.get(0);
+    });
+  }
+
+  function getGridHeaders($wrapper) {
+    var $headers = $wrapper.find(".jstree-grid-header-cell,.jstree-grid-header").filter(function () {
+      return $(this).closest(".jstree-grid-wrapper").get(0) === $wrapper.get(0);
+    });
+    return $headers.filter(function () {
+      return !$(this).parents(".jstree-grid-header-cell,.jstree-grid-header").length;
+    });
+  }
+
+  function getGridColumnHeader($column) {
+    if (!$column || !$column.length) return $();
+    var $header = $column.children(".jstree-grid-header-cell,.jstree-grid-header").first();
+    return $header.length ? $header : $column.find(".jstree-grid-header-cell,.jstree-grid-header").first();
+  }
+
+  function findGridColumnByIndex($wrapper, index) {
+    return $wrapper.find(".jstree-grid-column-" + index).filter(function () {
+      return $(this).closest(".jstree-grid-wrapper").get(0) === $wrapper.get(0);
+    }).first();
+  }
+
+  function readGridHeaderLabel($header) {
+    if (!$header || !$header.length) return "";
+    return normaliseText($header.clone().children(".jstree-grid-separator").remove().end().text());
+  }
+
+  function findLabelIndex(labels, wanted) {
+    var normalised = wanted.map(normaliseText);
+    for (var i = 0; i < labels.length; i++) {
+      if (normalised.indexOf(normaliseText(labels[i])) !== -1) return i;
+    }
+    return -1;
   }
 
   function rememberOriginalGridColumn($wrapper, $column, $header) {
@@ -301,10 +395,14 @@
     if ($wrapper.length) return $wrapper;
     $wrapper = $tree.parent().closest(".jstree-grid-wrapper").first();
     if ($wrapper.length) return $wrapper;
-    return $("#items_tab .jstree-grid-wrapper,.jstree-grid-wrapper").filter(function () {
-      var text = normaliseText($(this).find(".jstree-grid-header-cell").text());
+    $wrapper = $("#items_tab .jstree-grid-wrapper").filter(function () {
+      var text = normaliseText(getGridHeaders($(this)).text());
       return text.indexOf("unit price") !== -1 && text.indexOf("total") !== -1;
     }).first();
+    if ($wrapper.length) return $wrapper;
+    $wrapper = $("#items_tab .jstree-grid-midwrapper").closest(".jstree-grid-wrapper").first();
+    if ($wrapper.length) return $wrapper;
+    return $("#items_tab .jstree-grid-wrapper").first();
   }
 
   function getAllTreeNodes(tree) {
@@ -1343,7 +1441,7 @@
   function installStyles() {
     if (document.getElementById(CFG.styleId)) return;
     var css = [
-      ".wise-supplying-commercial-active .jstree-grid-column.wise-supplying-commercial-hidden-column{display:none!important;}",
+      ".wise-supplying-commercial-active .jstree-grid-column.wise-supplying-commercial-hidden-column,.wise-supplying-commercial-active .jstree-grid-column[data-wise-commercial-column='unit']{display:none!important;}",
       "." + CFG.panelClass + "{display:grid;grid-template-columns:minmax(190px,1fr) minmax(150px,.55fr) minmax(180px,.7fr);align-items:end;gap:12px;margin:12px 0;padding:12px 14px;border:1px solid #ccd8e5;border-left:4px solid #d4b455;border-radius:8px;background:linear-gradient(135deg,#fffdf8 0%,#f4f7fa 100%);box-sizing:border-box;}",
       "." + CFG.panelClass + ".has-error{border-color:#b42318;}",
       ".wise-line-commercial-heading{display:flex;flex-direction:column;gap:2px;align-self:center;}",
@@ -1449,7 +1547,11 @@
       depotAllowed: isProposalCreationDepot(),
       treeFound: !!tree,
       gridFound: !!$wrapper.length,
-      gridHeaders: $wrapper.find(".jstree-grid-header-cell").map(function () { return $.trim($(this).text()); }).get(),
+      gridHeaders: getGridHeaders($wrapper).map(function () { return $.trim($(this).text()); }).get(),
+      renderedGridColumns: getGridColumns($wrapper).length,
+      configuredGridHeaders: getConfiguredGridColumns(tree).map(function (column) {
+        return $.trim(String(column && column.header || ""));
+      }),
       selectedNodeId: node && node.id ? String(node.id) : "",
       selectedKind: node && node.data ? (node.data.kind == null ? node.data.KIND : node.data.kind) : null,
       matchingKeys: matchingKeys,
