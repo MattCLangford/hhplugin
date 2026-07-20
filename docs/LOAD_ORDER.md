@@ -26,6 +26,7 @@ The loader preserves this order when a route needs the modules.
 12. `12-projectgroups.js`
 13. `13-proposalpageicons.js`
 14. `14-jobgroups.js`
+15. `15-supplyingcommercial.js`
 
 `11-projectjourney.js` loads on the project/job tab route, but it only installs the Journey tab when it detects the project tab set.
 
@@ -34,6 +35,8 @@ The loader preserves this order when a route needs the modules.
 `13-proposalpageicons.js` loads with the supplying-list bundle, but only changes icons when the logged-in user's active depot is Proposal Creation. `Section:` headings become landscape hero/title page thumbnails and `Dept:` headings become landscape half-image/half-table thumbnails. Their `// Section:` and `// Dept:` disabled forms retain the relevant layout with a muted slash. The exact `Technical Summary` support heading gets a separate eye-and-revenue medallion to identify its client-visible line items and attached revenue. All other headings and list rows retain their native icons.
 
 `14-jobgroups.js` loads on the native job details page after `5-hirehop.js`, but only restyles the page when the logged-in user's active depot is Proposal Creation. It presents the current values as three balanced cards—Job Info, Job Dates and Times, and Job Commercial Info—with operational subgroups, responsive two/one-column fallbacks, and Goods out/in omitted presentation-only. HireHop's underlying values and save behavior remain unchanged.
+
+`15-supplyingcommercial.js` loads with the supplying-list bundle and activates only for Proposal Creation. It adds editable line-level `Revenue` and `Markup` custom fields to HireHop's native inventory-item dialog. Entering Markup calculates Revenue from the native line Total (shown as CoS); entering Revenue calculates and saves a whole-number Markup. The grid is presented as CoS, Markup, Revenue. Native Unit Price is hidden presentation-only; the underlying Unit Price, Discount/Markup, Flag and Total values remain intact.
 
 `6-editor2.js` remains registered but `0-loader.js` currently skips it, so the other supplying-list modules continue loading normally. To turn it back on, change its loader entry from `enabled: false` to `enabled: true`, restore its manifest status to `lazy-supplying-list-primary`, and set manifest `enabled` to `true`.
 
