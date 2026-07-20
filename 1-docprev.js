@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-15.3"); } catch (e) {}
+  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.7"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -1008,16 +1008,16 @@
 
     var $terms = $(
       '<aside id="' + COMMERCIAL_TERMS_ID + '" aria-label="Commercial adjustment inputs">' +
-        '<div class="wca-intro"><span class="wca-title">Commercial adjustments</span><span class="wca-note">Job inputs applied by Job Track</span></div>' +
+        '<div class="wca-intro"><span class="wca-title">Commercial adjustments</span><span class="wca-note">Job Track inputs shown for reference</span></div>' +
         commercialTermHtml("discount", "Discretionary discount") +
         commercialTermHtml("venue", "Venue commission") +
         commercialTermHtml("client", "Client commission") +
       '</aside>'
     );
     var $strip = $(
-      '<section id="' + JOB_PERFORMANCE_ID + '" class="is-unavailable" aria-label="Job performance after assumptions">' +
+      '<section id="' + JOB_PERFORMANCE_ID + '" class="is-unavailable" aria-label="Supplying-line job performance">' +
         '<div class="wjp-head">' +
-          '<div><span class="wjp-title">Job Performance</span><span class="wjp-kicker">Final post-assumption</span></div>' +
+          '<div><span class="wjp-title">Job Performance</span><span class="wjp-kicker">Supplying-line totals</span></div>' +
           '<div class="wjp-actions">' +
             '<span class="wjp-status" aria-live="polite"><span class="wjp-status-dot"></span><span data-wjp-status>Calculating...</span></span>' +
             '<button class="wjp-refresh" type="button">Refresh</button>' +
@@ -1025,13 +1025,13 @@
         '</div>' +
         '<div class="wjp-metrics">' +
           jobPerformanceMetricHtml("revenue", "Revenue", "") +
-          jobPerformanceMetricHtml("cos", "COS", "") +
+          jobPerformanceMetricHtml("cos", "CoS", "") +
           jobPerformanceMetricHtml("gp", "GP£", "is-gp") +
           jobPerformanceMetricHtml("gp-pct", "GP%", "is-gp-pct") +
         '</div>' +
         '<div class="wjp-health">' +
           '<div class="wjp-rail" role="progressbar" aria-label="Progress towards the 45 percent GP target" aria-valuemin="0" aria-valuemax="45" aria-valuenow="0"><div class="wjp-rail-fill"></div></div>' +
-          '<div class="wjp-health-note" data-wjp-health-note>Loading live Job Track calculation</div>' +
+          '<div class="wjp-health-note" data-wjp-health-note>Loading supplying-line totals</div>' +
         '</div>' +
         '<iframe id="' + JOB_PERFORMANCE_IFRAME_ID + '" title="Job Track calculation source" tabindex="-1" aria-hidden="true"></iframe>' +
       '</section>'
@@ -1126,6 +1126,7 @@
 
     var url = buildJobPerformanceUrl();
     if (!url) {
+      if (renderSupplyingLineJobPerformance(null)) return;
       renderJobPerformanceUnavailable("Job Track unavailable", "Could not determine this job's calculation source");
       return;
     }
@@ -1133,7 +1134,7 @@
     setJobPerformanceTone("is-unavailable");
     clearJobPerformanceColor();
     $strip.find("[data-wjp-status]").text(reason === "manual" ? "Refreshing..." : "Calculating...");
-    $strip.find("[data-wjp-health-note]").text("Loading live Job Track calculation");
+    $strip.find("[data-wjp-health-note]").text("Loading supplying-line totals and Job Track inputs");
     $strip.find(".wjp-rail").attr({ "aria-valuenow": "0", "aria-valuetext": "Loading" });
     $strip.find(".wjp-rail-fill").css({ width: "0", opacity: .35 });
     document.getElementById(JOB_PERFORMANCE_IFRAME_ID).src = url;
@@ -1148,6 +1149,7 @@
     try {
       doc = iframe && iframe.contentDocument;
     } catch (err) {
+      if (renderSupplyingLineJobPerformance(null)) return;
       renderJobPerformanceUnavailable("Job Track unavailable", "The live calculation could not be read on this page");
       return;
     }
@@ -1162,7 +1164,8 @@
         }, 120);
         return;
       }
-      renderJobPerformanceUnavailable("Waiting for Job Track", "The final post-assumption subtotal is not available yet");
+      if (renderSupplyingLineJobPerformance(null)) return;
+      renderJobPerformanceUnavailable("Waiting for Job Track", "The Job Track reference inputs are not available yet");
       return;
     }
 
@@ -1190,7 +1193,9 @@
       "[name='job:client_commission']"
     ], 0);
 
-    renderJobPerformanceMetrics(metrics);
+    if (!renderSupplyingLineJobPerformance(metrics)) {
+      renderJobPerformanceUnavailable("Supplying totals unavailable", "The supplying-list line data could not be read");
+    }
   }
 
   function readJobPerformancePercent(doc, selectors, fallback) {
@@ -1200,6 +1205,286 @@
       if (parsed != null) return parsed;
     }
     return fallback;
+  }
+
+  function renderSupplyingLineJobPerformance(jobTrackMetrics) {
+    var totals = readSupplyingLineCommercialTotals();
+    if (!totals.available) return false;
+
+    var metrics = $.extend({}, jobTrackMetrics || {});
+    var gp = totals.revenue - totals.cos;
+    var gpPct = totals.revenue === 0 ? null : (gp / totals.revenue) * 100;
+
+    metrics.revenue = formatJobPerformanceMoney(totals.revenue);
+    metrics.cos = formatJobPerformanceMoney(totals.cos);
+    metrics.gp = formatJobPerformanceMoney(gp);
+    metrics.gpPct = gpPct;
+    metrics.gpPctText = gpPct == null ? "—" : formatJobPerformancePercent(gpPct);
+    metrics.discountPct = metrics.discountPct == null ? null : metrics.discountPct;
+    metrics.venueCommissionPct = metrics.venueCommissionPct == null ? null : metrics.venueCommissionPct;
+    metrics.clientCommissionPct = metrics.clientCommissionPct == null ? null : metrics.clientCommissionPct;
+    metrics.sourceStatus = metrics.sourceStatus || "Job Track inputs unavailable";
+    metrics.lineCount = totals.lineCount;
+    metrics.revenueLineCount = totals.revenueLineCount;
+
+    renderJobPerformanceMetrics(metrics);
+    return true;
+  }
+
+  function readSupplyingLineCommercialTotals() {
+    var tree = getJobPerformanceSupplyingTree();
+    if (!tree) return { available: false, revenue: 0, cos: 0, lineCount: 0, revenueLineCount: 0 };
+
+    var nodes = getJobPerformanceTreeNodes(tree);
+    var revenue = 0;
+    var cos = 0;
+    var lineCount = 0;
+    var revenueLineCount = 0;
+
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (!isJobPerformanceInventoryLine(node)) continue;
+      lineCount += 1;
+
+      var lineRevenue = parseJobPerformanceMoney(readJobPerformanceRevenueField(node));
+      if (lineRevenue != null) {
+        revenue += lineRevenue;
+        revenueLineCount += 1;
+      }
+
+      var lineCos = parseJobPerformanceMoney(readJobPerformanceNativeTotal(node, tree));
+      if (lineCos != null) cos += lineCos;
+    }
+
+    return {
+      available: true,
+      revenue: roundJobPerformanceMoney(revenue),
+      cos: roundJobPerformanceMoney(cos),
+      lineCount: lineCount,
+      revenueLineCount: revenueLineCount
+    };
+  }
+
+  function getJobPerformanceSupplyingTree() {
+    var selector = "#items_tab .jstree";
+    var shared = window[HIREHOP_MODULE_GLOBAL];
+    if (shared && shared.selectors && shared.selectors.tree) selector = String(shared.selectors.tree);
+
+    var $candidates = $(selector)
+      .add($("#items_tab").filter(".jstree"))
+      .add($("#items_tab .jstree-grid-wrapper .jstree"));
+    var fallback = null;
+
+    for (var i = 0; i < $candidates.length; i++) {
+      try {
+        var tree = $($candidates[i]).jstree(true);
+        if (!tree) continue;
+        if (!fallback) fallback = tree;
+        var columns = getJobPerformanceGridColumns(tree);
+        if (columns.some(function (column) {
+          return normaliseJobPerformanceFieldName(column && column.header) === "total";
+        })) return tree;
+      } catch (err) {}
+    }
+    return fallback;
+  }
+
+  function getJobPerformanceTreeNodes(tree) {
+    var nodes = [];
+    var seen = {};
+
+    function addNode(candidate) {
+      if (!candidate) return;
+      var node = candidate;
+      try {
+        if (typeof candidate === "string" && tree && typeof tree.get_node === "function") node = tree.get_node(candidate);
+      } catch (err) { return; }
+      if (!node || !node.id || seen[node.id]) return;
+      seen[node.id] = true;
+      nodes.push(node);
+    }
+
+    try {
+      var flat = tree.get_json("#", { flat: true }) || [];
+      for (var i = 0; i < flat.length; i++) addNode(flat[i] && flat[i].id ? tree.get_node(flat[i].id) : flat[i]);
+    } catch (err) {}
+
+    var model = tree && tree._model && tree._model.data;
+    if (model && typeof model === "object") {
+      Object.keys(model).forEach(function (id) { addNode(model[id]); });
+    }
+    return nodes;
+  }
+
+  function isJobPerformanceInventoryLine(node) {
+    if (!node || !node.data) return false;
+    var kind = node.data.kind;
+    if (kind == null) kind = node.data.KIND;
+    kind = Number(kind);
+    if (kind === 1 || kind === 2) return true;
+    return /^[bc](?:_|-)?\d+/i.test(String(node.id || ""));
+  }
+
+  function getJobPerformanceNodeSources(node) {
+    var sources = [];
+    function add(source) {
+      if (!source || typeof source !== "object" || sources.indexOf(source) !== -1) return;
+      sources.push(source);
+    }
+    add(node && node.data);
+    add(node && node.original && node.original.data);
+    add(node && node.original);
+    add(node);
+    return sources;
+  }
+
+  function readJobPerformanceRevenueField(node) {
+    var sources = getJobPerformanceNodeSources(node);
+    var bag = {};
+
+    for (var i = 0; i < sources.length; i++) {
+      var custom = sources[i].CUSTOM_FIELDS || sources[i].custom_fields || sources[i].customFields;
+      if ($.isPlainObject(custom)) {
+        bag = $.extend(true, bag, custom);
+      } else if (typeof custom === "string" && $.trim(custom)) {
+        try {
+          var parsed = JSON.parse(custom);
+          if ($.isPlainObject(parsed)) bag = $.extend(true, bag, parsed);
+        } catch (err) {}
+      }
+    }
+
+    var value = findJobPerformanceCustomField([bag].concat(sources), "revenue");
+    return unwrapJobPerformanceValue(value);
+  }
+
+  function findJobPerformanceCustomField(sources, logicalName) {
+    for (var s = 0; s < sources.length; s++) {
+      var source = sources[s];
+      if (!source || typeof source !== "object") continue;
+      var keys = Object.keys(source);
+      for (var i = 0; i < keys.length; i++) {
+        if (normaliseJobPerformanceCustomFieldName(keys[i]) === logicalName) return source[keys[i]];
+      }
+    }
+    return "";
+  }
+
+  function readJobPerformanceNativeTotal(node, tree) {
+    var sources = getJobPerformanceNodeSources(node);
+    var columns = getJobPerformanceGridColumns(tree);
+    var totalColumn = null;
+
+    for (var i = 0; i < columns.length; i++) {
+      var header = normaliseJobPerformanceFieldName(columns[i] && columns[i].header);
+      if (header === "total" || header === "cos") {
+        totalColumn = columns[i];
+        break;
+      }
+    }
+
+    if (totalColumn && typeof totalColumn.value === "function") {
+      try {
+        var calculated = unwrapJobPerformanceValue(totalColumn.value(node));
+        if (parseJobPerformanceMoney(calculated) != null) return calculated;
+      } catch (err) {}
+    } else if (totalColumn && typeof totalColumn.value === "string") {
+      var configured = readJobPerformanceSourceValue(sources, totalColumn.value);
+      if (parseJobPerformanceMoney(configured) != null) return configured;
+    }
+
+    var direct = readJobPerformanceSourceValue(sources, "TOTAL");
+    if (parseJobPerformanceMoney(direct) != null) return direct;
+
+    var nodeId = String(node && node.id || "");
+    if (!nodeId) return "";
+    var $wrapper = tree && tree.gridWrapper ? $(tree.gridWrapper).first() : $("#items_tab .jstree-grid-wrapper").first();
+    var $column = $wrapper.find(".jstree-grid-column[data-wise-commercial-column='cos']").first();
+    if (!$column.length) {
+      $column = $wrapper.find(".jstree-grid-column").filter(function () {
+        var text = normaliseJobPerformanceFieldName($(this).children(".jstree-grid-header,.jstree-grid-header-cell").first().text());
+        return text === "total" || text === "cos";
+      }).first();
+    }
+    var $cell = $column.find(".jstree-grid-cell").filter(function () {
+      return String($(this).attr("data-jstreegrid") || "") === nodeId;
+    }).first();
+    return $cell.length ? $cell.text() : "";
+  }
+
+  function getJobPerformanceGridColumns(tree) {
+    var candidates = [
+      tree && tree.settings && tree.settings.grid && tree.settings.grid.columns,
+      tree && tree._gridSettings && tree._gridSettings.columns,
+      tree && tree._gridSettings && tree._gridSettings.cols
+    ];
+    for (var i = 0; i < candidates.length; i++) {
+      if (Array.isArray(candidates[i])) return candidates[i];
+    }
+    return [];
+  }
+
+  function readJobPerformanceSourceValue(sources, name) {
+    var target = normaliseJobPerformanceFieldName(name);
+    for (var s = 0; s < sources.length; s++) {
+      var source = sources[s];
+      if (!source || typeof source !== "object") continue;
+      var keys = Object.keys(source);
+      for (var i = 0; i < keys.length; i++) {
+        if (normaliseJobPerformanceFieldName(keys[i]) === target) return unwrapJobPerformanceValue(source[keys[i]]);
+      }
+    }
+    return "";
+  }
+
+  function unwrapJobPerformanceValue(value) {
+    if ($.isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, "value")) return value.value;
+    return value == null ? "" : value;
+  }
+
+  function normaliseJobPerformanceCustomFieldName(value) {
+    var text = $.trim(String(value == null ? "" : value));
+    var colon = text.lastIndexOf(":");
+    if (colon !== -1) text = text.slice(colon + 1);
+    return text.replace(/^[_~]+/, "").toLowerCase();
+  }
+
+  function normaliseJobPerformanceFieldName(value) {
+    var text = normaliseWhitespace(value).toLowerCase();
+    var colon = text.lastIndexOf(":");
+    return colon === -1 ? text : text.slice(colon + 1);
+  }
+
+  function parseJobPerformanceMoney(value) {
+    value = unwrapJobPerformanceValue(value);
+    if (typeof value === "number") return isFinite(value) ? value : null;
+    var text = $.trim(String(value == null ? "" : value));
+    if (!text || /\{\{/.test(text)) return null;
+    var negative = /^\(.*\)$/.test(text);
+    var cleaned = text.replace(/[£$€\s,()]/g, "");
+    if (!/^-?(?:\d+|\d*\.\d+)$/.test(cleaned)) return null;
+    var parsed = Number(cleaned);
+    if (!isFinite(parsed)) return null;
+    return negative ? -Math.abs(parsed) : parsed;
+  }
+
+  function roundJobPerformanceMoney(value) {
+    return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  }
+
+  function formatJobPerformanceMoney(value) {
+    var number = Number(value);
+    if (!isFinite(number)) return "—";
+    try {
+      return new Intl.NumberFormat("en-GB", {
+        style: "currency",
+        currency: "GBP",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(number);
+    } catch (err) {
+      return (number < 0 ? "-£" : "£") + Math.abs(number).toFixed(2);
+    }
   }
 
   function parseJobPerformancePercent(value) {
@@ -1221,25 +1506,38 @@
     setCommercialTerm("venue", metrics.venueCommissionPct);
     setCommercialTerm("client", metrics.clientCommissionPct);
 
-    var gpPct = metrics.gpPct == null ? 0 : Math.max(0, Math.min(100, metrics.gpPct));
-    var tone = gpPct < JOB_GP_GOLDEN_PCT ? "is-cold" : (gpPct <= JOB_GP_DARK_GREEN_PCT ? "is-golden" : "is-hot");
-    var label = gpPct < JOB_GP_GOLDEN_PCT ? "Cold · below 45%" : (gpPct <= JOB_GP_DARK_GREEN_PCT ? "Healthy" : "Hot");
-    var color = jobPerformanceColorForGp(gpPct);
-    var targetProgress = Math.max(0, Math.min(100, (gpPct / JOB_GP_GOLDEN_PCT) * 100));
-    var currentGpText = metrics.gpPctText || formatJobPerformancePercent(gpPct);
-    var targetNote = gpPct >= JOB_GP_GOLDEN_PCT
-      ? "45% GP target achieved · current " + currentGpText
-      : currentGpText + " GP · " + Math.round(targetProgress) + "% of 45% target";
+    var hasGpPct = metrics.gpPct != null && isFinite(metrics.gpPct);
+    var gpPct = hasGpPct ? Math.max(0, Math.min(100, metrics.gpPct)) : 0;
+    var tone = hasGpPct
+      ? (gpPct < JOB_GP_GOLDEN_PCT ? "is-cold" : (gpPct <= JOB_GP_DARK_GREEN_PCT ? "is-golden" : "is-hot"))
+      : "is-unavailable";
+    var label = hasGpPct
+      ? (gpPct < JOB_GP_GOLDEN_PCT ? "Cold · below 45%" : (gpPct <= JOB_GP_DARK_GREEN_PCT ? "Healthy" : "Hot"))
+      : "No revenue";
+    var color = hasGpPct ? jobPerformanceColorForGp(gpPct) : "";
+    var targetProgress = hasGpPct ? Math.max(0, Math.min(100, (gpPct / JOB_GP_GOLDEN_PCT) * 100)) : 0;
+    var currentGpText = hasGpPct ? (metrics.gpPctText || formatJobPerformancePercent(gpPct)) : "—";
+    var targetNote = !hasGpPct
+      ? "GP% unavailable while supplying-line Revenue is zero"
+      : (gpPct >= JOB_GP_GOLDEN_PCT
+        ? "45% GP target achieved · current " + currentGpText
+        : currentGpText + " GP · " + Math.round(targetProgress) + "% of 45% target");
 
     setJobPerformanceTone(tone);
-    applyJobPerformanceColor(color);
+    if (color) applyJobPerformanceColor(color);
+    else clearJobPerformanceColor();
     $strip.find("[data-wjp-status]").text(label);
     $strip.find(".wjp-rail")
-      .attr("aria-valuenow", Math.min(JOB_GP_GOLDEN_PCT, gpPct).toFixed(2))
+      .attr("aria-valuenow", (hasGpPct ? Math.min(JOB_GP_GOLDEN_PCT, gpPct) : 0).toFixed(2))
       .attr("aria-valuetext", targetNote);
     $strip.find(".wjp-rail-fill").css({ width: targetProgress.toFixed(2) + "%", opacity: 1 });
     $strip.find("[data-wjp-health-note]").text(targetNote);
-    $strip.attr("title", "Overall post-assumption GP " + (metrics.gpPctText || formatJobPerformancePercent(gpPct)) + ". Full Job Track flag: " + (metrics.sourceStatus || "not set") + ".");
+    $strip.attr(
+      "title",
+      "Supplying-line Revenue " + metrics.revenue + ", CoS " + metrics.cos + ", GP " + metrics.gp +
+      " (" + currentGpText + "). " + (metrics.lineCount == null ? "" : metrics.lineCount + " inventory lines. ") +
+      "Job Track flag: " + (metrics.sourceStatus || "not set") + "."
+    );
     releaseJobPerformanceFrame(jobPerformanceLoadToken);
   }
 
