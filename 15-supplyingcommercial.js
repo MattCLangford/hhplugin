@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.10",
+    version: "2026-07-21.11",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -1907,7 +1907,8 @@
     key = String(key || "");
     if (!key) return null;
     var defaults = state.inheritedDefaults[key];
-    if (defaults && defaults.retryAfterAt && Number(defaults.retryAfterAt) <= Date.now()) {
+    var refreshAt = defaults && (defaults.retryAfterAt || defaults.refreshAfterAt);
+    if (defaults && refreshAt && Number(refreshAt) <= Date.now()) {
       delete state.inheritedDefaults[key];
       defaults = null;
     }
@@ -1983,7 +1984,7 @@
   function requestInventoryCommercialDefaults(info) {
     var requests = getSharedRequestManager();
     if (!requests) return resolveInventoryCommercialDefaults(info);
-    return requests.request("inventory-defaults:v2:" + info.key, function () {
+    return requests.request("inventory-defaults:v3:" + info.key, function () {
       return resolveInventoryCommercialDefaults(info);
     }, {
       priority: -20,
@@ -2211,7 +2212,8 @@
         rsp: rsp.found ? rsp.value : "",
         revenueFound: revenue.found,
         markupFound: markup.found,
-        rspFound: rsp.found
+        rspFound: rsp.found,
+        refreshAfterAt: Date.now() + CFG.inventoryCacheTtlMs
       }
     };
   }
@@ -2287,15 +2289,38 @@
     var target = normaliseCustomFieldName(logicalName);
     var sources = [bag || {}].concat(Array.isArray(data) ? data : [data || {}]);
     for (var s = 0; s < sources.length; s++) {
-      var keys = Object.keys(sources[s]);
-      for (var i = 0; i < keys.length; i++) {
-        if (normaliseCustomFieldName(keys[i]) !== target) continue;
-        var value = sources[s][keys[i]];
-        if ($.isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, "value")) value = value.value;
-        return { found: true, value: value == null ? "" : value };
-      }
+      var match = readMatchingCustomFieldFromSource(sources[s], target);
+      if (match.found) return match;
     }
     return { found: false, value: "" };
+  }
+
+  function readMatchingCustomFieldFromSource(source, target) {
+    if (!source || typeof source !== "object") return { found: false, value: "" };
+    var keys = Object.keys(source);
+    var matchedKey = "";
+    var matchedPriority = -1;
+    for (var i = 0; i < keys.length; i++) {
+      if (normaliseCustomFieldName(keys[i]) !== target) continue;
+      var priority = customFieldKeyPriority(keys[i]);
+      if (priority < matchedPriority) continue;
+      matchedKey = keys[i];
+      matchedPriority = priority;
+    }
+    if (!matchedKey) return { found: false, value: "" };
+    var value = source[matchedKey];
+    if ($.isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, "value")) value = value.value;
+    return { found: true, value: value == null ? "" : value, key: matchedKey };
+  }
+
+  function customFieldKeyPriority(key) {
+    var text = $.trim(String(key == null ? "" : key));
+    var colon = text.lastIndexOf(":");
+    if (colon === -1) return /^[~_]/.test(text) ? 100 : 0;
+    var scope = text.slice(0, colon).toLowerCase();
+    if (scope === "items" || scope === "item" || scope === "line") return 400;
+    if (scope === "stock" || scope === "inventory") return 300;
+    return 200;
   }
 
   function setCustomField(bag, logicalName, value) {
@@ -2358,7 +2383,7 @@
   }
 
   function normaliseIntegerInput(value) {
-    var text = $.trim(String(value == null ? "" : value)).replace(/%$/, "").trim();
+    var text = $.trim(String(value == null ? "" : value)).replace(/[−–—]/g, "-").replace(/%$/, "").trim();
     if (!text) return "";
     if (!/^-?\d+$/.test(text)) return null;
     return String(parseInt(text, 10));

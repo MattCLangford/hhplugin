@@ -155,6 +155,52 @@ async function testRequestManager() {
   assert(summary.stats.rateLimits >= 1, "diagnostics should count rate limits");
 }
 
+function testCommercialTextMarkup() {
+  const commercial = fs.readFileSync(path.join(root, "15-supplyingcommercial.js"), "utf8");
+  const readerStart = commercial.indexOf("  function readCustomFieldResult");
+  const readerEnd = commercial.indexOf("  function setCustomField", readerStart);
+  const nameStart = commercial.indexOf("  function normaliseCustomFieldName");
+  const nameEnd = commercial.indexOf("  /* ------------------------------ Formatting", nameStart);
+  const integerStart = commercial.indexOf("  function normaliseIntegerInput");
+  const integerEnd = commercial.indexOf("  function rawMoney", integerStart);
+  const revenueStart = commercial.indexOf("  function calculateRevenue");
+  const revenueEnd = commercial.indexOf("  function calculateMarkup", revenueStart);
+  assert([readerStart, readerEnd, nameStart, nameEnd, integerStart, integerEnd, revenueStart, revenueEnd].every(index => index >= 0), "commercial test helpers should be discoverable");
+
+  const context = vm.createContext({
+    result: null,
+    $: {
+      trim: value => String(value == null ? "" : value).trim(),
+      isPlainObject: value => !!value && typeof value === "object" && !Array.isArray(value)
+    },
+    Object,
+    Array,
+    String,
+    Number,
+    RegExp,
+    Math,
+    isFinite
+  });
+  vm.runInContext(
+    commercial.slice(readerStart, readerEnd) +
+      commercial.slice(nameStart, nameEnd) +
+      commercial.slice(integerStart, integerEnd) +
+      commercial.slice(revenueStart, revenueEnd) +
+      '; result = {' +
+        'field: readCustomFieldResult({ Markup: { value: "0" }, "items:_Markup": { value: "-100" } }, [], "Markup"),' +
+        'ascii: normaliseIntegerInput("-100"),' +
+        'unicode: normaliseIntegerInput("−100"),' +
+        'revenue: calculateRevenue(84, "-100")' +
+      '};',
+    context
+  );
+  assert.strictEqual(context.result.field.value, "-100", "items:_Markup should outrank a generic Markup value");
+  assert.strictEqual(context.result.field.key, "items:_Markup", "the selected custom-field key should remain inspectable");
+  assert.strictEqual(context.result.ascii, "-100", "text markup should preserve an ASCII negative value");
+  assert.strictEqual(context.result.unicode, "-100", "text markup should normalise a Unicode minus value");
+  assert.strictEqual(context.result.revenue, 0, "-100 markup should calculate zero revenue");
+}
+
 function testSourceGuards() {
   const loader = fs.readFileSync(path.join(root, "0-loader.js"), "utf8");
   assert(loader.includes("loadIndependent"), "loader should initialize independent modules independently");
@@ -177,11 +223,15 @@ function testSourceGuards() {
   assert(!preview.includes("wise-rsp-selection-summary"), "Job Performance must not own, replace or remove the RSP calculator");
 
   const commercial = fs.readFileSync(path.join(root, "15-supplyingcommercial.js"), "utf8");
-  assert(commercial.includes("inventory-defaults:v2:"), "inventory defaults should use a versioned shared request key");
+  assert(commercial.includes("inventory-defaults:v3:"), "inventory defaults should use a versioned shared request key");
   assert(commercial.includes("sessionCache: true"), "inventory defaults should use session-level caching");
   assert(commercial.includes("shouldCache: hasInventoryCommercialDefaults"), "empty inventory responses must not be cached as durable defaults");
   assert(commercial.includes('stockListEndpoint: getHireHopEndpoint("stockList", "/modules/stock/list.php")'), "RSP lookup should use HireHop's stock record endpoint");
   assert(commercial.includes("unq: info.listId"), "stock lookup should request the exact inventory master ID");
+  assert(commercial.includes("function customFieldKeyPriority"), "custom-field aliases should have deterministic precedence");
+  assert(commercial.includes('scope === "items" || scope === "item" || scope === "line"'), "line-level namespaced fields should outrank generic row properties");
+  assert(commercial.includes('replace(/[−–—]/g, "-")'), "text markups should accept common minus characters");
+  assert(commercial.includes("refreshAfterAt: Date.now() + CFG.inventoryCacheTtlMs"), "successful inventory defaults should eventually refresh in a long-lived page");
   assert(commercial.includes("maintainCommercialTopSwitcher"), "RSP and Job Performance should share a display-only view switch");
   assert(commercial.includes("restoreTopCommercialViews"), "removing the RSP enhancement should restore Job Performance visibility");
   assert(commercial.includes('topView: "job-performance"'), "Job Performance should be the default commercial view on each page");
@@ -219,6 +269,7 @@ function testSourceGuards() {
 
 (async function run() {
   testSourceGuards();
+  testCommercialTextMarkup();
   await testRequestManager();
   console.log("Runtime reliability tests passed.");
 })().catch(error => {
