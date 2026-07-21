@@ -4,7 +4,7 @@
   if (window.__wiseDocPreviewLoaded) return;
   window.__wiseDocPreviewLoaded = true;
 
-  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.5"); } catch (e) {}
+  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.6"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -1834,7 +1834,15 @@
   }
 
   function findToolbarHost() {
-    return $("#wise-doc-preview-left > div:first-child,#items_tab > div:first-child:not(#wise-doc-preview-workspace)").first();
+    var shared = getSharedHireHopModule();
+    if (shared && typeof shared.findSupplyingToolbarHost === "function") {
+      var host = shared.findSupplyingToolbarHost();
+      if (host) return $(host);
+    }
+    return $("#wise-doc-preview-left > div,#items_tab > div:not(#wise-doc-preview-workspace)").filter(function () {
+      var text = normaliseWhitespace($(this).text() || "").toLowerCase();
+      return text.indexOf("new") !== -1 && (text.indexOf("edit") !== -1 || text.indexOf("delete") !== -1);
+    }).first();
   }
 
   function installLifecycleMaintenance() {

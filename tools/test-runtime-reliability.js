@@ -147,7 +147,8 @@ function testSourceGuards() {
 
   const shared = fs.readFileSync(path.join(root, "5-hirehop.js"), "utf8");
   assert(shared.includes('allowedIds: ["14"]'), "Proposal Creation depot ID should be an explicit stable gate");
-  assert(shared.includes("#wise-doc-preview-left > div:first-child"), "toolbar discovery should remain valid inside the docked preview");
+  assert(shared.includes("function findSupplyingToolbarHost"), "toolbar discovery should use native action detection instead of child position");
+  assert(!shared.includes('toolbarHost: "#items_tab > div:first-child"'), "commercial UI inserted above the toolbar must not break toolbar discovery");
 
   const preview = fs.readFileSync(path.join(root, "1-docprev.js"), "utf8");
   assert(preview.includes("maintainPreviewUi"), "preview UI should recover after supplying-root replacement");
@@ -159,6 +160,7 @@ function testSourceGuards() {
   assert(commercial.includes("sessionCache: true"), "inventory defaults should use session-level caching");
   assert(commercial.includes("maintainCommercialTopSwitcher"), "RSP and Job Performance should share a display-only view switch");
   assert(commercial.includes("restoreTopCommercialViews"), "removing the RSP enhancement should restore Job Performance visibility");
+  assert(commercial.includes('topView: "job-performance"'), "Job Performance should be the default commercial view on each page");
 
   const journey = fs.readFileSync(path.join(root, "11-projectjourney.js"), "utf8");
   const buildJourney = journey.slice(journey.indexOf("function buildJourneyHtml"), journey.indexOf("function buildHeaderSummary"));

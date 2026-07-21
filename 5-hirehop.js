@@ -9,12 +9,12 @@
    * This module names the HireHop UI surfaces and endpoints the editor depends on.
    */
   var hirehop = {
-    version: "2026-07-21.5",
+    version: "2026-07-21.6",
     purpose: "Centralises HireHop selectors, endpoints, depot gating, request control, retry timings, search helpers, and tree item prefixes.",
 
     selectors: {
       itemsTab: "#items_tab",
-      toolbarHost: "#wise-doc-preview-left > div:first-child,#items_tab > div:first-child:not(#wise-doc-preview-workspace)",
+      toolbarHost: "#wise-doc-preview-left > div,#items_tab > div:not(#wise-doc-preview-workspace)",
       tree: "#items_tab .jstree",
       treeNodes: "#items_tab li.jstree-node,#items_tab a.jstree-anchor",
       treeClicked: "#items_tab .jstree-clicked",
@@ -73,6 +73,7 @@
   hirehop.depot.resolveName = resolveDepotNameFromId;
   hirehop.depot.resolveId = resolveDepotIdFromName;
   hirehop.depot.debug = debugDepotDetection;
+  hirehop.findSupplyingToolbarHost = findSupplyingToolbarHost;
   hirehop.requests = createRequestManager();
   hirehop.diagnostics = { describe: describeRuntimeDiagnostics };
 
@@ -839,6 +840,49 @@
   function ensureJQuery() {
     if (!$ && window.jQuery) $ = window.jQuery;
     return $;
+  }
+
+  function findSupplyingToolbarHost() {
+    if (!ensureJQuery()) return null;
+    var $preview = $("#wise-doc-preview-toggle");
+    if ($preview.length && $preview.parent().length) return $preview.parent().get(0);
+
+    var $root = $(hirehop.selectors.itemsTab).first();
+    if (!$root.length) return null;
+    var $structural = $(hirehop.selectors.toolbarHost).filter(function () {
+      var matches = 0;
+      $(this).find("button,a,[role='button'],input[type='button'],input[type='submit']").filter(":visible").each(function () {
+        var $button = $(this);
+        if ($button.closest("#wise-commercial-view-switcher,#wise-doc-preview-panel").length) return;
+        var text = normaliseDepotText($button.text() || $button.val() || $button.attr("title") || $button.attr("aria-label") || "");
+        if (/^(new|edit|delete|refresh|menu)\b/.test(text) || $button.hasClass("fixed_width")) matches += 1;
+      });
+      return matches >= 2;
+    }).first();
+    if ($structural.length) return $structural.get(0);
+
+    var best = null;
+    var bestScore = 0;
+    $root.find("button,a,[role='button'],input[type='button'],input[type='submit']").filter(":visible").each(function () {
+      var $button = $(this);
+      if ($button.closest("#wise-commercial-view-switcher,#wise-doc-preview-panel,.ui-dialog").length) return;
+      var text = normaliseDepotText($button.text() || $button.val() || $button.attr("title") || $button.attr("aria-label") || "");
+      if (!/^(new|edit|delete|refresh|menu)\b/.test(text) && !$button.hasClass("fixed_width")) return;
+      var $parent = $button.parent();
+      if (!$parent.length) return;
+      var score = $parent.find("button,a,[role='button'],input[type='button'],input[type='submit']").filter(":visible").length;
+      if (score > bestScore) {
+        best = $parent.get(0);
+        bestScore = score;
+      }
+    });
+    if (best) return best;
+
+    var $fallback = $(hirehop.selectors.toolbarHost).filter(function () {
+      var text = normaliseDepotText($(this).text() || "");
+      return text.indexOf("new") !== -1 && (text.indexOf("edit") !== -1 || text.indexOf("delete") !== -1);
+    }).first();
+    return $fallback.length ? $fallback.get(0) : null;
   }
 
   function createRequestManager() {

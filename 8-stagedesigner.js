@@ -10,7 +10,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-07-21.4",
+    version: "2026-07-21.6",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -2727,6 +2727,12 @@
   function findToolbarHost() {
     var $preview = $("#wise-doc-preview-toggle");
     if ($preview.length && $preview.parent().length) return $preview.parent();
+
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    if (shared && typeof shared.findSupplyingToolbarHost === "function") {
+      var sharedHost = shared.findSupplyingToolbarHost();
+      if (sharedHost) return $(sharedHost);
+    }
 
     var $edit = findToolbarActionButton(/^edit\b/i);
     if ($edit.length && $edit.parent().length) return $edit.parent();

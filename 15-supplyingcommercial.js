@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.5",
+    version: "2026-07-21.6",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -36,7 +36,6 @@
     topSwitcherId: "wise-commercial-view-switcher",
     jobPerformanceId: "wise-job-performance",
     commercialTermsId: "wise-commercial-adjustments",
-    topViewStorageKey: "wise-supplying-commercial-top-view",
     inventoryCacheTtlMs: 15 * 60 * 1000,
     inventoryFallbackGapMs: 500,
     inventoryUpdateDebounceMs: 2500,
@@ -76,7 +75,7 @@
     gridFound: false,
     projectedColumns: [],
     rspSelected: {},
-    topView: readTopViewPreference()
+    topView: "job-performance"
   };
 
   boot();
@@ -180,6 +179,7 @@
 
   function maintainObserver(root) {
     if (state.observedRoot === root) return;
+    if (state.observedRoot && root && state.observedRoot !== root) state.topView = "job-performance";
     if (state.observer) state.observer.disconnect();
     state.observer = null;
     state.observedRoot = root || null;
@@ -823,24 +823,18 @@
   function findCommercialToolbarHost() {
     var $previewButton = $("#wise-doc-preview-toggle");
     if ($previewButton.length && $previewButton.parent().length) return $previewButton.parent();
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    if (shared && typeof shared.findSupplyingToolbarHost === "function") {
+      var sharedHost = shared.findSupplyingToolbarHost();
+      if (sharedHost) return $(sharedHost);
+    }
     return $(getHireHopSelector("toolbarHost", "#items_tab > div:first-child")).first();
   }
 
   function setTopCommercialView(view) {
     if (view !== "job-performance" && view !== "rsp") return;
     state.topView = view;
-    try {
-      if (window.sessionStorage) window.sessionStorage.setItem(CFG.topViewStorageKey, view);
-    } catch (err) {}
     applyTopCommercialView();
-  }
-
-  function readTopViewPreference() {
-    try {
-      var saved = window.sessionStorage && window.sessionStorage.getItem("wise-supplying-commercial-top-view");
-      if (saved === "job-performance" || saved === "rsp") return saved;
-    } catch (err) {}
-    return "job-performance";
   }
 
   function applyTopCommercialView() {
