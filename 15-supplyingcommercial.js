@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.15",
+    version: "2026-07-21.16",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -43,7 +43,7 @@
     inventoryFallbackGapMs: 500,
     inventoryUpdateDebounceMs: 2500,
     refreshDelayMs: 60,
-    dialogRetryDelaysMs: [0, 50, 160, 400, 900],
+    dialogRetryDelaysMs: [0, 50, 160, 400, 900, 1800, 3200, 5200],
     commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, rsp: 96 },
     rspSelectionRetentionMs: 15 * 1000,
     recoveryIntervalMs: 1200,
@@ -63,6 +63,7 @@
     observer: null,
     observedRoot: null,
     dialogObserver: null,
+    dialogObserverRoot: null,
     dialogTimers: {},
     alignmentObserver: null,
     alignmentRoot: null,
@@ -115,13 +116,21 @@
 
   function bindEvents() {
     $(window).on("load.wiseSupplyingCommercial focus.wiseSupplyingCommercial", function () {
+      installDialogObserver();
       scheduleRefresh(CFG.refreshDelayMs);
+      queueDialogMaintenanceChecks([0, 120, 500]);
     });
 
     $(document)
       .on("ajaxComplete.wiseSupplyingCommercial", function () {
+        installDialogObserver();
         scheduleRefresh(CFG.refreshDelayMs);
         scheduleDialogMaintenance(CFG.refreshDelayMs);
+      })
+      .on("visibilitychange.wiseSupplyingCommercial", function () {
+        if (document.hidden) return;
+        installDialogObserver();
+        queueDialogMaintenanceChecks([0, 120, 500]);
       })
       .on("dialogopen.wiseSupplyingCommercial", ".ui-dialog-content", function () {
         queueDialogMaintenanceChecks();
@@ -205,11 +214,15 @@
   }
 
   function installDialogObserver() {
-    if (state.dialogObserver || !window.MutationObserver) return;
+    if (!window.MutationObserver) return;
     if (!document.body) {
       setTimeout(installDialogObserver, 50);
       return;
     }
+    if (state.dialogObserver && state.dialogObserverRoot === document.body) return;
+    if (state.dialogObserver) state.dialogObserver.disconnect();
+    state.dialogObserver = null;
+    state.dialogObserverRoot = document.body;
     state.dialogObserver = new MutationObserver(function (mutations) {
       for (var i = 0; i < mutations.length; i++) {
         if (!mutationTouchesDialog(mutations[i])) continue;
@@ -219,6 +232,7 @@
     });
     state.dialogObserver.observe(document.body, {
       childList: true,
+      characterData: true,
       attributes: true,
       attributeFilter: ["style", "class", "aria-hidden", "aria-labelledby", "role"],
       subtree: true
@@ -227,7 +241,8 @@
 
   function mutationTouchesDialog(mutation) {
     var target = mutation && mutation.target;
-    if (target && target.nodeType === 1 && $(target).closest(".ui-dialog,[role='dialog'],.ui-dialog-content").length) return true;
+    var targetElement = target && target.nodeType === 1 ? target : (target && target.parentElement);
+    if (targetElement && $(targetElement).closest(".ui-dialog,[role='dialog'],.ui-dialog-content").length) return true;
     var added = mutation && mutation.addedNodes ? mutation.addedNodes : [];
     for (var i = 0; i < added.length; i++) {
       var node = added[i];
@@ -239,6 +254,7 @@
 
   function refresh() {
     var root = document.getElementById("items_tab");
+    installDialogObserver();
     maintainObserver(root);
 
     if (!root || !isProposalCreationDepot()) {
@@ -1313,34 +1329,42 @@
   function enhanceOpenItemDialog() {
     var $dialog = findOpenItemDialog();
     if (!$dialog.length) {
-      $("." + CFG.panelClass).remove();
-      stopCosWatcher();
-      state.activeDialog = null;
-      state.activeItemKey = "";
-      return;
+      $("." + CFG.panelClass).filter(function () {
+        var $owner = $(this).closest(".ui-dialog,[role='dialog']");
+        return !$owner.length || !$.contains(document.documentElement, $owner.get(0)) ||
+          !$owner.is(":visible") || !looksLikeItemDialogShell($owner);
+      }).remove();
+      if (!$("." + CFG.panelClass).length) {
+        stopCosWatcher();
+        state.activeDialog = null;
+        state.activeItemKey = "";
+      }
+      return false;
     }
+    var $content = getActiveDialogContent($dialog);
+    var contentElement = $content.get(0) || $dialog.get(0);
     $("." + CFG.panelClass).filter(function () {
-      return !$.contains($dialog.get(0), this);
+      return !$.contains(contentElement, this);
     }).remove();
 
-    var $existingPanel = $dialog.find("." + CFG.panelClass).first();
+    var $existingPanel = $content.find("." + CFG.panelClass).first();
     if ($existingPanel.length && $existingPanel.find("[data-wise-commercial-field='Markup']").length && $existingPanel.find("[data-wise-commercial-field='Revenue']").length) {
       hydrateCommercialPanel($dialog, $existingPanel);
       bindNativeCosRecalculation($dialog, $existingPanel);
       startCosWatcher($dialog, $existingPanel);
       state.activeDialog = $dialog.get(0);
-      return;
+      return true;
     }
     if ($existingPanel.length) $existingPanel.remove();
 
     var node = resolveDialogNode($dialog);
-    if (node && !isInventoryLine(node)) return;
+    if (node && !isInventoryLine(node)) return false;
     var commercial = readCommercialFields(node || { data: {} });
     commercial.cos = readLineCos($dialog, node);
     var $panel = $(commercialPanelHtml(commercial));
     var itemKey = getDialogItemKey($dialog, node);
     $panel.attr("data-wise-commercial-item-key", itemKey);
-    insertCommercialPanel($dialog, $panel);
+    insertCommercialPanel($dialog, $panel, $content);
     bindCommercialCalculations($panel);
     bindNativeCosRecalculation($dialog, $panel);
     startCosWatcher($dialog, $panel);
@@ -1348,6 +1372,7 @@
     renameDialogTotalAsCos($dialog);
     state.activeDialog = $dialog.get(0);
     state.activeItemKey = itemKey;
+    return !!$panel.closest("html").length;
   }
 
   function hydrateCommercialPanel($dialog, $panel) {
@@ -1384,12 +1409,23 @@
     return "";
   }
 
+  function getActiveDialogContent($dialog) {
+    if (!$dialog || !$dialog.length) return $();
+    var $contents = $dialog.filter(".ui-dialog-content").add($dialog.find(".ui-dialog-content"));
+    var $visible = $contents.filter(":visible");
+    if ($visible.length) return $visible.last();
+    if ($contents.length) return $contents.last();
+    return $dialog;
+  }
+
   function findOpenItemDialog() {
     var candidates = [];
     function addCandidate(element) {
       if (!element || candidates.indexOf(element) !== -1) return;
       candidates.push(element);
     }
+
+    if (state.activeDialog && $.contains(document.documentElement, state.activeDialog)) addCandidate(state.activeDialog);
 
     $("body .ui-dialog:visible,body [role='dialog']:visible").each(function () { addCandidate(this); });
     $("body .ui-dialog-content:visible").each(function () {
@@ -1424,18 +1460,32 @@
     if (!$dialog.length || !$dialog.is(":visible") || !hasNativeSaveButton($dialog)) return -1;
     var title = readDialogTitle($dialog);
     var titleMatched = looksLikeItemEditorTitle(title);
-    var $nativeInputs = $dialog.find("input,select,textarea").filter(function () {
+    var $formScope = getActiveDialogContent($dialog);
+    var $nativeInputs = $formScope.find("input,select,textarea").filter(function () {
       return !$(this).closest("." + CFG.panelClass).length;
     });
     var hasQuantity = $nativeInputs.filter("[name='qty'],[name='QTY'],[data-field='QTY'],[data-field='qty'],[class*='qty']").length > 0;
     var hasPrice = $nativeInputs.filter("[name='unit_price'],[name='price'],[name='total'],[name='line_total'],[data-field='TOTAL'],[data-field='UNIT_PRICE']").length > 0;
     var hasItemId = !!readDialogItemId($dialog);
-    var text = normaliseText($dialog.text());
+    var text = normaliseText($formScope.text());
     var hasPriceLabels = text.indexOf("unit price") !== -1 || text.indexOf("unit cost") !== -1 || text.indexOf("total") !== -1;
     if (!titleMatched && !(hasQuantity && (hasPrice || hasPriceLabels))) return -1;
     var zIndex = parseInt($dialog.css("z-index"), 10);
     if (!isFinite(zIndex)) zIndex = 0;
-    return (titleMatched ? 10000 : 0) + (hasQuantity ? 500 : 0) + (hasPrice ? 300 : 0) + (hasPriceLabels ? 150 : 0) + (hasItemId ? 100 : 0) + Math.min(99, zIndex) + domOrder;
+    return (titleMatched ? 10000 : 0) + (hasQuantity ? 500 : 0) + (hasPrice ? 300 : 0) + (hasPriceLabels ? 150 : 0) + (hasItemId ? 100 : 0) + Math.max(0, Math.min(9999, zIndex)) + domOrder;
+  }
+
+  function looksLikeItemDialogShell($dialog) {
+    if (!$dialog || !$dialog.length) return false;
+    if (looksLikeItemEditorTitle(readDialogTitle($dialog))) return true;
+    var $scope = getActiveDialogContent($dialog);
+    var $nativeInputs = $scope.find("input,select,textarea").filter(function () {
+      return !$(this).closest("." + CFG.panelClass).length;
+    });
+    var hasQuantity = $nativeInputs.filter("[name='qty'],[name='QTY'],[data-field='QTY'],[data-field='qty'],[class*='qty']").length > 0;
+    var hasPrice = $nativeInputs.filter("[name='unit_price'],[name='price'],[name='total'],[name='line_total'],[data-field='TOTAL'],[data-field='UNIT_PRICE']").length > 0;
+    var text = normaliseText($scope.text());
+    return hasQuantity && (hasPrice || text.indexOf("unit price") !== -1 || text.indexOf("unit cost") !== -1 || text.indexOf("total") !== -1);
   }
 
   function readDialogTitle($dialog) {
@@ -1501,12 +1551,13 @@
   }
 
   function readDialogItemId($dialog) {
+    var $scope = getActiveDialogContent($dialog);
     var selectors = [
       "input[name='id']", "input[name='ID']", "input[name='item_id']",
       "input[data-field='ID']", "[data-item-id]"
     ];
     for (var i = 0; i < selectors.length; i++) {
-      var $field = $dialog.find(selectors[i]).first();
+      var $field = $scope.find(selectors[i]).first();
       if (!$field.length) continue;
       var value = $field.attr("data-item-id") || $field.val() || "";
       if (/^\d+$/.test(String(value))) return String(value);
@@ -1543,7 +1594,8 @@
   }
 
   function readLineCos($dialog, node) {
-    var $labelledCos = findDialogCosInput($dialog);
+    var $scope = getActiveDialogContent($dialog);
+    var $labelledCos = findDialogCosInput($scope);
     if ($labelledCos.length) {
       var labelledMoney = normaliseMoneyInput($labelledCos.val());
       if (labelledMoney != null && labelledMoney !== "") return labelledMoney;
@@ -1554,7 +1606,7 @@
       "input[name='total']", "input[name='line_total']", "input[name='total_price']", "input.total_cell"
     ];
     for (var s = 0; s < selectors.length; s++) {
-      var $input = $dialog.find(selectors[s]).first();
+      var $input = $scope.find(selectors[s]).first();
       if (!$input.length) continue;
       var inputMoney = normaliseMoneyInput($input.val());
       if (inputMoney != null && inputMoney !== "") return inputMoney;
@@ -1588,19 +1640,20 @@
   }
 
   function findDialogCosInput($dialog) {
-    var $label = findSmallestExactText($dialog, ["cos", "total"]);
+    var $scope = getActiveDialogContent($dialog);
+    var $label = findSmallestExactText($scope, ["cos", "total"]);
     if (!$label.length) return $();
 
     var labelFor = String($label.attr("for") || "");
     if (labelFor) {
-      var $associated = $dialog.find("#" + escapeSelectorValue(labelFor)).first();
+      var $associated = $scope.find("#" + escapeSelectorValue(labelFor)).first();
       if (isUsableCosInput($associated)) return $associated;
     }
 
     var labelRect = elementRect($label.get(0));
     var best = null;
     var bestScore = Infinity;
-    $dialog.find("input").each(function () {
+    $scope.find("input").each(function () {
       var $input = $(this);
       if (!isUsableCosInput($input)) return;
       var inputRect = elementRect(this);
@@ -1615,12 +1668,13 @@
   }
 
   function findDialogQtyInput($dialog) {
-    var $label = findSmallestExactText($dialog, ["qty", "quantity"]);
+    var $scope = getActiveDialogContent($dialog);
+    var $label = findSmallestExactText($scope, ["qty", "quantity"]);
     if (!$label.length) return $();
     var labelRect = elementRect($label.get(0));
     var best = null;
     var bestScore = Infinity;
-    $dialog.find("input").each(function () {
+    $scope.find("input").each(function () {
       var $input = $(this);
       if (!isUsableCosInput($input)) return;
       var inputRect = elementRect(this);
@@ -1691,8 +1745,9 @@
       "input[name='qty']", "input[name='QTY']", "input[data-field='QTY']", "input[data-field='qty']",
       "input.qty_cell", "input[class*='qty']", "input[id*='qty']", "input[id*='QTY']"
     ].join(",");
-    var $qtyInputs = $dialog.find(selectors);
-    var $qtyLabel = findSmallestExactText($dialog, ["qty", "quantity"]);
+    var $formScope = getActiveDialogContent($dialog);
+    var $qtyInputs = $formScope.find(selectors);
+    var $qtyLabel = findSmallestExactText($formScope, ["qty", "quantity"]);
     if ($qtyLabel.length) {
       var $row = $qtyLabel.closest("tr");
       if ($row.length) $qtyInputs = $qtyInputs.add($row.find("input").filter(":enabled").first());
@@ -1843,9 +1898,8 @@
     if ($panel.hasClass("has-error") !== !!isError) $panel.toggleClass("has-error", !!isError);
   }
 
-  function insertCommercialPanel($dialog, $panel) {
-    var $content = $dialog.find(".ui-dialog-content").first();
-    if (!$content.length) $content = $dialog;
+  function insertCommercialPanel($dialog, $panel, $content) {
+    $content = $content && $content.length ? $content : getActiveDialogContent($dialog);
     var $priceLabel = findSmallestExactText($content, ["unit price", "unit cost", "total", "cos"]);
     var $table = $priceLabel.closest("table").first();
 
@@ -1861,7 +1915,7 @@
   }
 
   function renameDialogTotalAsCos($dialog) {
-    var $label = findSmallestExactText($dialog, ["total"]);
+    var $label = findSmallestExactText(getActiveDialogContent($dialog), ["total"]);
     if (!$label.length) return;
     if ($label.attr("data-wise-commercial-original-label") == null) {
       $label.attr("data-wise-commercial-original-label", $.trim($label.text()));
@@ -1892,6 +1946,13 @@
     document.addEventListener("pointerdown", function (event) {
       if (!isProposalCreationDepot()) return;
       rememberSupplyingNodeFromTarget(event.target);
+      if (looksLikeEditItemTrigger(event.target)) queueDialogMaintenanceChecks();
+    }, true);
+
+    document.addEventListener("dblclick", function (event) {
+      if (!isProposalCreationDepot()) return;
+      var target = event.target && event.target.nodeType === 1 ? event.target : (event.target && event.target.parentElement);
+      if (target && $(target).closest("#items_tab").length) queueDialogMaintenanceChecks();
     }, true);
 
     document.addEventListener("click", function (event) {
@@ -2897,6 +2958,15 @@
     if (!element) return null;
     if ($(element).is("button,input[type='button'],input[type='submit'],a")) return element;
     return $(element).closest("button,input[type='button'],input[type='submit'],a").get(0) || null;
+  }
+
+  function looksLikeEditItemTrigger(target) {
+    var element = target && target.nodeType === 1 ? target : (target && target.parentElement);
+    if (!element) return false;
+    var action = normaliseText(buttonText(closestActionElement(element)));
+    if (action === "edit" || /^edit\s+(?:hire|sales?|service|stock|supplying)?\s*item$/.test(action)) return true;
+    var $menuItem = $(element).closest("[role='menuitem'],.ui-menu-item,.context-menu-item,li").first();
+    return $menuItem.length > 0 && normaliseText($menuItem.text()) === "edit";
   }
 
   function buttonText(element) {

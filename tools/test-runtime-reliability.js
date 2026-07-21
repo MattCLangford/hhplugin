@@ -272,8 +272,16 @@ function testSourceGuards() {
   assert(commercial.includes('replace(/[−–—]/g, "-")'), "text markups should accept common minus characters");
   assert(commercial.includes("refreshAfterAt: Date.now() + CFG.inventoryCacheTtlMs"), "successful inventory defaults should eventually refresh in a long-lived page");
   assert(commercial.includes("function installDialogObserver"), "item editors should be observed outside the supplying-list DOM root");
+  assert(commercial.includes("dialogObserverRoot === document.body"), "the popup observer should recover if HireHop replaces the document body");
+  assert(commercial.includes("characterData: true"), "reused popup title and content changes should trigger editor recovery");
   assert(commercial.includes("function queueDialogMaintenanceChecks"), "item editor opening should receive bounded delayed recovery checks");
+  assert(commercial.includes("1800, 3200, 5200"), "popup recovery should remain active during slower reused-dialog rebuilds");
   assert(commercial.includes("function scoreItemEditorDialog"), "item editor detection should have a structural fallback beyond exact title text");
+  assert(commercial.includes("function getActiveDialogContent"), "reused dialog wrappers should target their current visible content pane");
+  assert(commercial.includes('if ($visible.length) return $visible.last()'), "the newest visible popup content should outrank hidden stale panes");
+  assert(commercial.includes("!looksLikeItemDialogShell($owner)"), "stale commercial fields should not remain in an unrelated reused dialog");
+  assert(commercial.includes("looksLikeEditItemTrigger(event.target)"), "Edit actions should trigger recovery from the capture phase");
+  assert(commercial.includes('addEventListener("dblclick"'), "row double-click recovery should not depend on bubbling through HireHop handlers");
   assert(commercial.includes("closedActiveEditor || containedCommercialPanel"), "unrelated dialog closes must not reset the active commercial editor");
   assert(commercial.includes("click.wiseSupplyingCommercialPopup dblclick.wiseSupplyingCommercialPopup"), "native Edit and row double-click interactions should trigger popup recovery");
   assert(commercial.includes("function alignSupplyingCommercialColumns"), "commercial columns should share a dedicated alignment pass");
