@@ -147,6 +147,7 @@ function testSourceGuards() {
   assert(loader.includes("Loading them without that dependency"), "dependent modules must not initialize before the shared module");
   assert(loader.includes("looksLikeJobDetailsText(document.body.textContent"), "ID-less job-detail pages should still load the grouped front-page module");
   assert(loader.includes('callModuleMethod("jobGroups"'), "an already-loaded job layout should refresh after HireHop route changes");
+  assert(loader.includes("isNonDetailJobTabCurrent() || isSupplyingPanelCurrent()"), "the job-details route fallback must yield to every non-detail job tab");
 
   const shared = fs.readFileSync(path.join(root, "5-hirehop.js"), "utf8");
   assert(shared.includes('allowedIds: ["14"]'), "Proposal Creation depot ID should be an explicit stable gate");
@@ -169,6 +170,11 @@ function testSourceGuards() {
 
   const jobGroups = fs.readFileSync(path.join(root, "14-jobgroups.js"), "utf8");
   assert(jobGroups.includes('label.indexOf("job id ") === 0'), "combined Job ID label/value cells should be accepted as job-detail anchors");
+  assert(jobGroups.includes("restoreJobInfoLayouts"), "job cards should restore HireHop's shared content before Supplying renders");
+  assert(jobGroups.includes("restoreStaleJobInfoLayouts"), "job cards should relinquish a content root that HireHop has repurposed");
+  assert(jobGroups.includes("findNativeJobSourceNodes"), "job cards should hide only positively identified native field blocks");
+  assert(!jobGroups.includes('root + "{display:block!important'), "job cards must not force layout onto HireHop's shared route wrapper");
+  assert(jobGroups.includes('click.wiseJobGroups'), "job tab clicks should trigger immediate layout ownership checks");
 
   const journey = fs.readFileSync(path.join(root, "11-projectjourney.js"), "utf8");
   const buildJourney = journey.slice(journey.indexOf("function buildJourneyHtml"), journey.indexOf("function buildHeaderSummary"));

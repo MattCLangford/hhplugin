@@ -24,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-07-21.7", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-07-21.8", maintainRecoveryMs: 5000 };
 
   var GROUPS = [
     {
@@ -121,7 +121,11 @@
       }
     }, CFG.maintainRecoveryMs);
     $(window).on("load.wiseJobGroups focus.wiseJobGroups hashchange.wiseJobGroups", function () { scheduleMaintain(60); });
-    $(document).on("ajaxComplete.wiseJobGroups", function () { scheduleMaintain(80); });
+    $(document)
+      .on("ajaxComplete.wiseJobGroups", function () { scheduleMaintain(80); })
+      .on("click.wiseJobGroups", "#tabs > ul a,.hh-framework_tabs > ul a,.ui-tabs > ul.ui-tabs-nav a", function () {
+        scheduleMaintain(20);
+      });
   }
 
   function scheduleMaintain(delay) {
@@ -133,21 +137,122 @@
   }
 
   function maintain() {
+    if (isNonDetailJobTabCurrent() || isSupplyingPanelCurrent()) {
+      restoreJobInfoLayouts();
+      return;
+    }
+    restoreStaleJobInfoLayouts();
     var $root = findJobInfoRoot();
     if (!$root.length || !isProposalCreationDepot()) return;
     if ($root.hasClass(ROOT_CLASS)) return;
 
     applyAccentColour($root);
-    var $nativeNodes = $root.children().not(".wise-jg-layout");
+    var $nativeNodes = findNativeJobSourceNodes($root);
+    if (!$nativeNodes.length) {
+      log("A safe job-field boundary was not found; native screen left visible.");
+      return;
+    }
     var $layout = renderLayout($root);
     if (!$layout.find(".wise-jg-field").length) {
       log("No canonical job fields were found; native screen left visible.");
       return;
     }
 
-    $nativeNodes.addClass("wise-jg-native-source-node").attr("aria-hidden", "true");
-    $root.append($layout).addClass(ROOT_CLASS);
+    $nativeNodes.each(function () {
+      var $node = $(this);
+      if ($node.attr("data-wise-jg-original-aria") == null) {
+        $node.attr("data-wise-jg-original-aria", $node.attr("aria-hidden") == null ? "__missing__" : $node.attr("aria-hidden"));
+      }
+    }).addClass("wise-jg-native-source-node").attr("aria-hidden", "true");
+    $layout.insertBefore($nativeNodes.first());
+    $root.addClass(ROOT_CLASS);
     state.lastRoot = $root.get(0);
+  }
+
+  function findNativeJobSourceNodes($root) {
+    var markers = [
+      "job id", "contact name", "job type", "venue", "address", "telephone", "mobile", "email",
+      "job memo", "client reference", "price group", "price structure", "credit period",
+      "kit booking start", "kit booking end", "project/onsite start", "project/onsite end",
+      "wise prep start", "vehicle load", "vehicle onsite", "vehicle tip", "warehouse name",
+      "calculate late fees", "allow early returns", "discretionary discount", "venue commission",
+      "client commission", "technical", "created by", "version"
+    ];
+    var $children = $root.children().not(".wise-jg-layout");
+    var $matched = $children.filter(function () {
+      var text = normaliseText($(this).text());
+      if (text.indexOf("job details") !== -1 && text.indexOf("kit booking start") !== -1 && text.indexOf("company") !== -1) return false;
+      if ($(this).find("ul.ui-tabs-nav,#items_tab").length) return false;
+      var matches = 0;
+      for (var i = 0; i < markers.length; i++) {
+        if (text.indexOf(markers[i]) !== -1) matches += 1;
+      }
+      return matches >= 2;
+    });
+    if ($matched.length) return $matched;
+
+    // Stable HireHop job-info containers are already a safe boundary. The
+    // ID-less fallback may be a shared wrapper, so never hide all of its
+    // children unless field-bearing children were positively identified.
+    if ($root.is("#job_info,#job_details,#job_detail,#job_info_container,[data-page='job-details']")) return $children;
+    return $();
+  }
+
+  function restoreStaleJobInfoLayouts() {
+    $("." + ROOT_CLASS).each(function () {
+      var $root = $(this);
+      var $source = $root.children(".wise-jg-native-source-node");
+      var text = normaliseText($source.text());
+      if (!looksLikeJobInfoText(text)) restoreJobInfoLayout($root);
+    });
+  }
+
+  function restoreJobInfoLayouts() {
+    $("." + ROOT_CLASS).each(function () { restoreJobInfoLayout($(this)); });
+  }
+
+  function restoreJobInfoLayout($root) {
+    if (!$root || !$root.length) return;
+    $root.children(".wise-jg-layout").remove();
+    $root.children(".wise-jg-native-source-node").each(function () {
+      var $node = $(this);
+      var originalAria = $node.attr("data-wise-jg-original-aria");
+      $node.removeClass("wise-jg-native-source-node").removeAttr("data-wise-jg-original-aria");
+      if (originalAria && originalAria !== "__missing__") $node.attr("aria-hidden", originalAria);
+      else $node.removeAttr("aria-hidden");
+    });
+    $root.removeClass(ROOT_CLASS);
+    if (state.lastRoot === $root.get(0)) state.lastRoot = null;
+  }
+
+  function isSupplyingPanelCurrent() {
+    var panel = document.getElementById("items_tab");
+    if (!panel) return false;
+    var ariaHidden = String(panel.getAttribute && panel.getAttribute("aria-hidden") || "").toLowerCase();
+    if (ariaHidden === "true") return false;
+    if (ariaHidden === "false") return true;
+    var $panel = $(panel);
+    if ($panel.is(".ui-tabs-hide,[hidden]")) return false;
+    var style = window.getComputedStyle ? window.getComputedStyle(panel) : panel.style;
+    return !style || (style.display !== "none" && style.visibility !== "hidden");
+  }
+
+  function isNonDetailJobTabCurrent() {
+    var selectors = [
+      "#tabs > ul li.ui-tabs-active", "#tabs > ul li.ui-state-active", "#tabs > ul li.active", "#tabs > ul [aria-selected='true']",
+      ".hh-framework_tabs > ul li.ui-tabs-active", ".hh-framework_tabs > ul li.ui-state-active", ".hh-framework_tabs > ul li.active", ".hh-framework_tabs > ul [aria-selected='true']",
+      ".ui-tabs > ul.ui-tabs-nav li.ui-tabs-active", ".ui-tabs > ul.ui-tabs-nav li.ui-state-active", ".ui-tabs > ul.ui-tabs-nav li.active", ".ui-tabs > ul.ui-tabs-nav [aria-selected='true']"
+    ];
+    var $active = $(selectors.join(","));
+    for (var i = 0; i < $active.length; i++) {
+      var $item = $active.eq(i);
+      var $host = $item.closest("ul");
+      var hostText = normaliseText($host.text());
+      if (hostText.indexOf("job details") === -1 || hostText.indexOf("supplying") === -1) continue;
+      var label = normaliseText($item.text());
+      return label.indexOf("job details") === -1 && label.indexOf("event requirements") === -1;
+    }
+    return false;
   }
 
   function renderLayout($root) {
@@ -410,7 +515,10 @@
   function looksLikeJobInfo($candidate) {
     if (!$candidate || !$candidate.length || $candidate.closest("#proj_info,#items_tab").length) return false;
     if ($candidate.find("#proj_info,#gbox_jobs_grid").length) return false;
-    var text = normaliseText($candidate.text());
+    return looksLikeJobInfoText(normaliseText($candidate.text()));
+  }
+
+  function looksLikeJobInfoText(text) {
     return text.indexOf("job id") !== -1 &&
       (text.indexOf("kit booking") !== -1 || text.indexOf("job memo") !== -1 || text.indexOf("client reference") !== -1);
   }
@@ -484,9 +592,9 @@
     var accentRgb = "var(--wise-job-accent-rgb," + FALLBACK_ACCENT_RGB + ")";
     var root = ".wise-jg-active";
     var css = [
-      root + "{display:block!important;background:#fff!important;border:0!important;outline:0!important;padding:5px!important;box-sizing:border-box;}",
+      root + "{box-sizing:border-box;}",
       root + ">.wise-jg-native-source-node{display:none!important;}",
-      root + ">.wise-jg-layout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;}",
+      root + ">.wise-jg-layout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;padding:5px;background:#fff;box-sizing:border-box;}",
       root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
       root + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid #e5e7eb;background:#fff;}",
       root + " .wise-jg-hdr-text{font-weight:700;font-size:.76em;letter-spacing:.025em;text-transform:uppercase;color:#1f2937;}",

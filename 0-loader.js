@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-21.7",
+    version: "2026-07-21.8",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -25,7 +25,7 @@
       projectJourney: { file: "11-projectjourney.js", version: "0.7" },
       projectGroups: { file: "12-projectgroups.js", version: "0.13" },
       proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.8" },
-      jobGroups: { file: "14-jobgroups.js", version: "1.0" },
+      jobGroups: { file: "14-jobgroups.js", version: "1.1" },
       supplyingCommercial: { file: "15-supplyingcommercial.js", version: "1.4" }
     }
   };
@@ -348,6 +348,7 @@
   }
 
   function hasJobDetailsPage() {
+    if (isNonDetailJobTabCurrent() || isSupplyingPanelCurrent()) return false;
     var candidates = [
       document.getElementById("job_info"),
       document.getElementById("job_details"),
@@ -377,6 +378,33 @@
     return text.indexOf("job id") !== -1 &&
       text.indexOf("kit booking start") !== -1 &&
       countContains(text, ["job memo", "client reference", "price structure", "warehouse name"]) >= 2;
+  }
+
+  function isSupplyingPanelCurrent() {
+    var panel = document.getElementById("items_tab");
+    if (!panel) return false;
+    var ariaHidden = String(panel.getAttribute && panel.getAttribute("aria-hidden") || "").toLowerCase();
+    if (ariaHidden === "true") return false;
+    if (ariaHidden === "false") return true;
+    if (matches(panel, ".ui-tabs-hide,[hidden]")) return false;
+    var style = window.getComputedStyle ? window.getComputedStyle(panel) : panel.style;
+    return !style || (style.display !== "none" && style.visibility !== "hidden");
+  }
+
+  function isNonDetailJobTabCurrent() {
+    var active = document.querySelectorAll(
+      "#tabs > ul li.ui-tabs-active,#tabs > ul li.ui-state-active,#tabs > ul li.active,#tabs > ul [aria-selected='true']," +
+      ".hh-framework_tabs > ul li.ui-tabs-active,.hh-framework_tabs > ul li.ui-state-active,.hh-framework_tabs > ul li.active,.hh-framework_tabs > ul [aria-selected='true']," +
+      ".ui-tabs > ul.ui-tabs-nav li.ui-tabs-active,.ui-tabs > ul.ui-tabs-nav li.ui-state-active,.ui-tabs > ul.ui-tabs-nav li.active,.ui-tabs > ul.ui-tabs-nav [aria-selected='true']"
+    );
+    for (var i = 0; i < active.length; i++) {
+      var host = closest(active[i], "ul");
+      var hostText = normaliseText(host && host.textContent || "");
+      if (hostText.indexOf("job details") === -1 || hostText.indexOf("supplying") === -1) continue;
+      var label = normaliseText(active[i].textContent || "");
+      return label.indexOf("job details") === -1 && label.indexOf("event requirements") === -1;
+    }
+    return false;
   }
 
   function hasProjectOrJobTabs() {
