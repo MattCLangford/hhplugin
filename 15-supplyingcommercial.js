@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.4",
+    version: "2026-07-21.5",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -33,6 +33,10 @@
     markupField: "Markup",
     rspField: "RSP",
     rspSummaryId: "wise-rsp-selection-summary",
+    topSwitcherId: "wise-commercial-view-switcher",
+    jobPerformanceId: "wise-job-performance",
+    commercialTermsId: "wise-commercial-adjustments",
+    topViewStorageKey: "wise-supplying-commercial-top-view",
     inventoryCacheTtlMs: 15 * 60 * 1000,
     inventoryFallbackGapMs: 500,
     inventoryUpdateDebounceMs: 2500,
@@ -71,7 +75,8 @@
     projectedRows: 0,
     gridFound: false,
     projectedColumns: [],
-    rspSelected: {}
+    rspSelected: {},
+    topView: readTopViewPreference()
   };
 
   boot();
@@ -132,6 +137,14 @@
         $(".wise-rsp-select").prop("checked", false);
         renderRspSelectionSummary();
       })
+      .on("click.wiseSupplyingCommercial", "#" + CFG.topSwitcherId + " [data-wise-commercial-view]", function (event) {
+        event.preventDefault();
+        if (this.disabled) return;
+        setTopCommercialView(String($(this).attr("data-wise-commercial-view") || ""));
+      })
+      .on("wise:job-performance-mounted.wiseSupplyingCommercial wise:job-performance-removed.wiseSupplyingCommercial", function () {
+        maintainCommercialTopSwitcher();
+      })
       .on(
         "ready.jstree.wiseSupplyingCommercial refresh.jstree.wiseSupplyingCommercial " +
         "redraw.jstree.wiseSupplyingCommercial load_node.jstree.wiseSupplyingCommercial " +
@@ -161,6 +174,7 @@
     $(document.body).addClass("wise-supplying-commercial-active");
     projectSupplyingGrid();
     refreshRspSelectionUi();
+    maintainCommercialTopSwitcher();
     enhanceOpenItemDialog();
   }
 
@@ -776,6 +790,86 @@
     $summary.find("[data-wise-rsp-selection-count]").text(countText);
     $summary.find("[data-wise-rsp-selection-total]").text(formatSterling(Math.round(total * 100) / 100));
     $summary.find("[data-wise-rsp-clear]").prop("disabled", lineCount === 0);
+  }
+
+  function maintainCommercialTopSwitcher() {
+    var $summary = $("#" + CFG.rspSummaryId);
+    if (!$summary.length) return;
+    var $switcher = ensureCommercialTopSwitcher();
+    if ($switcher.length && !$summary.prev().is($switcher)) $summary.insertAfter($switcher);
+    applyTopCommercialView();
+  }
+
+  function ensureCommercialTopSwitcher() {
+    var $switcher = $("#" + CFG.topSwitcherId);
+    if (!$switcher.length) {
+      $switcher = $(
+        '<nav id="' + CFG.topSwitcherId + '" class="wise-commercial-view-switcher" aria-label="Commercial summary view">' +
+          '<span>Commercial view</span>' +
+          '<div role="tablist" aria-label="Choose commercial summary">' +
+            '<button type="button" role="tab" data-wise-commercial-view="job-performance">Job Performance</button>' +
+            '<button type="button" role="tab" data-wise-commercial-view="rsp">RSP Calculator</button>' +
+          '</div>' +
+        '</nav>'
+      );
+    }
+
+    var $host = findCommercialToolbarHost();
+    if ($host.length && !$switcher.prev().is($host)) $switcher.insertAfter($host);
+    else if (!$switcher.parent().length) $("#items_tab").prepend($switcher);
+    return $switcher;
+  }
+
+  function findCommercialToolbarHost() {
+    var $previewButton = $("#wise-doc-preview-toggle");
+    if ($previewButton.length && $previewButton.parent().length) return $previewButton.parent();
+    return $(getHireHopSelector("toolbarHost", "#items_tab > div:first-child")).first();
+  }
+
+  function setTopCommercialView(view) {
+    if (view !== "job-performance" && view !== "rsp") return;
+    state.topView = view;
+    try {
+      if (window.sessionStorage) window.sessionStorage.setItem(CFG.topViewStorageKey, view);
+    } catch (err) {}
+    applyTopCommercialView();
+  }
+
+  function readTopViewPreference() {
+    try {
+      var saved = window.sessionStorage && window.sessionStorage.getItem("wise-supplying-commercial-top-view");
+      if (saved === "job-performance" || saved === "rsp") return saved;
+    } catch (err) {}
+    return "job-performance";
+  }
+
+  function applyTopCommercialView() {
+    var $switcher = $("#" + CFG.topSwitcherId);
+    var $summary = $("#" + CFG.rspSummaryId);
+    var $jobPerformance = $("#" + CFG.jobPerformanceId);
+    var $commercialTerms = $("#" + CFG.commercialTermsId);
+    var jobAvailable = !!$jobPerformance.length;
+    var effectiveView = state.topView === "job-performance" && jobAvailable ? "job-performance" : "rsp";
+
+    $switcher.find("[data-wise-commercial-view]").each(function () {
+      var view = String($(this).attr("data-wise-commercial-view") || "");
+      var selected = view === effectiveView;
+      $(this)
+        .toggleClass("is-active", selected)
+        .attr("aria-selected", selected ? "true" : "false")
+        .prop("disabled", view === "job-performance" && !jobAvailable);
+    });
+
+    $summary.css("display", effectiveView === "rsp" ? "" : "none").attr("aria-hidden", effectiveView === "rsp" ? "false" : "true");
+    $commercialTerms.add($jobPerformance)
+      .css("display", effectiveView === "job-performance" ? "" : "none")
+      .attr("aria-hidden", effectiveView === "job-performance" ? "false" : "true");
+    $switcher.attr("data-wise-commercial-active-view", effectiveView);
+  }
+
+  function restoreTopCommercialViews() {
+    $("#" + CFG.commercialTermsId + ",#" + CFG.jobPerformanceId).css("display", "").removeAttr("aria-hidden");
+    $("#" + CFG.topSwitcherId).remove();
   }
 
   function readRecommendedSalePrice(node) {
@@ -2191,6 +2285,7 @@
 
   function removeEnhancements() {
     stopCosWatcher();
+    restoreTopCommercialViews();
     if (state.inventoryUpdateTimer) clearTimeout(state.inventoryUpdateTimer);
     if (state.inventoryUiRefreshTimer) clearTimeout(state.inventoryUiRefreshTimer);
     state.inventoryUpdateTimer = null;
@@ -2255,6 +2350,9 @@
       ".wise-supplying-commercial-active .jstree-grid-column.wise-supplying-commercial-hidden-column,.wise-supplying-commercial-active .jstree-grid-column[data-wise-commercial-column='unit']{display:none!important;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='unit'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='unit'],.wise-supplying-commercial-active table.supplying_list_heads .wise-supplying-commercial-hidden-column,.wise-supplying-commercial-active table.cust_node .wise-supplying-commercial-hidden-column{display:none!important;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='revenue'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='revenue']{text-align:right;}",
+      ".wise-commercial-view-switcher{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 0;padding:6px 8px;border:1px solid #d5dde5;border-radius:7px;background:#f7f9fb;box-sizing:border-box;}",
+      ".wise-commercial-view-switcher>span{padding-left:3px;color:#667085;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}.wise-commercial-view-switcher>div{display:flex;gap:3px;padding:3px;border-radius:5px;background:#e8edf2;}",
+      ".wise-commercial-view-switcher button{min-width:128px;padding:5px 11px;border:0;border-radius:4px;background:transparent;color:#475467;font-size:11px;font-weight:700;cursor:pointer;}.wise-commercial-view-switcher button.is-active{background:#fff;color:#163a5f;box-shadow:0 1px 3px rgba(16,24,40,.16);}.wise-commercial-view-switcher button:disabled{opacity:.45;cursor:default;}",
       ".wise-rsp-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:8px 0;padding:9px 12px;border:1px solid #cbd8e6;border-left:4px solid #4b8dcc;border-radius:7px;background:#f7fafc;box-sizing:border-box;}",
       ".wise-rsp-summary-copy{display:flex;flex-direction:column;gap:2px;min-width:0;}.wise-rsp-summary-copy b{font-size:13px;color:#17212b;}.wise-rsp-summary-copy span{font-size:10px;color:#667085;}",
       ".wise-rsp-summary-result{display:flex;align-items:center;justify-content:flex-end;gap:10px;white-space:nowrap;}.wise-rsp-summary-result>span{font-size:11px;color:#475467;}.wise-rsp-summary-result>strong{min-width:88px;text-align:right;font-size:17px;color:#163a5f;}",
@@ -2271,7 +2369,7 @@
       ".wise-commercial-input-wrap:focus-within{border-color:#4b8dcc;box-shadow:0 0 0 2px rgba(75,141,204,.14);}",
       ".wise-commercial-input-wrap em{color:#667085;font-size:12px;font-style:normal;}",
       ".wise-commercial-input{min-width:0;width:100%;height:26px!important;padding:0!important;border:0!important;outline:0!important;background:transparent!important;text-align:right;font:inherit!important;color:#17212b!important;box-shadow:none!important;}",
-      "@media(max-width:760px){." + CFG.panelClass + "{grid-template-columns:1fr 1fr;}.wise-line-commercial-heading{grid-column:1/-1;}.wise-rsp-summary{align-items:flex-start;flex-direction:column;}.wise-rsp-summary-result{width:100%;justify-content:space-between;}}"
+      "@media(max-width:760px){." + CFG.panelClass + "{grid-template-columns:1fr 1fr;}.wise-line-commercial-heading{grid-column:1/-1;}.wise-commercial-view-switcher{align-items:flex-start;flex-direction:column;}.wise-commercial-view-switcher>div{width:100%;box-sizing:border-box;}.wise-commercial-view-switcher button{flex:1;min-width:0;}.wise-rsp-summary{align-items:flex-start;flex-direction:column;}.wise-rsp-summary-result{width:100%;justify-content:space-between;}}"
     ].join("");
     $("head").append('<style id="' + CFG.styleId + '">' + css + "</style>");
   }
@@ -2337,6 +2435,7 @@
     var shared = window.WiseProposalSectionBuilderHireHop;
     if (!shared || !shared.depot) return false;
     try {
+      if (typeof shared.depot.isProposalCreation === "function") return shared.depot.isProposalCreation();
       var allowedId = (typeof shared.depot.resolveId === "function" && shared.depot.resolveId("Proposal Creation")) || KNOWN_PROPOSAL_CREATION_DEPOT_ID;
       var context = typeof shared.depot.getUserContext === "function" ? shared.depot.getUserContext() : {};
       if (!context || (!context.id && !context.name)) {

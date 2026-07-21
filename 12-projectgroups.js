@@ -166,7 +166,7 @@
   ];
 
   var CFG = {
-    version: "2026-07-21.2",
+    version: "2026-07-21.5",
     maintainRecoveryMs: 5000
   };
 
@@ -288,6 +288,7 @@
     if (!shared || !shared.depot) return false;
 
     try {
+      if (typeof shared.depot.isProposalCreation === "function") return shared.depot.isProposalCreation();
       var raw = readCurrentUserDepotValue();
       if (!raw) return false; // can't confirm the user's depot — fail closed
 

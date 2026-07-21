@@ -55,9 +55,9 @@ function createSharedRuntime() {
     location: { search: "", href: "", pathname: "" },
     sessionStorage: createStorage(),
     localStorage: createStorage(),
-    // Some HireHop sessions expose a generic/current ID alongside the stable
-    // user depot name. Either authoritative match must keep the gate stable.
-    user: { DEPOT_ID: "0", DEPOT: "Proposal Creation" }
+    // HireHop can expose several depot-shaped user fields with different
+    // meanings. The Proposal Creation match may not be the first one.
+    user: { DEPOT_ID: "5", DEPOT: "Operations", DEFAULT_DEPOT: "Proposal Creation" }
   };
   const context = vm.createContext({
     window,
@@ -86,8 +86,7 @@ function createSharedRuntime() {
 async function testRequestManager() {
   const shared = createSharedRuntime();
   const requests = shared.requests;
-  const userDepot = shared.depot.getUserContext();
-  assert(shared.depot.isAllowed(userDepot), "the stable logged-in user depot should pass the Proposal Creation gate");
+  assert(shared.depot.isProposalCreation(), "Proposal Creation should match when any authoritative user depot field identifies it");
   let calls = 0;
   const first = requests.request("dedupe", () => {
     calls += 1;
@@ -153,10 +152,13 @@ function testSourceGuards() {
   const preview = fs.readFileSync(path.join(root, "1-docprev.js"), "utf8");
   assert(preview.includes("maintainPreviewUi"), "preview UI should recover after supplying-root replacement");
   assert(preview.includes("forceDepotScan: true"), "preview bootstrap should not remain blocked by an early cached depot context");
+  assert(!preview.includes("wise-rsp-selection-summary"), "Job Performance must not own, replace or remove the RSP calculator");
 
   const commercial = fs.readFileSync(path.join(root, "15-supplyingcommercial.js"), "utf8");
   assert(commercial.includes("inventory-defaults:"), "inventory defaults should use the shared keyed request queue");
   assert(commercial.includes("sessionCache: true"), "inventory defaults should use session-level caching");
+  assert(commercial.includes("maintainCommercialTopSwitcher"), "RSP and Job Performance should share a display-only view switch");
+  assert(commercial.includes("restoreTopCommercialViews"), "removing the RSP enhancement should restore Job Performance visibility");
 
   const journey = fs.readFileSync(path.join(root, "11-projectjourney.js"), "utf8");
   const buildJourney = journey.slice(journey.indexOf("function buildJourneyHtml"), journey.indexOf("function buildHeaderSummary"));

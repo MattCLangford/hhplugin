@@ -24,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-07-21.2", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-07-21.5", maintainRecoveryMs: 5000 };
 
   var GROUPS = [
     {
@@ -412,6 +412,7 @@
     var shared = window.WiseProposalSectionBuilderHireHop;
     if (!shared || !shared.depot) return false;
     try {
+      if (typeof shared.depot.isProposalCreation === "function") return shared.depot.isProposalCreation();
       var raw = readCurrentUserDepotValue();
       if (!raw) return false;
       var rawId = shared.depot.normaliseId ? shared.depot.normaliseId(raw) : "";

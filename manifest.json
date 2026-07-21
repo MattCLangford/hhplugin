@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-21.4",
+  "version": "2026-07-21.5",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "3.4",
+      "cacheVersion": "3.5",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -21,14 +21,14 @@
     {
       "file": "5-hirehop.js",
       "status": "lazy-shared-module",
-      "cacheVersion": "0.9",
-      "role": "Shared selectors, user-first depot rules, docked-preview-safe toolbar discovery and a priority request queue providing concurrency control, deduplication, caching, hidden-page pausing, rate-limit cooldown and diagnostics.",
+      "cacheVersion": "1.0",
+      "role": "Shared selectors, multi-source Proposal Creation depot matching, docked-preview-safe toolbar discovery and a priority request queue providing concurrency control, deduplication, caching, hidden-page pausing, rate-limit cooldown and diagnostics.",
       "recommendedLoadOrder": 1
     },
     {
       "file": "1-docprev.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "2.0",
+      "cacheVersion": "2.1",
       "role": "Supplying-list preview and Job Performance strip with live depot re-evaluation and event-driven recovery after HireHop replaces the supplying root. Job Track inputs are loaded once, then Revenue/CoS changes recalculate locally.",
       "recommendedLoadOrder": 2
     },
@@ -99,29 +99,29 @@
     {
       "file": "12-projectgroups.js",
       "status": "lazy-project-details",
-      "cacheVersion": "0.12",
-      "role": "Proposal Creation depot only (gated on the logged-in user's active depot via window.user, not the shared 5-hirehop.js DOM-scan helper, which was confirmed unreliable on this page): groups the native #proj_info project details fields into 5 white rounded 'card' sections (Wise Project Details, Project Ownership, Operational Timings, Working Links, System Details), reorders them so Salesforce/Wise info leads and native HireHop record fields (System Details, compact/collapsible via a Show more toggle) take a back seat, and gives every card an accent-coloured left rail plus icon badge so the live project/stage colour reads clearly. Wise Project Details renders as 3 equal columns and gets a coloured Status pill using a fixed stage palette (purple=quote, yellow=very likely, orange=hold, green=confirmed, grey=closed/lost/cancelled, blue=completed/invoiced). Accent colour is read directly from #proj_info's own inline background-color (the live project colour). Native layout structure and save behaviour fully unaffected — fields are reparented, never cloned/removed.",
+      "cacheVersion": "0.13",
+      "role": "Proposal Creation depot only, using the shared multi-source depot gate. Groups native project fields into Wise Project Details, Project Ownership, Operational Timings, Working Links and System Details cards without changing their values or save behaviour.",
       "recommendedLoadOrder": 12
     },
     {
       "file": "13-proposalpageicons.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "0.7",
+      "cacheVersion": "0.8",
       "role": "Proposal Creation depot only: uses QTC-V4 CreatePage, PageTemplate and Include Heading custom fields for proposal-page thumbnails, with legacy Section:/Dept: and // markers as read-only fallback. Heading data and every unmatched native tree icon remain untouched.",
       "recommendedLoadOrder": 13
     },
     {
       "file": "14-jobgroups.js",
       "status": "lazy-job-details",
-      "cacheVersion": "0.8",
+      "cacheVersion": "0.9",
       "role": "Proposal Creation depot only: restyles the native job details information area into three balanced, responsive cards — Job Info, Job Dates and Times, and Job Commercial Info — with operational subgroups and natural reading order. Goods out and Goods in are omitted presentation-only; HireHop's underlying job values and save behavior are unchanged.",
       "recommendedLoadOrder": 14
     },
     {
       "file": "15-supplyingcommercial.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "1.1",
-      "role": "Proposal Creation depot only: adds line-level Revenue and Markup custom-field inputs to native supplying item edit dialogs. Explicit supplying-line fields always win; untouched lines resolve their inventory master by LIST_ID and use its Revenue/Markup as defaults. Inventory-master RSP is displayed beside every component row with a dedicated checkbox; selected rows are totalled as Qty × RSP in a kit/bundle pricing summary without changing native selection. Revenue is recalculated from the live native line Total when Qty changes, direct Revenue remains permitted with blank or zero CoS as a 100% GP line with no applicable Markup, edits save through HireHop's native item request, and the supplying grid is presented as CoS (native line Total), Markup, Revenue while preserving native commercial data.",
+      "cacheVersion": "1.2",
+      "role": "Proposal Creation depot only: adds line-level Revenue and Markup fields plus inventory-master RSP controls. A display-only switch alternates the independent Job Performance and RSP Calculator summaries without changing either module's data or selection state. The supplying grid remains presented as CoS, Markup and Revenue while native commercial data is preserved.",
       "recommendedLoadOrder": 15
     }
   ],

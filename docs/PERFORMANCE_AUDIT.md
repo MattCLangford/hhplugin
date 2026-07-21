@@ -16,7 +16,7 @@ Live testing exposed three additional lifecycle defects behind intermittent comb
 - an early depot/header value could be cached before the logged-in user's stable depot fields were ready; Stage Designer is not depot-gated, so it could appear by itself;
 - the docked preview changes the supplying toolbar's DOM path, and HireHop can replace the complete `#items_tab` element after initialisation.
 
-The loader now waits for the shared dependency before starting those modules, depot resolution prefers and re-evaluates the complete `window.user` context, toolbar discovery supports both docked and undocked layouts, and root replacement triggers event-driven module health refreshes. These checks do not make HireHop API requests.
+The loader now waits for the shared dependency before starting those modules. Depot resolution evaluates every known authoritative `window.user` depot field plus active header state and accepts a positive Proposal Creation match without allowing the first unrelated numeric field to veto it. Toolbar discovery supports docked and undocked layouts, and root replacement triggers event-driven module health refreshes. These checks do not make HireHop API requests.
 
 ## Root Causes
 

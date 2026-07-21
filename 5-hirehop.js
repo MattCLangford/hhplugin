@@ -9,7 +9,7 @@
    * This module names the HireHop UI surfaces and endpoints the editor depends on.
    */
   var hirehop = {
-    version: "2026-07-21.4",
+    version: "2026-07-21.5",
     purpose: "Centralises HireHop selectors, endpoints, depot gating, request control, retry timings, search helpers, and tree item prefixes.",
 
     selectors: {
@@ -69,6 +69,7 @@
   hirehop.depot.getActiveContext = getActiveDepotContext;
   hirehop.depot.getUserContext = readUserDepotContext;
   hirehop.depot.isAllowed = isAllowedDepot;
+  hirehop.depot.isProposalCreation = isProposalCreationDepot;
   hirehop.depot.resolveName = resolveDepotNameFromId;
   hirehop.depot.resolveId = resolveDepotIdFromName;
   hirehop.depot.debug = debugDepotDetection;
@@ -137,10 +138,6 @@
     context = normaliseDepotContext(context || getActiveDepotContext());
 
     if (context.id && allowedIds.indexOf(context.id) !== -1) return true;
-    // HireHop can expose 0 while the user context is still being populated;
-    // allow the matching name to resolve that placeholder. A real conflicting
-    // ID remains authoritative and must not be overridden by stale text.
-    if (context.id && context.id !== "0") return false;
     if (context.name && allowedNames.indexOf(normaliseDepotText(context.name)) !== -1) return true;
 
     // A detected authoritative context that does not match must fail closed.
@@ -154,6 +151,53 @@
     }
 
     return context.id || context.name ? false : !blockWhenUndetected;
+  }
+
+  function isProposalCreationDepot() {
+    var allowedId = resolveDepotIdFromName("Proposal Creation") || "14";
+    var allowedIds = [allowedId];
+    var allowedNames = ["Proposal Creation"];
+    var contexts = collectUserDepotContexts();
+    contexts.push(
+      readHeaderDepotContext(),
+      readWindowDepotContext(),
+      readUrlDepotContext(),
+      readStoredDepotContext(),
+      readNamedDepotContext(),
+      readAttributeDepotContext(),
+      readVisibleCurrentDepotContext(allowedIds, allowedNames)
+    );
+    for (var i = 0; i < contexts.length; i++) {
+      if (contextMatchesAllowedDepot(contexts[i], allowedIds, allowedNames)) {
+        window.__wiseHireHopDepotContext = normaliseDepotContext(contexts[i]);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function collectUserDepotContexts() {
+    if (!window.user || typeof window.user !== "object") return [];
+    var keys = [
+      "DEPOT_ID", "depot_id", "DEFAULT_DEPOT_ID", "default_depot_id",
+      "BRANCH_ID", "branch_id", "WAREHOUSE_ID", "warehouse_id",
+      "DEPOT", "depot", "DEPOT_NAME", "depot_name",
+      "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
+    ];
+    var contexts = [];
+    for (var i = 0; i < keys.length; i++) {
+      var value = window.user[keys[i]];
+      if (value == null || value === "") continue;
+      if (value && typeof value === "object") {
+        contexts.push({
+          id: firstObjectValue(value, ["ID", "id", "DEPOT_ID", "depot_id", "value"]),
+          name: firstObjectValue(value, ["NAME", "name", "DEPOT", "depot", "DEPOT_NAME", "depot_name", "text", "label"])
+        });
+      } else {
+        contexts.push({ id: value, name: value });
+      }
+    }
+    return contexts;
   }
 
   function readHeaderDepotContext() {
@@ -597,6 +641,14 @@
   }
 
   function selectBestDepotContext(contexts, allowedIds, allowedNames) {
+    // Prefer a positive match among the explicit sources before accepting a
+    // generic value. HireHop exposes several depot fields with different
+    // meanings, so one unrelated numeric field must not veto the active name.
+    for (var m = 0; m < Math.min(contexts.length, 5); m++) {
+      if (contextMatchesAllowedDepot(contexts[m], allowedIds, allowedNames)) {
+        return normaliseDepotContext(contexts[m]);
+      }
+    }
     for (var i = 0; i < contexts.length; i++) {
       var context = normaliseDepotContext(contexts[i]);
       if (!context.id && !context.name) continue;
@@ -1014,6 +1066,7 @@
     return {
       sharedVersion: hirehop.version,
       depot: getActiveDepotContext({ useCache: true }),
+      proposalCreationAllowed: isProposalCreationDepot(),
       loader: loader && typeof loader.describe === "function" ? loader.describe() : null,
       requests: hirehop.requests.describe(),
       modules: {

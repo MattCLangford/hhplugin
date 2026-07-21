@@ -4,7 +4,7 @@
   if (window.__wiseDocPreviewLoaded) return;
   window.__wiseDocPreviewLoaded = true;
 
-  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.4"); } catch (e) {}
+  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.5"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -206,6 +206,16 @@
     if (!DEPOT_RULE.enabled) return true;
 
     var sharedDepot = getSharedDepotModule();
+    if (sharedDepot && typeof sharedDepot.isProposalCreation === "function") {
+      var proposalAllowed = sharedDepot.isProposalCreation();
+      logDepotDecision(
+        proposalAllowed ? "matched" : "blocked",
+        proposalAllowed ? "[WiseHireHop] Proposal Creation depot matched" : "[WiseHireHop] Proposal Creation depot not detected",
+        context,
+        options
+      );
+      return proposalAllowed;
+    }
     if (sharedDepot && typeof sharedDepot.isAllowed === "function") {
       var allowed = sharedDepot.isAllowed(context, {
         rule: DEPOT_RULE,
@@ -1088,6 +1098,7 @@
     } else {
       refreshJobPerformanceNow("mount");
     }
+    $(document).trigger("wise:job-performance-mounted");
   }
 
   function commercialTermHtml(key, label) {
@@ -1127,6 +1138,7 @@
     clearTimeout(jobPerformanceLoadTimer);
     jobPerformanceLoadToken += 1;
     $("#" + COMMERCIAL_TERMS_ID + ",#" + JOB_PERFORMANCE_ID).remove();
+    $(document).trigger("wise:job-performance-removed");
     $("#items_tab ." + NATIVE_TOTALS_HIDDEN_CLASS)
       .removeClass(NATIVE_TOTALS_HIDDEN_CLASS)
       .removeAttr("data-wise-native-totals");

@@ -22,7 +22,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.4",
+    version: "2026-07-21.5",
     styleId: "wise-proposal-page-icon-styles",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     refreshDelayMs: 70,
@@ -329,6 +329,7 @@
     if (!shared || !shared.depot) return false;
 
     try {
+      if (typeof shared.depot.isProposalCreation === "function") return shared.depot.isProposalCreation();
       var allowedId = (typeof shared.depot.resolveId === "function" &&
         shared.depot.resolveId("Proposal Creation")) || KNOWN_PROPOSAL_CREATION_DEPOT_ID;
       var context = typeof shared.depot.getUserContext === "function" ? shared.depot.getUserContext() : {};
