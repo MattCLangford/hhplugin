@@ -256,6 +256,9 @@ function testSourceGuards() {
   const preview = fs.readFileSync(path.join(root, "1-docprev.js"), "utf8");
   assert(preview.includes("maintainPreviewUi"), "preview UI should recover after supplying-root replacement");
   assert(preview.includes("forceDepotScan: true"), "preview bootstrap should not remain blocked by an early cached depot context");
+  assert(preview.includes('doc: "169"'), "proposal preview should use the QTC V4 document");
+  assert(!preview.includes('doc: "167"'), "proposal preview should not retain the previous QTC document");
+  assert(preview.includes('ps: "a4"'), "QTC V4 preview should explicitly request A4 output");
   assert(!preview.includes("wise-rsp-selection-summary"), "Job Performance must not own, replace or remove the RSP calculator");
 
   const commercial = fs.readFileSync(path.join(root, "15-supplyingcommercial.js"), "utf8");

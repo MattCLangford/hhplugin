@@ -4,7 +4,7 @@
   if (window.__wiseDocPreviewLoaded) return;
   window.__wiseDocPreviewLoaded = true;
 
-  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.6"); } catch (e) {}
+  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.7"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -67,10 +67,10 @@
       {
         key: "proposal_default",
         family: "Proposal",
-        label: "Default",
+        label: "QTC V4",
         previewMode: "page",
         params: {
-          doc: "167",
+          doc: "169",
           engine: "1"
         }
       },
@@ -92,6 +92,7 @@
       format: "html",
       stn: "0",
       or: "0",
+      ps: "a4",
       nums: "0"
     },
     refreshUrlPatterns: [
