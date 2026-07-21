@@ -8,6 +8,16 @@ The transaction warnings were caused by request amplification rather than one co
 
 The implementation now isolates module loading, serialises automatic HireHop reads, caches inventory results for 15 minutes in the browser session, observes server rate-limit responses, and removes eager or duplicated data loads.
 
+### Live reliability follow-up
+
+Live testing exposed three additional lifecycle defects behind intermittent combinations such as Stage Designer appearing without Preview, Job Performance or commercial columns:
+
+- shared-dependent scripts were allowed to initialize after the shared module failed to download, leaving their single-run guards around incomplete instances;
+- an early depot/header value could be cached before the logged-in user's stable depot fields were ready; Stage Designer is not depot-gated, so it could appear by itself;
+- the docked preview changes the supplying toolbar's DOM path, and HireHop can replace the complete `#items_tab` element after initialisation.
+
+The loader now waits for the shared dependency before starting those modules, depot resolution prefers and re-evaluates the complete `window.user` context, toolbar discovery supports both docked and undocked layouts, and root replacement triggers event-driven module health refreshes. These checks do not make HireHop API requests.
+
 ## Root Causes
 
 | Severity | Finding | Effect |
@@ -84,6 +94,7 @@ No automatic retry was added to the shared reader. Endpoint fallback remains exp
 - Runtime modules touched by this audit have single-instance guards.
 - Use `WiseHireHopEnhancementLoader.describe()` for module load state and retry timing.
 - Use `WiseHireHopDiagnostics.describe()` for loader state, depot context, loaded-module flags and request queue/cache/rate-limit counters.
+- Preview diagnostics now report whether its button, Job Performance strip and open panel are actually mounted, rather than treating script download alone as successful UI health.
 - Diagnostics record request type only, not job IDs, inventory IDs, payloads or response data.
 
 ## Remaining Live-Environment Checks

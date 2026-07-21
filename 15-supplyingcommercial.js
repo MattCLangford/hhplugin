@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.2",
+    version: "2026-07-21.4",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -2337,13 +2337,18 @@
     var shared = window.WiseProposalSectionBuilderHireHop;
     if (!shared || !shared.depot) return false;
     try {
-      var raw = readCurrentUserDepotValue();
-      if (raw == null || raw === "") return false;
-      var rawId = shared.depot.normaliseId ? shared.depot.normaliseId(raw) : "";
       var allowedId = (typeof shared.depot.resolveId === "function" && shared.depot.resolveId("Proposal Creation")) || KNOWN_PROPOSAL_CREATION_DEPOT_ID;
-      if (rawId && allowedId && rawId === allowedId) return true;
-      var rawText = shared.depot.normaliseText ? shared.depot.normaliseText(raw) : String(raw).trim().toLowerCase();
-      return rawText === "proposal creation";
+      var context = typeof shared.depot.getUserContext === "function" ? shared.depot.getUserContext() : {};
+      if (!context || (!context.id && !context.name)) {
+        context = typeof shared.depot.getActiveContext === "function"
+          ? shared.depot.getActiveContext({ useCache: false })
+          : { id: readCurrentUserDepotValue(), name: "" };
+      }
+      return typeof shared.depot.isAllowed === "function" && shared.depot.isAllowed(context, {
+        allowedIds: [allowedId],
+        allowedNames: ["Proposal Creation"],
+        blockWhenUndetected: true
+      });
     } catch (err) {
       return false;
     }

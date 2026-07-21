@@ -5,28 +5,28 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-21.3",
+    version: "2026-07-21.4",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
     recoveryIntervalMs: 2500,
     recoveryChecks: 12,
     scripts: {
-      hirehop: { file: "5-hirehop.js", version: "0.8" },
-      docprev: { file: "1-docprev.js", version: "1.9" },
+      hirehop: { file: "5-hirehop.js", version: "0.9" },
+      docprev: { file: "1-docprev.js", version: "2.0" },
       autopull: { file: "2-apselall.js", version: "0.5" },
       meta: { file: "3-meta.js", version: "0.2" },
       layout: { file: "4-layout.js", version: "0.2" },
       editor: { file: "6-editor2.js", version: "1.8", enabled: false },
       captrack: { file: "7-captrack.js", version: "3.1" },
-      stage: { file: "8-stagedesigner.js", version: "2.1" },
+      stage: { file: "8-stagedesigner.js", version: "2.2" },
       checklist: { file: "9-jobchecklist.js", version: "1.2" },
       projectJobs: { file: "10-projectjobs-qol.js", version: "1.0" },
       projectJourney: { file: "11-projectjourney.js", version: "0.7" },
       projectGroups: { file: "12-projectgroups.js", version: "0.12" },
-      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.6" },
+      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.7" },
       jobGroups: { file: "14-jobgroups.js", version: "0.8" },
-      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "1.0" }
+      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "1.1" }
     }
   };
 
@@ -40,6 +40,7 @@
   var recoveryTimer = null;
   var recoveryCount = 0;
   var jqueryBindAttempts = 0;
+  var supplyingRoot = null;
 
   boot();
 
@@ -142,7 +143,16 @@
       return;
     }
 
-    if (hasSupplyingList()) loadProposalSupplyingBundle();
+    var nextSupplyingRoot = document.getElementById("items_tab");
+    if (nextSupplyingRoot) {
+      var supplyingRootChanged = nextSupplyingRoot !== supplyingRoot;
+      supplyingRoot = nextSupplyingRoot;
+      loadProposalSupplyingBundle().then(function () {
+        if (supplyingRootChanged) refreshSupplyingModuleHealth();
+      });
+    } else {
+      supplyingRoot = null;
+    }
     if (isHomePage()) loadAfterShared(["captrack"]);
     if (hasProjectOrJobTabs()) loadAfterShared(["checklist", "projectJourney", "jobGroups"]);
     if (hasProjectJobsPage()) loadAfterShared(["projectJobs", "projectGroups"]);
@@ -155,9 +165,33 @@
   }
 
   function loadAfterShared(keys) {
-    return loadScript("hirehop")
-      .catch(function (error) { reportModuleFailure("hirehop", error); })
-      .then(function () { return loadIndependent(keys); });
+    return loadScript("hirehop").then(
+      function () { return loadIndependent(keys); },
+      function (error) {
+        // These modules read the shared selectors, depot rules and request
+        // service during bootstrap. Loading them without that dependency can
+        // leave their single-run guard set around an incomplete instance.
+        reportModuleFailure("hirehop", error);
+        return [];
+      }
+    );
+  }
+
+  function refreshSupplyingModuleHealth() {
+    setTimeout(function () {
+      callModuleMethod("docprev", window.__wiseDocPreview, "refresh");
+      callModuleMethod("stage", window.__wiseStageDesigner, "refresh");
+      callModuleMethod("proposalPageIcons", window.__wiseProposalPageIcons, "refresh");
+      callModuleMethod("supplyingCommercial", window.__wiseSupplyingCommercial, "refresh");
+    }, 80);
+  }
+
+  function callModuleMethod(name, module, method) {
+    try {
+      if (module && typeof module[method] === "function") module[method]();
+    } catch (error) {
+      try { console.warn("[WiseHireHop:loader] Module health refresh failed: " + name, error); } catch (ignore) {}
+    }
   }
 
   function loadIndependent(keys) {

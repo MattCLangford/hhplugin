@@ -10,7 +10,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-07-21.2",
+    version: "2026-07-21.4",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -3458,6 +3458,7 @@
 
   window.__wiseStageDesigner = {
     open: openDesigner,
+    refresh: function () { scheduleMaintainToolbarButton(0); },
     calculate: calculateStageKit,
     reloadStock: function () {
       return loadLiveStagingStock({ force: true });
@@ -3468,6 +3469,7 @@
     describe: function () {
       return {
         version: CFG.version,
+        toolbarButtonFound: !!document.getElementById(CFG.buttonId),
         role: "Simple metric/imperial staging spec designer that caches live HireHop stock and generates supplying-list rows from width, depth, height, live/custom carpet colour, fascia sides, live/custom fascia colour, and stair units.",
         assumptions: {
           deckIncrementM: CFG.deckIncrementM,

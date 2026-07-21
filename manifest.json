@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-21.3",
+  "version": "2026-07-21.4",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,8 +12,8 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "3.3",
-      "role": "Route-aware loader that defers page-specific modules, initializes sibling features independently, and applies bounded exponential backoff so one failed script cannot block or rapidly retry the rest of the bundle.",
+      "cacheVersion": "3.4",
+      "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
   ],
@@ -21,15 +21,15 @@
     {
       "file": "5-hirehop.js",
       "status": "lazy-shared-module",
-      "cacheVersion": "0.8",
-      "role": "Shared selectors, endpoints, authoritative depot rules and a priority request queue providing concurrency control, deduplication, caching, hidden-page pausing, rate-limit cooldown and diagnostics.",
+      "cacheVersion": "0.9",
+      "role": "Shared selectors, user-first depot rules, docked-preview-safe toolbar discovery and a priority request queue providing concurrency control, deduplication, caching, hidden-page pausing, rate-limit cooldown and diagnostics.",
       "recommendedLoadOrder": 1
     },
     {
       "file": "1-docprev.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "1.9",
-      "role": "Supplying-list preview and Job Performance strip. Job Track adjustment inputs are loaded once from document 162, then cached while Revenue/CoS changes are recalculated from existing tree data without repeated hidden document renders. Manual refresh remains available.",
+      "cacheVersion": "2.0",
+      "role": "Supplying-list preview and Job Performance strip with live depot re-evaluation and event-driven recovery after HireHop replaces the supplying root. Job Track inputs are loaded once, then Revenue/CoS changes recalculate locally.",
       "recommendedLoadOrder": 2
     },
     {
@@ -71,7 +71,7 @@
     {
       "file": "8-stagedesigner.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "2.1",
+      "cacheVersion": "2.2",
       "role": "Metric/imperial staging designer using the shared priority request queue, preferred per-category catalogue calls and conditional fallbacks. Generated rows and visual behaviour are preserved; writes remain throttled, bounded and Retry-After aware.",
       "recommendedLoadOrder": 8
     },
@@ -106,7 +106,7 @@
     {
       "file": "13-proposalpageicons.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "0.6",
+      "cacheVersion": "0.7",
       "role": "Proposal Creation depot only: uses QTC-V4 CreatePage, PageTemplate and Include Heading custom fields for proposal-page thumbnails, with legacy Section:/Dept: and // markers as read-only fallback. Heading data and every unmatched native tree icon remain untouched.",
       "recommendedLoadOrder": 13
     },
@@ -120,7 +120,7 @@
     {
       "file": "15-supplyingcommercial.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "1.0",
+      "cacheVersion": "1.1",
       "role": "Proposal Creation depot only: adds line-level Revenue and Markup custom-field inputs to native supplying item edit dialogs. Explicit supplying-line fields always win; untouched lines resolve their inventory master by LIST_ID and use its Revenue/Markup as defaults. Inventory-master RSP is displayed beside every component row with a dedicated checkbox; selected rows are totalled as Qty × RSP in a kit/bundle pricing summary without changing native selection. Revenue is recalculated from the live native line Total when Qty changes, direct Revenue remains permitted with blank or zero CoS as a 100% GP line with no applicable Markup, edits save through HireHop's native item request, and the supplying grid is presented as CoS (native line Total), Markup, Revenue while preserving native commercial data.",
       "recommendedLoadOrder": 15
     }

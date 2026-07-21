@@ -55,7 +55,9 @@ function createSharedRuntime() {
     location: { search: "", href: "", pathname: "" },
     sessionStorage: createStorage(),
     localStorage: createStorage(),
-    user: { DEPOT_ID: "14", DEPOT: "Proposal Creation" }
+    // Some HireHop sessions expose a generic/current ID alongside the stable
+    // user depot name. Either authoritative match must keep the gate stable.
+    user: { DEPOT_ID: "0", DEPOT: "Proposal Creation" }
   };
   const context = vm.createContext({
     window,
@@ -78,11 +80,14 @@ function createSharedRuntime() {
     clearTimeout
   });
   vm.runInContext(fs.readFileSync(path.join(root, "5-hirehop.js"), "utf8"), context);
-  return window.WiseProposalSectionBuilderHireHop.requests;
+  return window.WiseProposalSectionBuilderHireHop;
 }
 
 async function testRequestManager() {
-  const requests = createSharedRuntime();
+  const shared = createSharedRuntime();
+  const requests = shared.requests;
+  const userDepot = shared.depot.getUserContext();
+  assert(shared.depot.isAllowed(userDepot), "the stable logged-in user depot should pass the Proposal Creation gate");
   let calls = 0;
   const first = requests.request("dedupe", () => {
     calls += 1;
@@ -138,6 +143,16 @@ function testSourceGuards() {
   const loader = fs.readFileSync(path.join(root, "0-loader.js"), "utf8");
   assert(loader.includes("loadIndependent"), "loader should initialize independent modules independently");
   assert(loader.includes("nextRetryAt"), "loader should retain module retry cooldown state");
+  assert(loader.includes("refreshSupplyingModuleHealth"), "loader should refresh module health after HireHop replaces the supplying root");
+  assert(loader.includes("Loading them without that dependency"), "dependent modules must not initialize before the shared module");
+
+  const shared = fs.readFileSync(path.join(root, "5-hirehop.js"), "utf8");
+  assert(shared.includes('allowedIds: ["14"]'), "Proposal Creation depot ID should be an explicit stable gate");
+  assert(shared.includes("#wise-doc-preview-left > div:first-child"), "toolbar discovery should remain valid inside the docked preview");
+
+  const preview = fs.readFileSync(path.join(root, "1-docprev.js"), "utf8");
+  assert(preview.includes("maintainPreviewUi"), "preview UI should recover after supplying-root replacement");
+  assert(preview.includes("forceDepotScan: true"), "preview bootstrap should not remain blocked by an early cached depot context");
 
   const commercial = fs.readFileSync(path.join(root, "15-supplyingcommercial.js"), "utf8");
   assert(commercial.includes("inventory-defaults:"), "inventory defaults should use the shared keyed request queue");

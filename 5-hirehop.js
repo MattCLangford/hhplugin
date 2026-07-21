@@ -9,12 +9,12 @@
    * This module names the HireHop UI surfaces and endpoints the editor depends on.
    */
   var hirehop = {
-    version: "2026-07-21.2",
+    version: "2026-07-21.4",
     purpose: "Centralises HireHop selectors, endpoints, depot gating, request control, retry timings, search helpers, and tree item prefixes.",
 
     selectors: {
       itemsTab: "#items_tab",
-      toolbarHost: "#items_tab > div:first-child",
+      toolbarHost: "#wise-doc-preview-left > div:first-child,#items_tab > div:first-child:not(#wise-doc-preview-workspace)",
       tree: "#items_tab .jstree",
       treeNodes: "#items_tab li.jstree-node,#items_tab a.jstree-anchor",
       treeClicked: "#items_tab .jstree-clicked",
@@ -32,7 +32,7 @@
     },
 
     depot: {
-      allowedIds: [],
+      allowedIds: ["14"],
       allowedNames: ["Proposal Creation"],
       blockWhenUndetected: true,
       fieldNames: ["depot_id", "depot", "branch_id", "branch", "location_id", "location", "site_id", "site", "warehouse_id", "warehouse"],
@@ -67,6 +67,7 @@
   hirehop.depot.normaliseId = normaliseDepotId;
   hirehop.depot.normaliseText = normaliseDepotText;
   hirehop.depot.getActiveContext = getActiveDepotContext;
+  hirehop.depot.getUserContext = readUserDepotContext;
   hirehop.depot.isAllowed = isAllowedDepot;
   hirehop.depot.resolveName = resolveDepotNameFromId;
   hirehop.depot.resolveId = resolveDepotIdFromName;
@@ -97,6 +98,7 @@
     // Prefer explicit/authoritative state. Broad DOM scans are last-resort only;
     // unrelated project fields can contain an allowed depot name.
     var candidates = [
+      readUserDepotContext(),
       readHeaderDepotContext(),
       readWindowDepotContext(),
       readUrlDepotContext(),
@@ -135,6 +137,10 @@
     context = normaliseDepotContext(context || getActiveDepotContext());
 
     if (context.id && allowedIds.indexOf(context.id) !== -1) return true;
+    // HireHop can expose 0 while the user context is still being populated;
+    // allow the matching name to resolve that placeholder. A real conflicting
+    // ID remains authoritative and must not be overridden by stale text.
+    if (context.id && context.id !== "0") return false;
     if (context.name && allowedNames.indexOf(normaliseDepotText(context.name)) !== -1) return true;
 
     // A detected authoritative context that does not match must fail closed.
@@ -484,7 +490,8 @@
   }
 
   function readWindowDepotContext() {
-    var id = firstWindowValue([
+    var userContext = readUserDepotContext();
+    var id = userContext.id || firstWindowValue([
       "depot_id",
       "depotId",
       "current_depot_id",
@@ -500,7 +507,7 @@
       "warehouse_id",
       "warehouseId"
     ]);
-    var name = firstWindowValue([
+    var name = userContext.name || firstWindowValue([
       "depot_name",
       "depotName",
       "current_depot_name",
@@ -517,8 +524,14 @@
       "warehouseName"
     ]);
 
+    return { id: id, name: name };
+  }
+
+  function readUserDepotContext() {
+    var id = "";
+    var name = "";
     if (window.user && typeof window.user === "object") {
-      id = id || firstObjectValue(window.user, [
+      var idKeys = [
         "DEPOT_ID",
         "depot_id",
         "DEFAULT_DEPOT_ID",
@@ -527,8 +540,8 @@
         "branch_id",
         "WAREHOUSE_ID",
         "warehouse_id"
-      ]);
-      name = name || firstObjectValue(window.user, [
+      ];
+      var nameKeys = [
         "DEPOT",
         "depot",
         "DEPOT_NAME",
@@ -537,7 +550,9 @@
         "default_depot",
         "WAREHOUSE",
         "warehouse"
-      ]);
+      ];
+      id = firstObjectValue(window.user, idKeys);
+      name = firstObjectValue(window.user, nameKeys);
     }
 
     return { id: id, name: name };
@@ -1012,8 +1027,33 @@
         proposalPageIcons: !!window.__wiseProposalPageIconsLoaded,
         jobGroups: !!window.__wiseJobGroupsLoaded,
         supplyingCommercial: !!window.__wiseSupplyingCommercialLoaded
+      },
+      health: {
+        docPreview: safeModuleDescription(window.__wiseDocPreview),
+        stageDesigner: safeModuleDescription(window.__wiseStageDesigner),
+        proposalPageIcons: safeModuleDescription(window.__wiseProposalPageIcons),
+        supplyingCommercial: safeModuleDescription(window.__wiseSupplyingCommercial)
       }
     };
+  }
+
+  function safeModuleDescription(module) {
+    try {
+      if (!module || typeof module.describe !== "function") return null;
+      var detail = module.describe() || {};
+      var safe = {};
+      [
+        "version", "loaded", "depotAllowed", "supplyingListFound",
+        "toolbarButtonFound", "jobPerformanceFound", "panelOpen",
+        "gridFound", "projectedInventoryRows", "selectedRspLines",
+        "activePageIcons", "disabledPageIcons", "technicalSummaryIcons"
+      ].forEach(function (key) {
+        if (Object.prototype.hasOwnProperty.call(detail, key)) safe[key] = detail[key];
+      });
+      return safe;
+    } catch (error) {
+      return { error: String(error && error.message || error || "Health check failed") };
+    }
   }
 
   function debugDepotDetection() {

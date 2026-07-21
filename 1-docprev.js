@@ -4,7 +4,7 @@
   if (window.__wiseDocPreviewLoaded) return;
   window.__wiseDocPreviewLoaded = true;
 
-  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.2"); } catch (e) {}
+  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.4"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -133,6 +133,7 @@
   var nextPreviewLoadId = 1;
   var previewButtonRetryCount = 0;
   var previewButtonRetryMax = 30;
+  var activeItemsTabRoot = null;
 
   waitForAllowedDepotAndInit();
 
@@ -170,7 +171,7 @@
       }
 
       if (tries < DEPOT_BOOTSTRAP_MAX_TRIES) {
-        scheduleAttempt(DEPOT_BOOTSTRAP_RETRY_MS, {});
+        scheduleAttempt(DEPOT_BOOTSTRAP_RETRY_MS, { forceDepotScan: true });
       }
     }
 
@@ -181,10 +182,10 @@
     }
 
     $(window).on("load.wiseDocPreviewDepot focus.wiseDocPreviewDepot", function () {
-      scheduleAttempt(DEPOT_BOOTSTRAP_EVENT_DELAY_MS, {});
+      scheduleAttempt(DEPOT_BOOTSTRAP_EVENT_DELAY_MS, { forceDepotScan: true });
     });
     $(document).on("ajaxComplete.wiseDocPreviewDepot", function () {
-      scheduleAttempt(DEPOT_BOOTSTRAP_EVENT_DELAY_MS, {});
+      scheduleAttempt(DEPOT_BOOTSTRAP_EVENT_DELAY_MS, { forceDepotScan: true });
     });
     $(document).on("change.wiseDocPreviewDepot input.wiseDocPreviewDepot", "select,input", function () {
       if (isLikelyDepotControl(this)) scheduleAttempt(DEPOT_BOOTSTRAP_EVENT_DELAY_MS, { forceDepotScan: true });
@@ -713,6 +714,7 @@
         installDepotRuntimeGate();
         installAjaxHooks();
         installFetchHooks();
+        installLifecycleMaintenance();
 
         $(window).off("resize.wiseDocPreview").on("resize.wiseDocPreview", function () {
           if (!panelOpen) return;
@@ -1820,7 +1822,49 @@
   }
 
   function findToolbarHost() {
-    return $("#items_tab > div:first-child");
+    return $("#wise-doc-preview-left > div:first-child,#items_tab > div:first-child:not(#wise-doc-preview-workspace)").first();
+  }
+
+  function installLifecycleMaintenance() {
+    $(window)
+      .off("focus.wiseDocPreviewLifecycle")
+      .on("focus.wiseDocPreviewLifecycle", function () { setTimeout(maintainPreviewUi, 80); });
+    $(document)
+      .off("ajaxComplete.wiseDocPreviewLifecycle")
+      .on("ajaxComplete.wiseDocPreviewLifecycle", function () { setTimeout(maintainPreviewUi, 140); });
+    maintainPreviewUi();
+  }
+
+  function maintainPreviewUi() {
+    var root = document.getElementById("items_tab");
+    if (!root) {
+      activeItemsTabRoot = null;
+      return;
+    }
+    if (!isCurrentDepotAllowed()) {
+      removePreviewEntryPoint();
+      activeItemsTabRoot = root;
+      return;
+    }
+
+    var rootChanged = activeItemsTabRoot !== root;
+    activeItemsTabRoot = root;
+    var restoreOpenPanel = panelOpen && !document.getElementById(OUTER_WRAP_ID);
+    if (restoreOpenPanel) {
+      panelOpen = false;
+      previewHasLoaded = false;
+      removeTargetedDomObserver();
+    }
+
+    tryAddPreviewButton();
+    if ($("#" + TOGGLE_ID).length && !$("#" + JOB_PERFORMANCE_ID).length) {
+      mountJobPerformanceStrip(findToolbarHost());
+    }
+    if (restoreOpenPanel) {
+      setTimeout(openDockedPreview, 0);
+    } else if (panelOpen && rootChanged) {
+      installTargetedDomObserver();
+    }
   }
 
   function getNativeToolbarButtonTemplate($host) {
@@ -3071,5 +3115,19 @@
       .replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;");
   }
+
+  window.__wiseDocPreview = {
+    refresh: maintainPreviewUi,
+    describe: function () {
+      return {
+        loaded: true,
+        depotAllowed: isCurrentDepotAllowed(),
+        supplyingListFound: !!document.getElementById("items_tab"),
+        toolbarButtonFound: !!document.getElementById(TOGGLE_ID),
+        jobPerformanceFound: !!document.getElementById(JOB_PERFORMANCE_ID),
+        panelOpen: panelOpen
+      };
+    }
+  };
 
 })();

@@ -12,7 +12,7 @@ On the supplying list, `1-docprev.js` opens the docked proposal preview by defau
 
 The loader preserves this order when a route needs the modules.
 
-After `5-hirehop.js` is available, sibling modules for the detected route initialize independently. A failed script uses bounded exponential backoff and cannot prevent other features from loading. Automatic HireHop reads using the shared request service are serialised and rate-limit aware; user-opened work receives priority over background inventory hydration.
+The loader does not start shared-dependent modules until `5-hirehop.js` is available. After that dependency succeeds, sibling modules for the detected route initialize independently. A failed sibling uses bounded exponential backoff and cannot prevent other features from loading. Replacing HireHop's complete supplying root invokes the modules' local health hooks so observers and toolbar controls attach to the new DOM. Automatic HireHop reads using the shared request service are serialised and rate-limit aware; user-opened work receives priority over background inventory hydration.
 
 1. `5-hirehop.js`
 2. `1-docprev.js`
