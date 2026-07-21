@@ -5,34 +5,37 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-21.1",
+    version: "2026-07-21.3",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
     recoveryIntervalMs: 2500,
     recoveryChecks: 12,
     scripts: {
-      hirehop: { file: "5-hirehop.js", version: "0.7" },
-      docprev: { file: "1-docprev.js", version: "1.8" },
+      hirehop: { file: "5-hirehop.js", version: "0.8" },
+      docprev: { file: "1-docprev.js", version: "1.9" },
       autopull: { file: "2-apselall.js", version: "0.5" },
       meta: { file: "3-meta.js", version: "0.2" },
       layout: { file: "4-layout.js", version: "0.2" },
-      editor: { file: "6-editor2.js", version: "1.7", enabled: false },
-      captrack: { file: "7-captrack.js", version: "3.0" },
-      stage: { file: "8-stagedesigner.js", version: "2.0" },
-      checklist: { file: "9-jobchecklist.js", version: "1.0" },
-      projectJobs: { file: "10-projectjobs-qol.js", version: "0.9" },
-      projectJourney: { file: "11-projectjourney.js", version: "0.6" },
-      projectGroups: { file: "12-projectgroups.js", version: "0.5" },
-      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.5" },
-      jobGroups: { file: "14-jobgroups.js", version: "0.7" },
-      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "0.9" }
+      editor: { file: "6-editor2.js", version: "1.8", enabled: false },
+      captrack: { file: "7-captrack.js", version: "3.1" },
+      stage: { file: "8-stagedesigner.js", version: "2.1" },
+      checklist: { file: "9-jobchecklist.js", version: "1.2" },
+      projectJobs: { file: "10-projectjobs-qol.js", version: "1.0" },
+      projectJourney: { file: "11-projectjourney.js", version: "0.7" },
+      projectGroups: { file: "12-projectgroups.js", version: "0.12" },
+      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.6" },
+      jobGroups: { file: "14-jobgroups.js", version: "0.8" },
+      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "1.0" }
     }
   };
 
   var baseUrl = resolveBaseUrl();
   var loaded = {};
   var loading = {};
+  var failures = {};
+  var moduleState = {};
+  var runtimeErrors = [];
   var routeTimer = null;
   var recoveryTimer = null;
   var recoveryCount = 0;
@@ -46,12 +49,15 @@
     bindJQueryEventsSoon();
     installRouteObserver();
     startRecoveryChecks();
+    installRuntimeErrorDiagnostics();
 
     window.WiseHireHopEnhancementLoader = {
       version: CFG.version,
       loaded: loaded,
+      failures: failures,
       check: function () { checkRoutes(); },
-      load: loadScript
+      load: loadScript,
+      describe: describeLoader
     };
   }
 
@@ -112,6 +118,7 @@
 
   function startRecoveryChecks() {
     recoveryTimer = setInterval(function () {
+      if (document.hidden) return;
       recoveryCount += 1;
       scheduleRouteCheck(0);
       if (recoveryCount >= CFG.recoveryChecks) {
@@ -136,25 +143,34 @@
     }
 
     if (hasSupplyingList()) loadProposalSupplyingBundle();
-    if (isHomePage()) loadSequence(["hirehop", "captrack"]);
-    if (hasProjectOrJobTabs()) loadSequence(["hirehop", "checklist", "projectJourney", "jobGroups"]);
-    if (hasProjectJobsPage()) loadSequence(["hirehop", "projectJobs", "projectGroups"]);
-    if (hasJobDetailsPage()) loadSequence(["hirehop", "jobGroups"]);
-    if (hasAutopullDialog()) loadSequence(["autopull"]);
+    if (isHomePage()) loadAfterShared(["captrack"]);
+    if (hasProjectOrJobTabs()) loadAfterShared(["checklist", "projectJourney", "jobGroups"]);
+    if (hasProjectJobsPage()) loadAfterShared(["projectJobs", "projectGroups"]);
+    if (hasJobDetailsPage()) loadAfterShared(["jobGroups"]);
+    if (hasAutopullDialog()) loadIndependent(["autopull"]);
   }
 
   function loadProposalSupplyingBundle() {
-    loadSequence(["hirehop", "docprev", "meta", "layout", "editor", "stage", "proposalPageIcons", "supplyingCommercial"]);
+    loadAfterShared(["docprev", "meta", "layout", "editor", "stage", "proposalPageIcons", "supplyingCommercial"]);
   }
 
-  function loadSequence(keys) {
-    var chain = Promise.resolve();
+  function loadAfterShared(keys) {
+    return loadScript("hirehop")
+      .catch(function (error) { reportModuleFailure("hirehop", error); })
+      .then(function () { return loadIndependent(keys); });
+  }
+
+  function loadIndependent(keys) {
+    var requests = [];
     for (var i = 0; i < keys.length; i++) {
       (function (key) {
-        chain = chain.then(function () { return loadScript(key); });
+        requests.push(loadScript(key).catch(function (error) {
+          reportModuleFailure(key, error);
+          return null;
+        }));
       })(keys[i]);
     }
-    return chain;
+    return Promise.all(requests);
   }
 
   function loadScript(key) {
@@ -163,25 +179,120 @@
     if (item.enabled === false) return Promise.resolve();
     if (loaded[key]) return Promise.resolve();
     if (loading[key]) return loading[key];
+    var failed = failures[key];
+    if (failed && failed.nextRetryAt > Date.now()) return Promise.reject(failed.error);
 
     loading[key] = new Promise(function (resolve, reject) {
       var script = document.createElement("script");
+      var settled = false;
+      var timeout = setTimeout(function () {
+        fail(new Error("Timed out loading Wise HireHop module: " + item.file));
+      }, 15000);
       script.async = false;
       script.src = baseUrl + item.file + "?v=" + encodeURIComponent(item.version);
       script.onload = function () {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
         loaded[key] = true;
+        moduleState[key] = { status: "loaded", at: Date.now(), file: item.file };
+        delete failures[key];
         delete loading[key];
         scheduleRouteCheck(60);
         resolve();
       };
-      script.onerror = function () {
+      script.onerror = function () { fail(new Error("Could not load Wise HireHop module: " + item.file)); };
+
+      function fail(error) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if (script.parentNode) script.parentNode.removeChild(script);
         delete loading[key];
-        reject(new Error("Could not load Wise HireHop module: " + item.file));
-      };
+        var previous = failures[key];
+        var attempts = (previous && previous.attempts || 0) + 1;
+        var backoff = Math.min(5 * 60 * 1000, 2000 * Math.pow(2, Math.min(attempts - 1, 7)));
+        backoff += Math.floor(Math.random() * 750);
+        failures[key] = { attempts: attempts, nextRetryAt: Date.now() + backoff, error: error, file: item.file };
+        moduleState[key] = { status: "failed", at: Date.now(), attempts: attempts, retryInMs: backoff, file: item.file };
+        reject(error);
+      }
       (document.head || document.documentElement).appendChild(script);
     });
 
     return loading[key];
+  }
+
+  function reportModuleFailure(key, error) {
+    var failure = failures[key];
+    if (failure && failure.reportedAttempt === failure.attempts) return;
+    if (failure) failure.reportedAttempt = failure.attempts;
+    try {
+      console.warn("[WiseHireHop:loader] Module failed independently; other modules will continue.", {
+        module: key,
+        file: failure && failure.file,
+        attempt: failure && failure.attempts,
+        retryInMs: failure ? Math.max(0, failure.nextRetryAt - Date.now()) : 0,
+        message: String(error && error.message || error || "Unknown error")
+      });
+    } catch (ignore) {}
+  }
+
+  function describeLoader() {
+    var failed = {};
+    Object.keys(failures).forEach(function (key) {
+      failed[key] = {
+        file: failures[key].file,
+        attempts: failures[key].attempts,
+        retryInMs: Math.max(0, failures[key].nextRetryAt - Date.now()),
+        message: String(failures[key].error && failures[key].error.message || "")
+      };
+    });
+    return {
+      version: CFG.version,
+      baseUrl: baseUrl,
+      loaded: Object.keys(loaded).filter(function (key) { return !!loaded[key]; }),
+      loading: Object.keys(loading),
+      failures: failed,
+      modules: moduleState,
+      runtimeErrors: runtimeErrors.slice()
+    };
+  }
+
+  function installRuntimeErrorDiagnostics() {
+    addEvent(window, "error", function (event) {
+      var filename = String(event && event.filename || "");
+      var key = findModuleKeyForFilename(filename);
+      if (!key) return;
+      recordRuntimeError(key, String(event && event.message || "Runtime error"));
+    });
+    addEvent(window, "unhandledrejection", function (event) {
+      var reason = event && event.reason;
+      var stack = String(reason && reason.stack || "");
+      var key = findModuleKeyForFilename(stack);
+      if (!key) return;
+      recordRuntimeError(key, String(reason && reason.message || reason || "Unhandled rejection"));
+    });
+  }
+
+  function findModuleKeyForFilename(value) {
+    value = String(value || "");
+    var keys = Object.keys(CFG.scripts);
+    for (var i = 0; i < keys.length; i++) {
+      if (value.indexOf(CFG.scripts[keys[i]].file) !== -1) return keys[i];
+    }
+    return "";
+  }
+
+  function recordRuntimeError(key, message) {
+    var signature = key + "|" + message;
+    for (var i = 0; i < runtimeErrors.length; i++) {
+      if (runtimeErrors[i].signature === signature) return;
+    }
+    runtimeErrors.push({ signature: signature, module: key, message: message, at: Date.now() });
+    if (runtimeErrors.length > 20) runtimeErrors.shift();
+    moduleState[key] = { status: "runtime-error", at: Date.now(), file: CFG.scripts[key] && CFG.scripts[key].file, message: message };
+    try { console.warn("[WiseHireHop:loader] Runtime error isolated to module " + key + ": " + message); } catch (ignore) {}
   }
 
   function hasSupplyingList() {

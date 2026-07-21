@@ -1,6 +1,9 @@
 (function () {
   "use strict";
 
+  if (window.__wiseProjectJourneyLoaded) return;
+  window.__wiseProjectJourneyLoaded = true;
+
   var $ = window.jQuery;
   if (!$) return;
 
@@ -183,7 +186,7 @@
   };
 
   var CFG = {
-    version: "2026-06-26.6",
+    version: "2026-07-21.2",
     buttonId: "wise-project-journey-tab",
     panelId: "wise-project-journey-panel",
     stylesId: "wise-project-journey-styles",
@@ -205,7 +208,13 @@
     lastAnalysis: null,
     lastPanelMaxHeight: "",
     cachedJobRows: null,
-    cachedProjectData: null
+    cachedProjectData: null,
+    detailRequests: {},
+    detailAttempted: {},
+    recoveryCount: 0,
+    recoveryChecks: 12,
+    renderTimer: null,
+    projectKey: ""
   };
 
   bootstrap();
@@ -215,7 +224,13 @@
     scheduleMaintainProjectJourney(0, { forceScan: true });
 
     state.maintainTimer = setInterval(function () {
+      if (document.hidden) return;
+      state.recoveryCount += 1;
       scheduleMaintainProjectJourney(0, {});
+      if (state.recoveryCount >= state.recoveryChecks) {
+        clearInterval(state.maintainTimer);
+        state.maintainTimer = null;
+      }
     }, CFG.maintainRecoveryMs);
 
     $(window).on("load.wiseProjectJourney focus.wiseProjectJourney resize.wiseProjectJourney hashchange.wiseProjectJourney", function () {
@@ -226,6 +241,7 @@
       tryCacheProjectFromResponse(xhr);
       tryCacheJobsFromResponse(xhr);
       scheduleMaintainProjectJourney(80, { forceScan: true });
+      if ($("#" + CFG.panelId).is(":visible")) scheduleJourneyRender(180);
     });
   }
 
@@ -250,6 +266,9 @@
   }
 
   function maintainProjectJourney() {
+    var projectKey = String(getCurrentProjectId() || "");
+    if (projectKey && state.projectKey && projectKey !== state.projectKey) resetJourneyProjectCache();
+    if (projectKey) state.projectKey = projectKey;
     var $host = findProjectTabsHost();
     if (!$host.length) {
       state.lastHost = null;
@@ -261,6 +280,14 @@
     state.lastHost = $host.get(0);
     installJourneyTab($host);
     bindNativeTabReset($host);
+  }
+
+  function resetJourneyProjectCache() {
+    state.cachedJobRows = null;
+    state.cachedProjectData = null;
+    state.detailRequests = {};
+    state.detailAttempted = {};
+    state.lastAnalysis = null;
   }
 
   function findProjectTabsHost() {
@@ -469,6 +496,7 @@
     ensureJourneyPanel($host);
     renderJourneyPanel();
     showJourneyPanel($host);
+    maybePreloadJobData();
   }
 
   function ensureJourneyPanel($host) {
@@ -519,6 +547,14 @@
     $panel.html(buildJourneyHtml(data, analysis));
     bindJourneyPanelEvents();
     applyJourneyPanelSizing($panel);
+  }
+
+  function scheduleJourneyRender(delay) {
+    if (state.renderTimer) clearTimeout(state.renderTimer);
+    state.renderTimer = setTimeout(function () {
+      state.renderTimer = null;
+      if ($("#" + CFG.panelId).is(":visible")) renderJourneyPanel();
+    }, Math.max(0, Number(delay) || 0));
   }
 
   function showJourneyPanel($host) {
@@ -2033,29 +2069,8 @@
   }
 
   function maybePreloadJobData() {
-    var $grid = $("#jobs_grid,#project_jobs_grid,table[id*='jobs'][id*='grid']").first();
-    var hasJqGrid = $grid.length && typeof $grid.jqGrid === "function";
-
-    // If jqGrid is present and we have no cached rows yet, try fetching from its URL
-    if (hasJqGrid && (!state.cachedJobRows || !state.cachedJobRows.length)) {
-      var url;
-      try { url = $grid.jqGrid("getGridParam", "url"); } catch (e) {}
-      if (url) {
-        $.ajax({
-          url: url, method: "GET", dataType: "json",
-          success: function (data) {
-            tryCacheJobsFromResponse({ responseText: JSON.stringify(data) });
-            maybePreloadJobDetails();
-            if (state.cachedJobRows && state.cachedJobRows.length) {
-              scheduleMaintainProjectJourney(50, { forceScan: true });
-            }
-          }
-        });
-        return;
-      }
-    }
-
-    // Always attempt detail preload — will fall back to DOM rows if cache is empty
+    // The native grid request is observed through ajaxComplete and its rendered
+    // rows are available in the DOM. Never duplicate that request here.
     maybePreloadJobDetails();
   }
 
@@ -2078,24 +2093,58 @@
       }
     }
     if (!toFetch.length) return;
-    toFetch = toFetch.slice(0, 5);
+    toFetch = toFetch.filter(function (jobId) {
+      return !state.detailAttempted[jobId] && !state.detailRequests[jobId];
+    }).slice(0, 5);
+    var requestProjectKey = state.projectKey;
     for (var j = 0; j < toFetch.length; j++) {
       (function (jobId) {
-        $.ajax({
-          url: "api/job_data.php?job=" + encodeURIComponent(jobId),
-          method: "GET", dataType: "json",
-          success: function (data) {
+        state.detailAttempted[jobId] = true;
+        state.detailRequests[jobId] = requestJourneyJobDetail(jobId)
+          .then(function (data) {
+            if (requestProjectKey !== state.projectKey) return;
             if (!data || typeof data !== "object") return;
             tryCacheJobsFromResponse({ responseText: JSON.stringify(data) });
-            scheduleMaintainProjectJourney(120, { forceScan: true });
-          }
-        });
+            scheduleJourneyRender(120);
+          })
+          .catch(function (error) {
+            delete state.detailAttempted[jobId];
+            log("Job detail preload failed for " + jobId, error);
+          })
+          .then(function () { delete state.detailRequests[jobId]; });
       })(toFetch[j]);
     }
   }
 
+  function requestJourneyJobDetail(jobId) {
+    var url = "api/job_data.php?job=" + encodeURIComponent(jobId);
+    var factory = function () {
+      return new Promise(function (resolve, reject) {
+        $.ajax({
+          url: url,
+          method: "GET",
+          dataType: "json",
+          success: resolve,
+          error: function (xhr, status, error) {
+            var failure = new Error(String(error || status || "Job detail request failed"));
+            failure.status = Number(xhr && xhr.status) || 0;
+            failure.responseText = String(xhr && xhr.responseText || "").slice(0, 300);
+            reject(failure);
+          }
+        });
+      });
+    };
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    var requests = shared && shared.requests;
+    if (!requests || typeof requests.request !== "function") return factory();
+    return requests.request("journey-job-detail:" + jobId, factory, {
+      priority: 20,
+      minGapMs: 1250,
+      cacheTtlMs: 5 * 60 * 1000
+    });
+  }
+
   function buildJourneyHtml(data, analysis) {
-    maybePreloadJobData();
     var operationalMilestones = getOperationalMilestones(data.milestones || []);
     var visibleMilestones = state.showCriticalOnly ? filterCriticalMilestones(operationalMilestones) : operationalMilestones;
     var issuesByMilestone = indexIssuesByMilestone(analysis.issues);

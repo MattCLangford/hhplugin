@@ -6,6 +6,9 @@
 (function () {
   "use strict";
 
+  if (window.__wiseJobGroupsLoaded) return;
+  window.__wiseJobGroupsLoaded = true;
+
   var $ = window.jQuery;
   if (!$) return;
 
@@ -21,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-07-16.1", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-07-21.2", maintainRecoveryMs: 5000 };
 
   var GROUPS = [
     {
@@ -88,7 +91,7 @@
   ];
 
   var ALL_LABELS = buildAllLabels();
-  var state = { maintainTimer: null, maintainScheduled: null, lastRoot: null };
+  var state = { maintainTimer: null, maintainScheduled: null, lastRoot: null, recoveryCount: 0, recoveryChecks: 12 };
 
   bootstrap();
 
@@ -108,7 +111,15 @@
   function bootstrap() {
     installStyles();
     scheduleMaintain(0);
-    state.maintainTimer = setInterval(function () { scheduleMaintain(0); }, CFG.maintainRecoveryMs);
+    state.maintainTimer = setInterval(function () {
+      if (document.hidden) return;
+      state.recoveryCount += 1;
+      scheduleMaintain(0);
+      if (state.recoveryCount >= state.recoveryChecks) {
+        clearInterval(state.maintainTimer);
+        state.maintainTimer = null;
+      }
+    }, CFG.maintainRecoveryMs);
     $(window).on("load.wiseJobGroups focus.wiseJobGroups hashchange.wiseJobGroups", function () { scheduleMaintain(60); });
     $(document).on("ajaxComplete.wiseJobGroups", function () { scheduleMaintain(80); });
   }

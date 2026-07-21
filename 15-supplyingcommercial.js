@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.1",
+    version: "2026-07-21.2",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -33,6 +33,9 @@
     markupField: "Markup",
     rspField: "RSP",
     rspSummaryId: "wise-rsp-selection-summary",
+    inventoryCacheTtlMs: 15 * 60 * 1000,
+    inventoryFallbackGapMs: 500,
+    inventoryUpdateDebounceMs: 2500,
     refreshDelayMs: 60,
     recoveryIntervalMs: 1200,
     recoveryChecks: 18,
@@ -60,6 +63,11 @@
     lastSelectedNodeId: "",
     inheritedDefaults: {},
     inheritedRequests: {},
+    inheritedFailures: {},
+    inventoryUpdateTimer: null,
+    inventoryUpdatedKeys: {},
+    inventoryUiRefreshTimer: null,
+    lastInventoryUiRefreshAt: 0,
     projectedRows: 0,
     gridFound: false,
     projectedColumns: [],
@@ -76,6 +84,7 @@
     scheduleRefresh(0);
 
     state.recoveryTimer = setInterval(function () {
+      if (document.hidden) return;
       state.recoveryCount += 1;
       scheduleRefresh(0);
       if (state.recoveryCount >= CFG.recoveryChecks) {
@@ -170,7 +179,7 @@
         }
       }
     });
-    state.observer.observe(document.body || root, {
+    state.observer.observe(root, {
       childList: true,
       attributes: true,
       attributeFilter: ["style", "class", "aria-hidden"],
@@ -1767,24 +1776,66 @@
   function queueInheritedCommercialDefaults(node) {
     if (!window.fetch) return;
     var info = getInventoryMasterInfo(node);
-    if (!info.key || state.inheritedDefaults[info.key] || state.inheritedRequests[info.key]) return;
+    if (!info.key || state.inheritedDefaults[info.key] || state.inheritedRequests[info.key] || state.inheritedFailures[info.key]) return;
 
-    state.inheritedRequests[info.key] = resolveInventoryCommercialDefaults(info)
+    state.inheritedRequests[info.key] = requestInventoryCommercialDefaults(info)
       .then(function (defaults) {
         state.inheritedDefaults[info.key] = defaults;
         delete state.inheritedRequests[info.key];
-        scheduleRefresh(0);
-        $(document).trigger("wise:supplying-commercial-defaults-updated", [info.key, defaults]);
+        scheduleInventoryDefaultsUiRefresh();
+        queueInventoryDefaultsUpdatedEvent(info.key, defaults);
         return defaults;
       })
-      .catch(function () {
+      .catch(function (error) {
         var empty = resolvedEmptyCommercialDefaults();
+        empty.failed = true;
         state.inheritedDefaults[info.key] = empty;
+        state.inheritedFailures[info.key] = {
+          at: Date.now(),
+          status: Number(error && error.status) || 0,
+          message: String(error && error.message || "Inventory lookup failed")
+        };
         delete state.inheritedRequests[info.key];
-        scheduleRefresh(0);
-        $(document).trigger("wise:supplying-commercial-defaults-updated", [info.key, empty]);
+        scheduleInventoryDefaultsUiRefresh();
+        queueInventoryDefaultsUpdatedEvent(info.key, empty);
         return empty;
       });
+  }
+
+  function requestInventoryCommercialDefaults(info) {
+    var requests = getSharedRequestManager();
+    if (!requests) return resolveInventoryCommercialDefaults(info);
+    return requests.request("inventory-defaults:" + info.key, function () {
+      return resolveInventoryCommercialDefaults(info);
+    }, {
+      priority: -20,
+      pauseWhenHidden: true,
+      minGapMs: getHireHopNumberValue("timings", "readMinGapMs", 1250),
+      cacheTtlMs: CFG.inventoryCacheTtlMs,
+      sessionCache: true
+    });
+  }
+
+  function queueInventoryDefaultsUpdatedEvent(key, defaults) {
+    state.inventoryUpdatedKeys[String(key || "")] = defaults || {};
+    if (state.inventoryUpdateTimer) clearTimeout(state.inventoryUpdateTimer);
+    state.inventoryUpdateTimer = setTimeout(function () {
+      state.inventoryUpdateTimer = null;
+      var updated = state.inventoryUpdatedKeys;
+      state.inventoryUpdatedKeys = {};
+      $(document).trigger("wise:supplying-commercial-defaults-updated", [Object.keys(updated), updated]);
+    }, CFG.inventoryUpdateDebounceMs);
+  }
+
+  function scheduleInventoryDefaultsUiRefresh() {
+    var minGap = 4000;
+    var delay = Math.max(0, minGap - (Date.now() - state.lastInventoryUiRefreshAt));
+    if (state.inventoryUiRefreshTimer) return;
+    state.inventoryUiRefreshTimer = setTimeout(function () {
+      state.inventoryUiRefreshTimer = null;
+      state.lastInventoryUiRefreshAt = Date.now();
+      scheduleRefresh(0);
+    }, delay);
   }
 
   function resolveInventoryCommercialDefaults(info) {
@@ -1799,23 +1850,67 @@
         headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
       })
         .then(function (response) {
-          if (!response || !response.ok) return null;
-          return response.text();
+          if (!response) return null;
+          return response.text().then(function (text) {
+            if (response.ok) return text;
+            if (isInventoryRateLimitResponse(response, text)) throw inventoryRequestError(response, text);
+            return null;
+          });
         })
         .then(function (text) {
           var payload = parseInventoryResponse(text);
-          if (payload == null) return tryRequest(index + 1);
+          if (payload == null) return waitForInventoryFallback().then(function () { return tryRequest(index + 1); });
+          if (inventoryPayloadRateLimited(payload)) {
+            var limited = new Error("HireHop inventory lookup returned rate-limit code 327.");
+            limited.status = 429;
+            limited.responseText = "too many transactions";
+            throw limited;
+          }
           var result = findInventoryCommercialDefaults(payload, info);
           if (result.foundCommercial) return result.defaults;
-          return tryRequest(index + 1);
+          return waitForInventoryFallback().then(function () { return tryRequest(index + 1); });
         })
-        .catch(function () { return tryRequest(index + 1); });
+        .catch(function (error) {
+          if (isInventoryRateLimitError(error)) throw error;
+          return waitForInventoryFallback().then(function () { return tryRequest(index + 1); });
+        });
     }
 
     return tryRequest(0).then(function (defaults) {
       if (defaults && defaults.resolved) return defaults;
       return resolvedEmptyCommercialDefaults();
     });
+  }
+
+  function waitForInventoryFallback() {
+    return new Promise(function (resolve) { setTimeout(resolve, CFG.inventoryFallbackGapMs); });
+  }
+
+  function isInventoryRateLimitResponse(response, text) {
+    if (Number(response && response.status) === 429) return true;
+    var value = String(text || "").toLowerCase();
+    return value.indexOf("too many") !== -1 || value.indexOf("rate limit") !== -1 || value.indexOf("too many transactions") !== -1;
+  }
+
+  function inventoryRequestError(response, text) {
+    var error = new Error("HireHop inventory lookup was rate limited.");
+    error.status = Number(response && response.status) || 429;
+    error.responseText = String(text || "").slice(0, 300);
+    var retryAfter = response && response.headers && response.headers.get ? response.headers.get("retry-after") : "";
+    if (/^\d+(?:\.\d+)?$/.test(String(retryAfter || ""))) error.retryAfterMs = Math.ceil(Number(retryAfter) * 1000);
+    return error;
+  }
+
+  function isInventoryRateLimitError(error) {
+    if (Number(error && error.status) === 429) return true;
+    var value = String(error && (error.responseText || error.message) || "").toLowerCase();
+    return value.indexOf("too many") !== -1 || value.indexOf("rate limit") !== -1 || value.indexOf("too many transactions") !== -1;
+  }
+
+  function inventoryPayloadRateLimited(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    return String(payload.error == null ? "" : payload.error) === "327" ||
+      String(payload.warning == null ? "" : payload.warning) === "327";
   }
 
   function buildInventoryDefaultRequests(info) {
@@ -2096,6 +2191,11 @@
 
   function removeEnhancements() {
     stopCosWatcher();
+    if (state.inventoryUpdateTimer) clearTimeout(state.inventoryUpdateTimer);
+    if (state.inventoryUiRefreshTimer) clearTimeout(state.inventoryUiRefreshTimer);
+    state.inventoryUpdateTimer = null;
+    state.inventoryUiRefreshTimer = null;
+    state.inventoryUpdatedKeys = {};
     $("." + CFG.panelClass).remove();
     $(".wise-rsp-row-control,#" + CFG.rspSummaryId).remove();
     $("[data-wise-commercial-original-label]").each(function () {
@@ -2221,6 +2321,18 @@
     return value ? String(value) : fallback;
   }
 
+  function getHireHopNumberValue(sectionName, key, fallback) {
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    var value = shared && shared[sectionName] && shared[sectionName][key];
+    value = Number(value);
+    return isFinite(value) ? value : fallback;
+  }
+
+  function getSharedRequestManager() {
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    return shared && shared.requests && typeof shared.requests.request === "function" ? shared.requests : null;
+  }
+
   function isProposalCreationDepot() {
     var shared = window.WiseProposalSectionBuilderHireHop;
     if (!shared || !shared.depot) return false;
@@ -2306,6 +2418,11 @@
         itemEditorEnhanced: !!$("." + CFG.panelClass).length,
         fields: { revenue: CFG.revenueField, markup: CFG.markupField, rsp: CFG.rspField },
         selectedRspLines: Object.keys(state.rspSelected).length,
+        inventoryDefaults: {
+          resolved: Object.keys(state.inheritedDefaults).length,
+          pending: Object.keys(state.inheritedRequests).length,
+          failed: Object.keys(state.inheritedFailures).length
+        },
         saveBridge: typeof $.ajaxPrefilter === "function" ? "ajax-prefilter-and-form-fields" : "form-fields"
       };
     }

@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-21.1",
+  "version": "2026-07-21.3",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,8 +12,8 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "3.1",
-      "role": "Tiny route-aware loader that defers page-specific Wise HireHop modules until their matching HireHop page, tab set, supplying list, project journey, or autopull dialog exists.",
+      "cacheVersion": "3.3",
+      "role": "Route-aware loader that defers page-specific modules, initializes sibling features independently, and applies bounded exponential backoff so one failed script cannot block or rapidly retry the rest of the bundle.",
       "recommendedLoadOrder": 1
     }
   ],
@@ -21,15 +21,15 @@
     {
       "file": "5-hirehop.js",
       "status": "lazy-shared-module",
-      "cacheVersion": "0.7",
-      "role": "Shared HireHop selectors, endpoint paths, depot rules, retry timings, search helpers, and tree item prefixes consumed by the section builder and capacity tracker.",
+      "cacheVersion": "0.8",
+      "role": "Shared selectors, endpoints, authoritative depot rules and a priority request queue providing concurrency control, deduplication, caching, hidden-page pausing, rate-limit cooldown and diagnostics.",
       "recommendedLoadOrder": 1
     },
     {
       "file": "1-docprev.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "1.8",
-      "role": "Document preview panel used by power users on the supplying list. It opens docked by default after the toolbar entry point mounts, remains user-closable, and does not reopen automatically after the user closes it during that page session. Directly below the native buttons and above the list, a compact Commercial adjustments reminder and Job Performance strip calculate Revenue from each supplying line's explicit Revenue or its inventory-master default and CoS strictly from native line Totals. Job Track's discretionary discount plus venue and client commissions are shown as a separate monetary Adjustments total and deducted when deriving GP£; they never inflate CoS. GP% remains GP£ divided by line Revenue. The solid-colour performance totaliser fills from 0% to the required 45% GP target and uses the current supplying-line GP heat colour: an accelerated below-target gradient to dark blue at 0%, green at 45%, dark green at 65%, amber at 75%, red at 90%, and deep red at 100%. The misleading native Replacement cost/Weight/Volume/Discount-Markup/Quoted net total footer is hidden presentation-only.",
+      "cacheVersion": "1.9",
+      "role": "Supplying-list preview and Job Performance strip. Job Track adjustment inputs are loaded once from document 162, then cached while Revenue/CoS changes are recalculated from existing tree data without repeated hidden document renders. Manual refresh remains available.",
       "recommendedLoadOrder": 2
     },
     {
@@ -57,70 +57,70 @@
       "file": "6-editor2.js",
       "status": "disabled-ready-to-enable",
       "enabled": false,
-      "cacheVersion": "1.7",
+      "cacheVersion": "1.8",
       "role": "Main proposal page editor and HireHop authoring layer, updated to read and write QTC-V4 Heading custom fields with legacy prefix/suffix fallback. Retained but currently skipped by 0-loader.js; set its loader entry to enabled: true when it is needed again.",
       "recommendedLoadOrder": 6
     },
     {
       "file": "7-captrack.js",
       "status": "lazy-home-page",
-      "cacheVersion": "3.0",
+      "cacheVersion": "3.1",
       "role": "Full-page Wise capacity timeline, with a home-page entry button visible across all depots, using project-level custom fields, date-range filtering, Wise status controls, and sanitized absence overlay support.",
       "recommendedLoadOrder": 7
     },
     {
       "file": "8-stagedesigner.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "2.0",
-      "role": "Simple metric/imperial staging designer that caches live HireHop hire stock plus imperial sales consumables, adds the required small/medium/large staging box by deck count, limits carpet/fascia colour choices to exact live stock colours with a custom colour fallback, imports stage rows under a generated heading that includes 3/4 sided fascia, and keeps carpet to one combined stage-top/tread row.",
+      "cacheVersion": "2.1",
+      "role": "Metric/imperial staging designer using the shared priority request queue, preferred per-category catalogue calls and conditional fallbacks. Generated rows and visual behaviour are preserved; writes remain throttled, bounded and Retry-After aware.",
       "recommendedLoadOrder": 8
     },
     {
       "file": "9-jobchecklist.js",
       "status": "lazy-project-job-tabs",
-      "cacheVersion": "1.0",
-      "role": "Project and job page UI polish that hides Billing and Purchase orders tabs for non-admin users across all depots, keeps them visible for admin users, and adds a native Checklist tab panel with placeholder project/job checklist fields using native tab activation where available.",
+      "cacheVersion": "1.2",
+      "role": "Project and job page UI polish that hides Billing and Purchase orders tabs for non-admin users and keeps them visible for admins. The prototype Checklist tab and panel are disabled while their source is retained for possible future use.",
       "recommendedLoadOrder": 9
     },
     {
       "file": "10-projectjobs-qol.js",
       "status": "lazy-project-details",
-      "cacheVersion": "0.9",
+      "cacheVersion": "1.0",
       "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable, adds a compact project-info toggle above the jobs grid, and hides secondary project-level timing fields so project dates read as the Wise event wrapper.",
       "recommendedLoadOrder": 10
     },
     {
       "file": "11-projectjourney.js",
       "status": "lazy-project-tabs",
-      "cacheVersion": "0.6",
-      "role": "Project page Journey tab that visualises the Wise Event Wrapper from Start Date Time and Project End Date Time, operational milestones, critical path, readiness score, department readiness, and issues/exceptions with mock data plus live-data mapping hooks, using native tab activation where available.",
+      "cacheVersion": "0.7",
+      "role": "Project Journey tab that reuses the native jobs-grid response and requests missing job details only after the user opens Journey, serialised through the shared request queue.",
       "recommendedLoadOrder": 11
     },
     {
       "file": "12-projectgroups.js",
       "status": "lazy-project-details",
-      "cacheVersion": "0.11",
+      "cacheVersion": "0.12",
       "role": "Proposal Creation depot only (gated on the logged-in user's active depot via window.user, not the shared 5-hirehop.js DOM-scan helper, which was confirmed unreliable on this page): groups the native #proj_info project details fields into 5 white rounded 'card' sections (Wise Project Details, Project Ownership, Operational Timings, Working Links, System Details), reorders them so Salesforce/Wise info leads and native HireHop record fields (System Details, compact/collapsible via a Show more toggle) take a back seat, and gives every card an accent-coloured left rail plus icon badge so the live project/stage colour reads clearly. Wise Project Details renders as 3 equal columns and gets a coloured Status pill using a fixed stage palette (purple=quote, yellow=very likely, orange=hold, green=confirmed, grey=closed/lost/cancelled, blue=completed/invoiced). Accent colour is read directly from #proj_info's own inline background-color (the live project colour). Native layout structure and save behaviour fully unaffected — fields are reparented, never cloned/removed.",
       "recommendedLoadOrder": 12
     },
     {
       "file": "13-proposalpageicons.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "0.5",
+      "cacheVersion": "0.6",
       "role": "Proposal Creation depot only: uses QTC-V4 CreatePage, PageTemplate and Include Heading custom fields for proposal-page thumbnails, with legacy Section:/Dept: and // markers as read-only fallback. Heading data and every unmatched native tree icon remain untouched.",
       "recommendedLoadOrder": 13
     },
     {
       "file": "14-jobgroups.js",
       "status": "lazy-job-details",
-      "cacheVersion": "0.7",
+      "cacheVersion": "0.8",
       "role": "Proposal Creation depot only: restyles the native job details information area into three balanced, responsive cards — Job Info, Job Dates and Times, and Job Commercial Info — with operational subgroups and natural reading order. Goods out and Goods in are omitted presentation-only; HireHop's underlying job values and save behavior are unchanged.",
       "recommendedLoadOrder": 14
     },
     {
       "file": "15-supplyingcommercial.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "0.9",
+      "cacheVersion": "1.0",
       "role": "Proposal Creation depot only: adds line-level Revenue and Markup custom-field inputs to native supplying item edit dialogs. Explicit supplying-line fields always win; untouched lines resolve their inventory master by LIST_ID and use its Revenue/Markup as defaults. Inventory-master RSP is displayed beside every component row with a dedicated checkbox; selected rows are totalled as Qty × RSP in a kit/bundle pricing summary without changing native selection. Revenue is recalculated from the live native line Total when Qty changes, direct Revenue remains permitted with blank or zero CoS as a 100% GP line with no applicable Markup, edits save through HireHop's native item request, and the supplying grid is presented as CoS (native line Total), Markup, Revenue while preserving native commercial data.",
       "recommendedLoadOrder": 15
     }

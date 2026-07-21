@@ -1,6 +1,9 @@
 (function () {
   "use strict";
 
+  if (window.__wiseProposalPageEditorLoaded) return;
+  window.__wiseProposalPageEditorLoaded = true;
+
   var $ = window.jQuery;
   if (!$) return;
 
@@ -15,7 +18,7 @@
    * - Hands native listed-item flows back to HireHop where HireHop remains the source of truth.
    */
   var CFG = {
-    version: "2026-07-20.1-heading-custom-fields",
+    version: "2026-07-21.2-reliability",
     buttonId: "wise-proposal-page-editor-button",
     stylesId: "wise-proposal-page-editor-styles",
     overlayId: "wise-proposal-page-editor-overlay",
@@ -113,7 +116,9 @@
     viewMode: "native",
     userSelectedNativeView: false,
     bootstrapTimer: null,
-    bootstrapPendingOptions: null
+    bootstrapPendingOptions: null,
+    maintainRecoveryTimer: null,
+    maintainRecoveryCount: 0
   };
 
   function getExternalMetaModule() {
@@ -276,8 +281,14 @@
       setTimeout(updateToolbarCompression, 80);
       setTimeout(updateToolbarCompression, 450);
     });
-    setInterval(function () {
+    editor.maintainRecoveryTimer = setInterval(function () {
+      if (document.hidden) return;
+      editor.maintainRecoveryCount += 1;
       if (editor.ready) maintainDefaultSupplyingListEditor();
+      if (editor.maintainRecoveryCount >= 24) {
+        clearInterval(editor.maintainRecoveryTimer);
+        editor.maintainRecoveryTimer = null;
+      }
     }, 2500);
   }
 
@@ -2603,11 +2614,11 @@
       var text = await response.text();
       var json = tryParseJson(text);
 
-      if (!response.ok) throw new Error("items_delete failed with status " + response.status);
-      if (isRateLimitResponse(json) && attempts < CFG.saveMaxAttempts) {
-        await waitForRateLimit();
+      if (isWriteRateLimitResponse(response, json, text) && attempts < CFG.saveMaxAttempts) {
+        await waitForRateLimit(getRetryAfterMs(response));
         continue;
       }
+      if (!response.ok) throw new Error("items_delete failed with status " + response.status);
       if (json && typeof json.error !== "undefined") throw new Error(readServerMessage(json.error, "Could not delete removed items."));
       return;
     }
@@ -2630,11 +2641,11 @@
       var text = await response.text();
       var json = tryParseJson(text);
 
-      if (!response.ok) throw new Error("items_save failed with status " + response.status);
-      if (isRateLimitResponse(json) && attempts < CFG.saveMaxAttempts) {
-        await waitForRateLimit();
+      if (isWriteRateLimitResponse(response, json, text) && attempts < CFG.saveMaxAttempts) {
+        await waitForRateLimit(getRetryAfterMs(response));
         continue;
       }
+      if (!response.ok) throw new Error("items_save failed with status " + response.status);
       if (json && typeof json.error !== "undefined") throw new Error(readServerMessage(json.error, "HireHop returned an error."));
       if (json && typeof json.warning !== "undefined") throw new Error(readServerMessage(json.warning, "HireHop returned a warning."));
 
@@ -2653,9 +2664,9 @@
     editor.lastWriteAt = Date.now();
   }
 
-  async function waitForRateLimit() {
+  async function waitForRateLimit(retryAfterMs) {
     setStatus("HireHop rate limit reached. Waiting, then retrying...", "warning");
-    await delay(CFG.rateLimitRetryMs);
+    await delay(Math.max(1000, Number(retryAfterMs) || CFG.rateLimitRetryMs));
   }
 
   function setBusy(isBusy) {
@@ -2890,6 +2901,17 @@
     if (!value) return "";
     if ($.isPlainObject(value) && $.isEmptyObject(value)) return "";
     return value;
+  }
+
+  function isWriteRateLimitResponse(response, json, text) {
+    if (Number(response && response.status) === 429 || isRateLimitResponse(json)) return true;
+    text = String(text || "").toLowerCase();
+    return text.indexOf("too many transactions") !== -1 || text.indexOf("too many tries") !== -1;
+  }
+
+  function getRetryAfterMs(response) {
+    var value = response && response.headers && response.headers.get ? response.headers.get("retry-after") : "";
+    return /^\d+(?:\.\d+)?$/.test(String(value || "")) ? Math.ceil(Number(value) * 1000) : CFG.rateLimitRetryMs;
   }
 
   function getHeadingCustomFieldNames() {

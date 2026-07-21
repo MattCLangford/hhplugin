@@ -1,13 +1,16 @@
 (function () {
   "use strict";
 
+  if (window.__wiseStageDesignerLoaded) return;
+  window.__wiseStageDesignerLoaded = true;
+
   var $ = window.jQuery;
   if (!$) return;
 
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-06-12.20",
+    version: "2026-07-21.2",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -72,7 +75,9 @@
     target: null,
     currentSpec: null,
     toolbarTimer: null,
-    toolbarScheduled: null
+    toolbarScheduled: null,
+    toolbarRecoveryCount: 0,
+    toolbarRecoveryChecks: 12
   };
 
   bootstrap();
@@ -81,7 +86,13 @@
     installStyles();
     scheduleMaintainToolbarButton(0);
     state.toolbarTimer = setInterval(function () {
+      if (document.hidden) return;
+      state.toolbarRecoveryCount += 1;
       scheduleMaintainToolbarButton(0);
+      if (state.toolbarRecoveryCount >= state.toolbarRecoveryChecks) {
+        clearInterval(state.toolbarTimer);
+        state.toolbarTimer = null;
+      }
     }, CFG.toolbarRecoveryMs);
 
     $(window).on("load.wiseStageDesigner focus.wiseStageDesigner", function () {
@@ -998,27 +1009,10 @@
     var urls = buildSearchListUrls(term);
 
     for (var i = 0; i < urls.length; i++) {
-      try {
-        var response = await fetch(urls[i].url, {
-          method: "GET",
-          credentials: "same-origin",
-          headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
-        });
-        if (!response.ok) {
-          rememberStockDiagnostic(urls[i].label, response.status, "");
-          continue;
-        }
-        var text = await response.text();
-        var json = tryParseJson(text);
-        if (!json) {
-          rememberStockDiagnostic(urls[i].label, response.status, text);
-          continue;
-        }
-        appendStockCandidates(out, normaliseCandidateList(json, "search:" + term));
-      } catch (err) {
-        rememberStockDiagnostic(urls[i].label, "error", getErrorMessage(err, "Search failed."));
-        warn("Live stock search failed for " + term, err);
-      }
+      var json = await fetchStagingJson(urls[i], "Search failed.");
+      if (!json) continue;
+      appendStockCandidates(out, normaliseCandidateList(json, "search:" + term));
+      if (out.length) break;
     }
 
     return out;
@@ -1027,29 +1021,15 @@
   async function fetchAvailabilityListCandidates(term) {
     var out = [];
     var urls = buildAvailabilityListUrls(term);
+    var successfulGroups = {};
 
     for (var i = 0; i < urls.length; i++) {
-      try {
-        var response = await fetch(urls[i].url, {
-          method: "GET",
-          credentials: "same-origin",
-          headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
-        });
-        if (!response.ok) {
-          rememberStockDiagnostic(urls[i].label, response.status, "");
-          continue;
-        }
-        var text = await response.text();
-        var json = tryParseJson(text);
-        if (!json) {
-          rememberStockDiagnostic(urls[i].label, response.status, text);
-          continue;
-        }
-        appendStockCandidates(out, normaliseCandidateList(json, "availability:" + term));
-      } catch (err) {
-        rememberStockDiagnostic(urls[i].label, "error", getErrorMessage(err, "Availability search failed."));
-        warn("Availability stock search failed for " + term, err);
-      }
+      if (urls[i].fallback && successfulGroups[urls[i].group]) continue;
+      var before = out.length;
+      var json = await fetchStagingJson(urls[i], "Availability search failed.");
+      if (!json) continue;
+      appendStockCandidates(out, normaliseCandidateList(json, "availability:" + term));
+      if (out.length > before && urls[i].group) successfulGroups[urls[i].group] = true;
     }
 
     return out;
@@ -1060,27 +1040,8 @@
     var urls = buildHireStockListUrls();
 
     for (var i = 0; i < urls.length; i++) {
-      try {
-        var response = await fetch(urls[i].url, {
-          method: "GET",
-          credentials: "same-origin",
-          headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
-        });
-        if (!response.ok) {
-          rememberStockDiagnostic(urls[i].label, response.status, "");
-          continue;
-        }
-        var text = await response.text();
-        var json = tryParseJson(text);
-        if (!json) {
-          rememberStockDiagnostic(urls[i].label, response.status, text);
-          continue;
-        }
-        appendStockCandidates(out, normaliseCandidateList(json, "hire-stock-list"));
-      } catch (err) {
-        rememberStockDiagnostic(urls[i].label, "error", getErrorMessage(err, "Hire stock list failed."));
-        warn("Hire stock list failed", err);
-      }
+      var json = await fetchStagingJson(urls[i], "Hire stock list failed.");
+      if (json) appendStockCandidates(out, normaliseCandidateList(json, "hire-stock-list"));
     }
 
     return out;
@@ -1091,30 +1052,86 @@
     var urls = buildSalesStockListUrls();
 
     for (var i = 0; i < urls.length; i++) {
-      try {
-        var response = await fetch(urls[i].url, {
-          method: "GET",
-          credentials: "same-origin",
-          headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
-        });
-        if (!response.ok) {
-          rememberStockDiagnostic(urls[i].label, response.status, "");
-          continue;
-        }
-        var text = await response.text();
-        var json = tryParseJson(text);
-        if (!json) {
-          rememberStockDiagnostic(urls[i].label, response.status, text);
-          continue;
-        }
-        appendStockCandidates(out, normaliseCandidateList(json, "sales-stock-list"));
-      } catch (err) {
-        rememberStockDiagnostic(urls[i].label, "error", getErrorMessage(err, "Sales stock list failed."));
-        warn("Sales stock list failed", err);
-      }
+      var json = await fetchStagingJson(urls[i], "Sales stock list failed.");
+      if (json) appendStockCandidates(out, normaliseCandidateList(json, "sales-stock-list"));
     }
 
     return out;
+  }
+
+  async function fetchStagingJson(request, fallbackMessage) {
+    try {
+      var response = await managedStagingFetch(request);
+      var text = String(response && response.text || "");
+      if (!response.ok) {
+        rememberStockDiagnostic(request.label, response.status, text);
+        if (isStagingRateLimit(response.status, text)) {
+          var limited = new Error("HireHop staging lookup was rate limited.");
+          limited.status = 429;
+          limited.responseText = String(text || "").slice(0, 300);
+          if (Number(response.retryAfterMs) > 0) limited.retryAfterMs = Number(response.retryAfterMs);
+          throw limited;
+        }
+        return null;
+      }
+      var json = tryParseJson(text);
+      if (!json) {
+        rememberStockDiagnostic(request.label, response.status, text);
+        return null;
+      }
+      return json;
+    } catch (err) {
+      rememberStockDiagnostic(request.label, "error", getErrorMessage(err, fallbackMessage));
+      if (isStagingRateLimit(err && err.status, err && (err.responseText || err.message))) throw err;
+      warn(request.label + " failed", err);
+      return null;
+    }
+  }
+
+  function managedStagingFetch(request) {
+    var factory = function () {
+      return fetch(request.url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: { "Accept": "application/json, text/javascript, */*; q=0.01" }
+      }).then(function (response) {
+        return response.text().then(function (text) {
+          var retryAfter = response.headers && response.headers.get ? response.headers.get("retry-after") : "";
+          var packet = {
+            ok: !!response.ok,
+            status: Number(response.status) || 0,
+            text: text,
+            retryAfterMs: /^\d+(?:\.\d+)?$/.test(String(retryAfter || "")) ? Math.ceil(Number(retryAfter) * 1000) : 0
+          };
+          var json = tryParseJson(text);
+          if (!isStagingRateLimit(packet.status, text) && !isStagingPayloadRateLimit(json)) return packet;
+          var limited = new Error("HireHop staging lookup was rate limited.");
+          limited.status = 429;
+          limited.responseText = String(text || "").slice(0, 300);
+          if (packet.retryAfterMs) limited.retryAfterMs = packet.retryAfterMs;
+          throw limited;
+        });
+      });
+    };
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    var requests = shared && shared.requests;
+    if (!requests || typeof requests.request !== "function") return factory();
+    return requests.request("stage-catalog:" + request.url, factory, {
+      priority: 40,
+      minGapMs: getHireHopNumberValue("timings", "readMinGapMs", 1250)
+    });
+  }
+
+  function isStagingRateLimit(status, text) {
+    if (Number(status) === 429) return true;
+    text = String(text || "").toLowerCase();
+    return text.indexOf("too many") !== -1 || text.indexOf("rate limit") !== -1 || text.indexOf("too many transactions") !== -1;
+  }
+
+  function isStagingPayloadRateLimit(payload) {
+    if (!payload || typeof payload !== "object") return false;
+    return String(payload.error == null ? "" : payload.error) === "327" ||
+      String(payload.warning == null ? "" : payload.warning) === "327";
   }
 
   function buildAvailabilityListUrls(term) {
@@ -1141,8 +1158,9 @@
     for (var i = 0; i < ids.length; i++) {
       var catId = Number(ids[i]) || ids[i];
       var cats = [catId];
-      out.push(endpointRequest(base, extendObject(common, { cats: JSON.stringify(cats) }), "availability cats-json " + ids[i] + " " + term));
-      out.push(endpointRequest(base, extendObject(common, { cat: ids[i] }), "availability cat " + ids[i] + " " + term));
+      var group = "availability:" + ids[i];
+      out.push(endpointRequest(base, extendObject(common, { cats: JSON.stringify(cats) }), "availability cats-json " + ids[i] + " " + term, group, false));
+      out.push(endpointRequest(base, extendObject(common, { cat: ids[i] }), "availability cat " + ids[i] + " " + term, group, true));
     }
 
     return out;
@@ -1167,7 +1185,6 @@
     for (var i = 0; i < ids.length; i++) {
       out.push(endpointRequest(base, { cat: ids[i], depot: 0, local: formatLocalDateTime(new Date()), tz: getTimezone() }, "hire-stock-list cat " + ids[i]));
     }
-    out.push(endpointRequest(base, { cat: 0, depot: 0, local: formatLocalDateTime(new Date()), tz: getTimezone() }, "hire-stock-list all"));
     return out;
   }
 
@@ -1186,10 +1203,12 @@
     return [endpointRequest(base, params, "sales-stock-list cat " + String(CFG.salesConsumablesCategoryId || ""))];
   }
 
-  function endpointRequest(base, params, label) {
+  function endpointRequest(base, params, label, group, fallback) {
     return {
       label: label || base,
-      url: base + (base.indexOf("?") === -1 ? "?" : "&") + $.param(params || {})
+      url: base + (base.indexOf("?") === -1 ? "?" : "&") + $.param(params || {}),
+      group: group || "",
+      fallback: !!fallback
     };
   }
 
@@ -1901,11 +1920,11 @@
       var text = await response.text();
       var json = tryParseJson(text);
 
-      if (!response.ok) throw new Error("items_save failed with status " + response.status);
-      if (isRateLimitResponse(json) && attempts < CFG.saveMaxAttempts) {
-        await waitForRateLimit();
+      if (isWriteRateLimitResponse(response, json, text) && attempts < CFG.saveMaxAttempts) {
+        await waitForRateLimit(getRetryAfterMs(response));
         continue;
       }
+      if (!response.ok) throw new Error("items_save failed with status " + response.status);
       if (json && typeof json.error !== "undefined") throw new Error(readServerMessage(json.error, "HireHop returned an error."));
       if (json && typeof json.warning !== "undefined") throw new Error(readServerMessage(json.warning, "HireHop returned a warning."));
 
@@ -1934,11 +1953,11 @@
       var text = await response.text();
       var json = tryParseJson(text);
 
-      if (!response.ok) throw new Error("items_import failed with status " + response.status);
-      if (isRateLimitResponse(json) && attempts < CFG.saveMaxAttempts) {
-        await waitForRateLimit();
+      if (isWriteRateLimitResponse(response, json, text) && attempts < CFG.saveMaxAttempts) {
+        await waitForRateLimit(getRetryAfterMs(response));
         continue;
       }
+      if (!response.ok) throw new Error("items_import failed with status " + response.status);
       if (isBareErrorCode(json, text)) throw new Error(readServerMessage(json != null ? json : text, "HireHop returned an error while importing stage lines."));
       if (json && typeof json.error !== "undefined") {
         throw new Error(readServerMessage(json.error, "HireHop returned an error while importing stage lines.") + " First row: " + summariseImportRow(rows && rows[0]));
@@ -1981,11 +2000,11 @@
       var text = await response.text();
       var json = tryParseJson(text);
 
-      if (!response.ok) throw new Error("items_delete failed with status " + response.status);
-      if (isRateLimitResponse(json) && attempts < CFG.saveMaxAttempts) {
-        await waitForRateLimit();
+      if (isWriteRateLimitResponse(response, json, text) && attempts < CFG.saveMaxAttempts) {
+        await waitForRateLimit(getRetryAfterMs(response));
         continue;
       }
+      if (!response.ok) throw new Error("items_delete failed with status " + response.status);
       if (json && typeof json.error !== "undefined") throw new Error(readServerMessage(json.error, "HireHop returned an error while removing the partial stage."));
       return;
     }
@@ -3294,9 +3313,9 @@
     state.lastWriteAt = Date.now();
   }
 
-  async function waitForRateLimit() {
+  async function waitForRateLimit(retryAfterMs) {
     setStatus("HireHop rate limit reached. Waiting, then retrying...", "warning");
-    await delay(CFG.rateLimitRetryMs);
+    await delay(Math.max(1000, Number(retryAfterMs) || CFG.rateLimitRetryMs));
   }
 
   function delay(ms) {
@@ -3316,6 +3335,17 @@
   function isRateLimitResponse(json) {
     if (!json) return false;
     return isRateLimitCode(json.error) || isRateLimitCode(json.warning);
+  }
+
+  function isWriteRateLimitResponse(response, json, text) {
+    if (Number(response && response.status) === 429 || isRateLimitResponse(json)) return true;
+    text = String(text || "").toLowerCase();
+    return text.indexOf("too many transactions") !== -1 || text.indexOf("too many tries") !== -1;
+  }
+
+  function getRetryAfterMs(response) {
+    var value = response && response.headers && response.headers.get ? response.headers.get("retry-after") : "";
+    return /^\d+(?:\.\d+)?$/.test(String(value || "")) ? Math.ceil(Number(value) * 1000) : CFG.rateLimitRetryMs;
   }
 
   function isRateLimitCode(value) {

@@ -115,6 +115,9 @@
 (function () {
   "use strict";
 
+  if (window.__wiseProjectGroupsLoaded) return;
+  window.__wiseProjectGroupsLoaded = true;
+
   var $ = window.jQuery;
   if (!$) return;
 
@@ -163,13 +166,15 @@
   ];
 
   var CFG = {
-    version: "2026-07-03.6",
+    version: "2026-07-21.2",
     maintainRecoveryMs: 5000
   };
 
   var state = {
     maintainTimer: null,
-    maintainScheduled: null
+    maintainScheduled: null,
+    recoveryCount: 0,
+    recoveryChecks: 12
   };
 
   bootstrap();
@@ -177,7 +182,15 @@
   function bootstrap() {
     installStyles();
     scheduleMaintain(0);
-    state.maintainTimer = setInterval(function () { scheduleMaintain(0); }, CFG.maintainRecoveryMs);
+    state.maintainTimer = setInterval(function () {
+      if (document.hidden) return;
+      state.recoveryCount += 1;
+      scheduleMaintain(0);
+      if (state.recoveryCount >= state.recoveryChecks) {
+        clearInterval(state.maintainTimer);
+        state.maintainTimer = null;
+      }
+    }, CFG.maintainRecoveryMs);
 
     $(window).on("load.wiseProjectGroups focus.wiseProjectGroups resize.wiseProjectGroups hashchange.wiseProjectGroups", function () {
       scheduleMaintain(60);

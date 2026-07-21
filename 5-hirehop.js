@@ -1,13 +1,16 @@
 (function () {
   "use strict";
 
+  if (window.__wiseHireHopSharedLoaded) return;
+  window.__wiseHireHopSharedLoaded = true;
+
   /*
    * Shared HireHop integration contract for the Wise proposal platform.
    * This module names the HireHop UI surfaces and endpoints the editor depends on.
    */
   var hirehop = {
-    version: "2026-05-18.4",
-    purpose: "Centralises HireHop selectors, endpoints, depot gating, retry timings, search helpers, and tree item prefixes.",
+    version: "2026-07-21.2",
+    purpose: "Centralises HireHop selectors, endpoints, depot gating, request control, retry timings, search helpers, and tree item prefixes.",
 
     selectors: {
       itemsTab: "#items_tab",
@@ -41,6 +44,8 @@
       bootstrapRetryMs: 500,
       writeThrottleMs: 1150,
       rateLimitRetryMs: 65000,
+      readConcurrency: 1,
+      readMinGapMs: 1250,
       saveMaxAttempts: 2,
       previewAttachRetryDelays: [10, 180, 720, 1600],
       listedItemMenuRetryDelays: [350, 900, 1500, 2300]
@@ -66,6 +71,8 @@
   hirehop.depot.resolveName = resolveDepotNameFromId;
   hirehop.depot.resolveId = resolveDepotIdFromName;
   hirehop.depot.debug = debugDepotDetection;
+  hirehop.requests = createRequestManager();
+  hirehop.diagnostics = { describe: describeRuntimeDiagnostics };
 
   hirehop.describe = function () {
     return {
@@ -73,6 +80,7 @@
       selectors: hirehop.selectors,
       endpoints: hirehop.endpoints,
       depot: hirehop.depot,
+      requests: hirehop.requests.describe(),
       timings: hirehop.timings,
       kindPrefixes: hirehop.kindPrefixes,
       activeDepotContext: getActiveDepotContext()
@@ -86,14 +94,16 @@
       return normaliseDepotContext(window.__wiseHireHopDepotContext);
     }
 
+    // Prefer explicit/authoritative state. Broad DOM scans are last-resort only;
+    // unrelated project fields can contain an allowed depot name.
     var candidates = [
       readHeaderDepotContext(),
-      readVisibleCurrentDepotContext(),
+      readWindowDepotContext(),
+      readUrlDepotContext(),
+      readStoredDepotContext(),
       readNamedDepotContext(),
       readAttributeDepotContext(),
-      readUrlDepotContext(),
-      readWindowDepotContext(),
-      readStoredDepotContext()
+      readVisibleCurrentDepotContext()
     ];
     var context = normaliseDepotContext(selectBestDepotContext(candidates, hirehop.depot.allowedIds, hirehop.depot.allowedNames));
 
@@ -126,6 +136,10 @@
 
     if (context.id && allowedIds.indexOf(context.id) !== -1) return true;
     if (context.name && allowedNames.indexOf(normaliseDepotText(context.name)) !== -1) return true;
+
+    // A detected authoritative context that does not match must fail closed.
+    // Do not let an unrelated field elsewhere in the page override the user.
+    if (context.id || context.name) return false;
 
     var currentContext = readVisibleCurrentDepotContext(allowedIds, allowedNames);
     if (contextMatchesAllowedDepot(currentContext, allowedIds, allowedNames)) {
@@ -568,17 +582,12 @@
   }
 
   function selectBestDepotContext(contexts, allowedIds, allowedNames) {
-    var first = {};
-
     for (var i = 0; i < contexts.length; i++) {
       var context = normaliseDepotContext(contexts[i]);
       if (!context.id && !context.name) continue;
-
-      if (!first.id && !first.name) first = context;
-      if (contextMatchesAllowedDepot(context, allowedIds, allowedNames)) return context;
+      return context;
     }
-
-    return first;
+    return {};
   }
 
   function contextMatchesAllowedDepot(context, allowedIds, allowedNames) {
@@ -765,6 +774,248 @@
     return $;
   }
 
+  function createRequestManager() {
+    var queue = [];
+    var inFlight = {};
+    var memoryCache = {};
+    var active = 0;
+    var lastStartedAt = 0;
+    var cooldownUntil = 0;
+    var pumpTimer = null;
+    var sequence = 0;
+    var stats = {
+      requested: 0,
+      started: 0,
+      completed: 0,
+      failed: 0,
+      deduplicated: 0,
+      cacheHits: 0,
+      rateLimits: 0
+    };
+    var recent = [];
+    var storagePrefix = "wise-hirehop-request:";
+
+    if (document && document.addEventListener) {
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) pump();
+      }, false);
+    }
+
+    function request(key, factory, options) {
+      key = String(key || "");
+      options = options || {};
+      if (!key || typeof factory !== "function") return Promise.reject(new Error("A request key and factory are required."));
+      stats.requested += 1;
+
+      var cached = readCache(key, options);
+      if (cached.hit) {
+        stats.cacheHits += 1;
+        return Promise.resolve(cached.value);
+      }
+      if (inFlight[key]) {
+        stats.deduplicated += 1;
+        return inFlight[key];
+      }
+
+      var task;
+      var promise = new Promise(function (resolve, reject) {
+        task = {
+          key: key,
+          factory: factory,
+          options: options,
+          priority: Number(options.priority) || 0,
+          sequence: sequence++,
+          resolve: resolve,
+          reject: reject
+        };
+        queue.push(task);
+        queue.sort(function (a, b) {
+          return b.priority - a.priority || a.sequence - b.sequence;
+        });
+      });
+      inFlight[key] = promise;
+      pump();
+      return promise;
+    }
+
+    function pump() {
+      if (pumpTimer) {
+        clearTimeout(pumpTimer);
+        pumpTimer = null;
+      }
+      var concurrency = Math.max(1, Number(hirehop.timings.readConcurrency) || 1);
+      while (active < concurrency && queue.length) {
+        var index = nextRunnableTaskIndex();
+        if (index < 0) return;
+        var task = queue[index];
+        var now = Date.now();
+        var minGap = Math.max(0, Number(task.options.minGapMs));
+        if (!isFinite(minGap)) minGap = Math.max(0, Number(hirehop.timings.readMinGapMs) || 0);
+        var wait = Math.max(0, cooldownUntil - now, (lastStartedAt + minGap) - now);
+        if (wait > 0) {
+          schedulePump(wait);
+          return;
+        }
+        queue.splice(index, 1);
+        startTask(task);
+      }
+    }
+
+    function nextRunnableTaskIndex() {
+      for (var i = 0; i < queue.length; i++) {
+        if (!(queue[i].options.pauseWhenHidden && document && document.hidden)) return i;
+      }
+      return -1;
+    }
+
+    function schedulePump(delay) {
+      if (pumpTimer) clearTimeout(pumpTimer);
+      pumpTimer = setTimeout(function () {
+        pumpTimer = null;
+        pump();
+      }, Math.max(20, Math.ceil(delay || 0)));
+    }
+
+    function startTask(task) {
+      active += 1;
+      lastStartedAt = Date.now();
+      stats.started += 1;
+      record("start", task.key);
+
+      Promise.resolve()
+        .then(function () { return task.factory(); })
+        .then(function (value) {
+          stats.completed += 1;
+          writeCache(task.key, value, task.options);
+          record("complete", task.key);
+          finishTask(task);
+          task.resolve(value);
+        }, function (error) {
+          stats.failed += 1;
+          if (isRateLimitError(error)) {
+            stats.rateLimits += 1;
+            var retryMs = Number(error && error.retryAfterMs);
+            if (!isFinite(retryMs) || retryMs <= 0) retryMs = Math.max(1000, Number(hirehop.timings.rateLimitRetryMs) || 65000);
+            cooldownUntil = Math.max(cooldownUntil, Date.now() + retryMs);
+            record("rate-limit", task.key, retryMs);
+          } else {
+            record("failed", task.key, error && (error.status || error.message));
+          }
+          finishTask(task);
+          task.reject(error);
+        });
+    }
+
+    function finishTask(task) {
+      delete inFlight[task.key];
+      active = Math.max(0, active - 1);
+      pump();
+    }
+
+    function isRateLimitError(error) {
+      var status = Number(error && error.status);
+      if (status === 429) return true;
+      var text = String(error && (error.responseText || error.message) || "").toLowerCase();
+      return text.indexOf("too many") !== -1 || text.indexOf("rate limit") !== -1 || text.indexOf("too many transactions") !== -1;
+    }
+
+    function readCache(key, options) {
+      var now = Date.now();
+      var cached = memoryCache[key];
+      if (cached && cached.expiresAt > now) return { hit: true, value: cached.value };
+      if (cached) delete memoryCache[key];
+      if (!options.sessionCache) return { hit: false };
+      try {
+        var raw = window.sessionStorage && window.sessionStorage.getItem(storagePrefix + encodeURIComponent(key));
+        var parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && parsed.expiresAt > now) {
+          memoryCache[key] = { expiresAt: parsed.expiresAt, value: parsed.value };
+          return { hit: true, value: parsed.value };
+        }
+        if (raw && window.sessionStorage) window.sessionStorage.removeItem(storagePrefix + encodeURIComponent(key));
+      } catch (err) {}
+      return { hit: false };
+    }
+
+    function writeCache(key, value, options) {
+      var ttl = Math.max(0, Number(options.cacheTtlMs) || 0);
+      if (!ttl) return;
+      var entry = { expiresAt: Date.now() + ttl, value: value };
+      memoryCache[key] = entry;
+      if (!options.sessionCache) return;
+      try {
+        if (window.sessionStorage) window.sessionStorage.setItem(storagePrefix + encodeURIComponent(key), JSON.stringify(entry));
+      } catch (err) {}
+    }
+
+    function invalidate(prefix) {
+      prefix = String(prefix || "");
+      Object.keys(memoryCache).forEach(function (key) {
+        if (!prefix || key.indexOf(prefix) === 0) delete memoryCache[key];
+      });
+      if (!prefix) return;
+      try {
+        if (!window.sessionStorage) return;
+        var removals = [];
+        for (var i = 0; i < window.sessionStorage.length; i++) {
+          var key = String(window.sessionStorage.key(i) || "");
+          if (key.indexOf(storagePrefix + encodeURIComponent(prefix)) === 0) removals.push(key);
+        }
+        for (var r = 0; r < removals.length; r++) window.sessionStorage.removeItem(removals[r]);
+      } catch (err) {}
+    }
+
+    function record(type, key, detail) {
+      recent.push({ at: new Date().toISOString(), type: type, key: diagnosticRequestKey(key), detail: detail == null ? "" : String(detail) });
+      if (recent.length > 30) recent.shift();
+    }
+
+    function diagnosticRequestKey(key) {
+      var text = String(key || "");
+      var colon = text.indexOf(":");
+      return colon === -1 ? text : text.slice(0, colon);
+    }
+
+    function describe() {
+      return {
+        active: active,
+        queued: queue.length,
+        inFlight: Object.keys(inFlight).length,
+        cooldownMs: Math.max(0, cooldownUntil - Date.now()),
+        stats: $.extend ? $.extend({}, stats) : stats,
+        recent: recent.slice()
+      };
+    }
+
+    return {
+      request: request,
+      invalidate: invalidate,
+      describe: describe
+    };
+  }
+
+  function describeRuntimeDiagnostics() {
+    var loader = window.WiseHireHopEnhancementLoader;
+    return {
+      sharedVersion: hirehop.version,
+      depot: getActiveDepotContext({ useCache: true }),
+      loader: loader && typeof loader.describe === "function" ? loader.describe() : null,
+      requests: hirehop.requests.describe(),
+      modules: {
+        docPreview: !!window.__wiseDocPreviewLoaded,
+        capacityTracker: !!window.__wiseCapacityTrackerLoaded,
+        stageDesigner: !!window.__wiseStageDesignerLoaded,
+        checklist: !!window.__wiseJobChecklistLoaded,
+        projectJobs: !!window.__wiseProjectJobsQolLoaded,
+        projectJourney: !!window.__wiseProjectJourneyLoaded,
+        projectGroups: !!window.__wiseProjectGroupsLoaded,
+        proposalPageIcons: !!window.__wiseProposalPageIconsLoaded,
+        jobGroups: !!window.__wiseJobGroupsLoaded,
+        supplyingCommercial: !!window.__wiseSupplyingCommercialLoaded
+      }
+    };
+  }
+
   function debugDepotDetection() {
     var candidates = {
       header: readHeaderDepotContext(),
@@ -786,4 +1037,5 @@
   }
 
   window.WiseProposalSectionBuilderHireHop = hirehop;
+  window.WiseHireHopDiagnostics = hirehop.diagnostics;
 })();

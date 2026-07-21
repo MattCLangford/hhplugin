@@ -1,7 +1,10 @@
 (function () {
   "use strict";
 
-  try { console.warn("[WiseHireHop] docked doc preview loaded - v2026-07-20.13"); } catch (e) {}
+  if (window.__wiseDocPreviewLoaded) return;
+  window.__wiseDocPreviewLoaded = true;
+
+  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.2"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -15,7 +18,7 @@
     blockWhenUndetected: getSharedDepotBooleanValue("blockWhenUndetected", true)
   };
 
-  var DEPOT_BOOTSTRAP_MAX_TRIES = 120;
+  var DEPOT_BOOTSTRAP_MAX_TRIES = 40;
   var DEPOT_BOOTSTRAP_RETRY_MS = 500;
   var DEPOT_BOOTSTRAP_INITIAL_DELAY_MS = 180;
   var DEPOT_BOOTSTRAP_EVENT_DELAY_MS = 250;
@@ -114,6 +117,10 @@
   var jobPerformanceRefreshTimer = null;
   var jobPerformanceLoadTimer = null;
   var jobPerformanceLoadToken = 0;
+  var cachedJobTrackInputs = null;
+  var cachedJobTrackJobId = "";
+  var lastJobPerformanceDocumentLoadAt = 0;
+  var jobPerformanceAutoRetryMinMs = 60000;
 
   var lastIframeScrollTop = 0;
   var lastIframeScrollRatio = 0;
@@ -124,6 +131,8 @@
   var lastSelectedNodeIdsKey = "";
   var activeDocumentVariantKey = getDefaultDocumentVariantKey();
   var nextPreviewLoadId = 1;
+  var previewButtonRetryCount = 0;
+  var previewButtonRetryMax = 30;
 
   waitForAllowedDepotAndInit();
 
@@ -955,9 +964,11 @@
 
     var $host = findToolbarHost();
     if (!$host.length) {
-      setTimeout(tryAddPreviewButton, 1000);
+      previewButtonRetryCount += 1;
+      if (previewButtonRetryCount < previewButtonRetryMax) setTimeout(tryAddPreviewButton, 1000);
       return;
     }
+    previewButtonRetryCount = 0;
 
     var nativeButtonTemplate = getNativeToolbarButtonTemplate($host);
     var classAttr = nativeButtonTemplate.className || "items_func_btn ui-button ui-widget ui-state-default ui-corner-all ui-button-text-icon-primary";
@@ -992,6 +1003,12 @@
     if (defaultOpenAttempted) return;
     defaultOpenAttempted = true;
 
+    if (document.hidden) {
+      $(document).one("visibilitychange.wiseDocPreviewDefaultOpen", function () {
+        if (!document.hidden && !panelOpen && $("#" + TOGGLE_ID).length) openDockedPreview();
+      });
+      return;
+    }
     setTimeout(function () {
       if (panelOpen || !$("#" + TOGGLE_ID).length) return;
       openDockedPreview();
@@ -1062,7 +1079,13 @@
       jobPerformanceLoadTimer = setTimeout(function () { readJobPerformanceFromFrame(token, 0); }, 80);
     });
 
-    refreshJobPerformanceNow("mount");
+    if (document.hidden) {
+      $(document).one("visibilitychange.wiseJobPerformanceMount", function () {
+        if (!document.hidden) refreshJobPerformanceNow("mount");
+      });
+    } else {
+      refreshJobPerformanceNow("mount");
+    }
   }
 
   function commercialTermHtml(key, label) {
@@ -1127,6 +1150,22 @@
     var $strip = $("#" + JOB_PERFORMANCE_ID);
     if (!$strip.length) return;
 
+    var currentJobId = String(getCurrentJobId() || "");
+    var canRecalculateLocally = reason !== "mount" && reason !== "manual" &&
+      cachedJobTrackInputs && cachedJobTrackJobId === currentJobId;
+    if (canRecalculateLocally) {
+      clearTimeout(jobPerformanceRefreshTimer);
+      if (!renderSupplyingLineJobPerformance(cachedJobTrackInputs)) {
+        renderJobPerformanceUnavailable("Supplying totals unavailable", "The supplying-list line data could not be read");
+      }
+      return;
+    }
+    if (reason !== "mount" && reason !== "manual" && lastJobPerformanceDocumentLoadAt &&
+        (Date.now() - lastJobPerformanceDocumentLoadAt) < jobPerformanceAutoRetryMinMs) {
+      renderSupplyingLineJobPerformance(null);
+      return;
+    }
+
     clearTimeout(jobPerformanceRefreshTimer);
     clearTimeout(jobPerformanceLoadTimer);
     jobPerformanceLoadToken += 1;
@@ -1144,6 +1183,7 @@
     $strip.find("[data-wjp-health-note]").text("Loading supplying-line totals and Job Track inputs");
     $strip.find(".wjp-rail").attr({ "aria-valuenow": "0", "aria-valuetext": "Loading" });
     $strip.find(".wjp-rail-fill").css({ width: "0", opacity: .35 });
+    lastJobPerformanceDocumentLoadAt = Date.now();
     document.getElementById(JOB_PERFORMANCE_IFRAME_ID).src = url;
   }
 
@@ -1200,7 +1240,15 @@
       "[name='job:client_commission']"
     ], 0);
 
-    if (!renderSupplyingLineJobPerformance(metrics)) {
+    cachedJobTrackJobId = String(getCurrentJobId() || "");
+    cachedJobTrackInputs = {
+      sourceStatus: metrics.sourceStatus,
+      discountPct: metrics.discountPct,
+      venueCommissionPct: metrics.venueCommissionPct,
+      clientCommissionPct: metrics.clientCommissionPct
+    };
+
+    if (!renderSupplyingLineJobPerformance(cachedJobTrackInputs)) {
       renderJobPerformanceUnavailable("Supplying totals unavailable", "The supplying-list line data could not be read");
     }
   }

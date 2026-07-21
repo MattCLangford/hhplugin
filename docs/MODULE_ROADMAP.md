@@ -53,7 +53,7 @@ It owns:
 - Project and job page tab polish across all depots.
 - Hiding Billing and Purchase orders from non-admin users at both levels.
 - Keeping the full native button set visible for admin users.
-- Native Checklist tab panels and placeholder checklist state until final HireHop project/job custom fields are agreed.
+- The prototype native Checklist tab/panel source, currently disabled until the feature is revived.
 
 `10-projectjobs-qol.js` owns:
 

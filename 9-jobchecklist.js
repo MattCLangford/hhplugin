@@ -1,6 +1,9 @@
 (function () {
   "use strict";
 
+  if (window.__wiseJobChecklistLoaded) return;
+  window.__wiseJobChecklistLoaded = true;
+
   var $ = window.jQuery;
   if (!$) return;
 
@@ -22,7 +25,10 @@
   ];
 
   var CFG = {
-    version: "2026-06-24.1",
+    version: "2026-07-21.3",
+    // The checklist was a prototype. Keep the commercial-tab policy active,
+    // but do not install its tab/panel until the feature is explicitly revived.
+    checklistEnabled: false,
     defaultButtonLabel: asText(EXTERNAL_CONFIG.buttonLabel) || "Checklist",
     defaultButtonTitle: asText(EXTERNAL_CONFIG.buttonTitle) || "Open technical checklist",
     buttonIdPrefix: "wise-checklist-tab-",
@@ -53,16 +59,24 @@
     maintainTimer: null,
     maintainScheduled: null,
     pendingMaintainOptions: null,
-    lastMaintainSignature: ""
+    lastMaintainSignature: "",
+    recoveryCount: 0,
+    recoveryChecks: 12
   };
 
   bootstrap();
 
   function bootstrap() {
-    installStyles();
+    if (CFG.checklistEnabled) installStyles();
     scheduleMaintainJobTabs(0, { forceScan: true });
     state.maintainTimer = setInterval(function () {
+      if (document.hidden) return;
+      state.recoveryCount += 1;
       scheduleMaintainJobTabs(0, {});
+      if (state.recoveryCount >= state.recoveryChecks) {
+        clearInterval(state.maintainTimer);
+        state.maintainTimer = null;
+      }
     }, CFG.maintainRecoveryMs);
 
     $(window).on("load.wiseJobChecklist focus.wiseJobChecklist hashchange.wiseJobChecklist", function () {
@@ -111,7 +125,10 @@
     var signature = getMaintainSignature($host, profile, admin);
     var $button = $("#" + getButtonId(profile));
 
-    if (!options.forceScan && state.lastMaintainSignature === signature && $button.length && $button.parent().is($host)) {
+    var checklistReady = CFG.checklistEnabled
+      ? ($button.length && $button.parent().is($host))
+      : !$button.length;
+    if (!options.forceScan && state.lastMaintainSignature === signature && checklistReady) {
       redirectHiddenActiveTab($host, profile);
       return;
     }
@@ -119,7 +136,8 @@
     state.lastMaintainSignature = signature;
 
     updateCommercialTabs($host, admin);
-    installChecklistTab($host, profile);
+    if (CFG.checklistEnabled) installChecklistTab($host, profile);
+    else removeChecklistTab();
     redirectHiddenActiveTab($host, profile);
   }
 
@@ -308,6 +326,7 @@
 
   function removeChecklistTab() {
     $('[data-wise-job-checklist="1"]').remove();
+    $('[data-wise-checklist-panel="1"]').remove();
   }
 
   function hideTab($tab) {
@@ -344,6 +363,7 @@
   }
 
   function openChecklist() {
+    if (!CFG.checklistEnabled) return;
     var match = findChecklistTabsHost();
     var $host = match.host.length ? match.host : $(state.lastHost);
     var profile = match.profile || state.activeProfile || CFG.pageProfiles[0];
@@ -1441,6 +1461,7 @@
         tabsFound: !!$host.length,
         level: profile ? profile.key : "",
         admin: isAdminUser(),
+        checklistEnabled: CFG.checklistEnabled,
         checklistItems: profile && profile.items ? profile.items.length : 0,
         currentEntityId: profile ? getCurrentEntityId(profile) : "",
         hiddenCommercialTabs: $host.length ? $host.children('[data-wise-job-checklist-hidden="1"]').length : 0

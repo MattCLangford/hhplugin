@@ -1,6 +1,9 @@
 (function () {
   "use strict";
 
+  if (window.__wiseCapacityTrackerLoaded) return;
+  window.__wiseCapacityTrackerLoaded = true;
+
   var $ = window.jQuery;
   if (!$) return;
 
@@ -8,7 +11,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-06-22.3",
+    version: "2026-07-21.2",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",

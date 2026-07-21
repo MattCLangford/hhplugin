@@ -22,7 +22,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-20.1-heading-custom-fields",
+    version: "2026-07-21.2-reliability",
     styleId: "wise-proposal-page-icon-styles",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     refreshDelayMs: 70,
@@ -61,6 +61,7 @@
     scheduleRefresh(0);
 
     state.recoveryTimer = setInterval(function () {
+      if (document.hidden) return;
       state.recoveryCount += 1;
       scheduleRefresh(0);
       if (state.recoveryCount >= CFG.recoveryChecks) {

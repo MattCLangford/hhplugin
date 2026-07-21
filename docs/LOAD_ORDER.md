@@ -12,6 +12,8 @@ On the supplying list, `1-docprev.js` opens the docked proposal preview by defau
 
 The loader preserves this order when a route needs the modules.
 
+After `5-hirehop.js` is available, sibling modules for the detected route initialize independently. A failed script uses bounded exponential backoff and cannot prevent other features from loading. Automatic HireHop reads using the shared request service are serialised and rate-limit aware; user-opened work receives priority over background inventory hydration.
+
 1. `5-hirehop.js`
 2. `1-docprev.js`
 3. `2-apselall.js`
@@ -20,7 +22,7 @@ The loader preserves this order when a route needs the modules.
 6. `6-editor2.js` — currently disabled
 7. `7-captrack.js`
 8. `8-stagedesigner.js`
-9. `9-jobchecklist.js`
+9. `9-jobchecklist.js` (commercial-tab policy active; prototype Checklist tab disabled)
 10. `10-projectjobs-qol.js`
 11. `11-projectjourney.js`
 12. `12-projectgroups.js`

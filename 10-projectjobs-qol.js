@@ -1,6 +1,9 @@
 (function () {
   "use strict";
 
+  if (window.__wiseProjectJobsQolLoaded) return;
+  window.__wiseProjectJobsQolLoaded = true;
+
   var $ = window.jQuery;
   if (!$) return;
 
@@ -10,7 +13,7 @@
     : {};
 
   var CFG = {
-    version: "2026-06-24.2",
+    version: "2026-07-21.2",
     stylesId: "wise-project-jobs-qol-styles",
     buttonId: "wise-project-jobs-compact-btn",
     summaryId: "wise-project-jobs-compact-summary",
@@ -29,7 +32,9 @@
     projectInfoRowsMarked: false,
     projectKitBookingFieldsMarked: false,
     lastHiddenProjectKitBookingCount: 0,
-    lastScrollMaxHeight: ""
+    lastScrollMaxHeight: "",
+    recoveryCount: 0,
+    recoveryChecks: 12
   };
 
   bootstrap();
@@ -38,7 +43,13 @@
     installStyles();
     scheduleMaintainProjectJobsLayout(0, { forceScan: true });
     state.maintainTimer = setInterval(function () {
+      if (document.hidden) return;
+      state.recoveryCount += 1;
       scheduleMaintainProjectJobsLayout(0, {});
+      if (state.recoveryCount >= state.recoveryChecks) {
+        clearInterval(state.maintainTimer);
+        state.maintainTimer = null;
+      }
     }, CFG.maintainRecoveryMs);
 
     $(window).on("load.wiseProjectJobsQol focus.wiseProjectJobsQol resize.wiseProjectJobsQol hashchange.wiseProjectJobsQol", function () {
@@ -637,4 +648,3 @@
     }
   };
 })();
-
