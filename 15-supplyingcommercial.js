@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.7",
+    version: "2026-07-21.9",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -262,7 +262,7 @@
 
   function projectNativeSupplyingGrid(tree, $headerTable) {
     var $headerRow = $headerTable.find("tr").first();
-    var $headers = $headerRow.children("th,td");
+    var $headers = $headerRow.children("th,td").not("[data-wise-rsp-column]");
     if (!$headers.length) return;
 
     rememberNativeCellOrder($headers);
@@ -360,7 +360,7 @@
   function markNativeSupplyingBodyCells($tables, headerCount, columns) {
     $tables.each(function () {
       var $row = $(this).find("tr").first();
-      var $cells = $row.children("td,th");
+      var $cells = $row.children("td,th").not("[data-wise-rsp-column]");
       if (!$cells.length) return;
       rememberNativeCellOrder($cells);
       var offset = Math.max(0, $cells.length - headerCount);
@@ -674,6 +674,11 @@
     var nodes = getAllTreeNodes(tree);
     var present = {};
 
+    ensureRspSelectionColumn();
+    $(".wise-rsp-row-control").filter(function () {
+      return !$(this).closest("[data-wise-rsp-column]").length;
+    }).remove();
+
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
       if (!isInventoryLine(node)) continue;
@@ -700,7 +705,7 @@
     if (!element) return;
 
     var $element = $(element);
-    var $host = findRspRowHost($element);
+    var $host = findRspColumnHost($element, nodeId);
     if (!$host.length) return;
 
     var rsp = readRecommendedSalePrice(node);
@@ -708,7 +713,7 @@
     var available = raw != null && raw !== "";
     var quantity = readSupplyingQuantity(node);
     var lineTotal = available ? Number(raw) * quantity : null;
-    var label = !rsp.resolved && !available ? "RSP …" : (available ? "RSP " + formatSterling(raw) + " ea" : "RSP —");
+    var label = !rsp.resolved && !available ? "…" : (available ? formatSterling(raw) : "—");
     var title = available
       ? "Select for kit/bundle total · Qty " + formatQuantity(quantity) + " · line RSP " + formatSterling(lineTotal)
       : (!rsp.resolved ? "Loading recommended sale price" : "No RSP is set on this inventory component");
@@ -733,22 +738,70 @@
     $control.toggleClass("is-unavailable", !available).toggleClass("is-loading", !rsp.resolved && !available);
   }
 
-  function findRspRowHost($element) {
-    var $row = $element.find("table.cust_node tr").first();
-    var $cells = $row.children("td,th").filter(function () {
-      return !$(this).attr("data-wise-commercial-column");
-    });
-    var $host = $cells.filter(".item_cell.node_desc,.node_desc").last();
-    if (!$host.length) $host = $cells.filter(".name_cell").last();
-    if (!$host.length) {
-      $host = $cells.filter(function () {
-        return $(this).find(".jstree-anchor").length > 0;
-      }).first();
+  function ensureRspSelectionColumn() {
+    var $nativeHeader = getNativeSupplyingHeaderTable();
+    if ($nativeHeader.length) {
+      ensureNativeRspSelectionColumn($nativeHeader);
+      return;
     }
-    if (!$host.length && $cells.length) $host = $cells.first();
-    if (!$host.length) $host = $element.children(".jstree-anchor").first();
-    if (!$host.length) $host = $element.find(".jstree-anchor").first();
-    return $host;
+    ensureGridRspSelectionColumn(getGridWrapper(getTree()));
+  }
+
+  function ensureNativeRspSelectionColumn($headerTable) {
+    var $headerRow = $headerTable.find("tr").first();
+    var $header = $headerRow.children("[data-wise-rsp-column]").first();
+    var $revenueHeader = $headerRow.children("[data-wise-commercial-column='revenue']").first();
+    if (!$header.length) {
+      $header = $('<th class="wise-rsp-column-header" data-wise-rsp-column="header"><div>RSP</div></th>');
+      if ($revenueHeader.length) $header.insertAfter($revenueHeader);
+      else $header.appendTo($headerRow);
+    } else if ($revenueHeader.length && $header.prev().get(0) !== $revenueHeader.get(0)) {
+      $header.insertAfter($revenueHeader);
+    }
+
+    $("#items_tab table.cust_node").each(function () {
+      var $row = $(this).find("tr").first();
+      if (!$row.length) return;
+      var $revenue = $row.children("[data-wise-commercial-column='revenue']").first();
+      var $cell = $row.children("[data-wise-rsp-column]").first();
+      if (!$cell.length) $cell = $('<td class="wise-rsp-column-cell" data-wise-rsp-column="cell"></td>');
+      if ($revenue.length && $cell.prev().get(0) !== $revenue.get(0)) $cell.insertAfter($revenue);
+      else if (!$cell.parent().length) $cell.appendTo($row);
+    });
+  }
+
+  function ensureGridRspSelectionColumn($wrapper) {
+    if (!$wrapper || !$wrapper.length) return;
+    var $column = $wrapper.find(".wise-rsp-grid-column[data-wise-rsp-column='grid']").first();
+    var $revenue = $wrapper.find(".jstree-grid-column[data-wise-commercial-column='revenue']").first();
+    if (!$column.length && $revenue.length) {
+      $column = $revenue.clone(false, false)
+        .removeAttr("id data-wise-commercial-column data-wise-commercial-original-index")
+        .attr("data-wise-rsp-column", "grid")
+        .addClass("wise-rsp-grid-column");
+      var columnClasses = String($column.attr("class") || "").split(/\s+/).filter(function (name) {
+        return !/^jstree-grid-column-\d+$/.test(name);
+      });
+      $column.attr("class", columnClasses.join(" "));
+      $column.find("[id]").removeAttr("id");
+      $column.find("[data-wise-commercial-original-label]").removeAttr("data-wise-commercial-original-label");
+      var $header = getGridColumnHeader($column);
+      var $separator = $header.children(".jstree-grid-separator").detach();
+      $header.empty().text("RSP");
+      if ($separator.length) $header.append($separator);
+      $column.find(".jstree-grid-cell").empty();
+      $column.insertAfter($revenue);
+    } else if ($column.length && $revenue.length && $column.prev().get(0) !== $revenue.get(0)) {
+      $column.insertAfter($revenue);
+    }
+  }
+
+  function findRspColumnHost($element, nodeId) {
+    var $host = $element.find("table.cust_node tr").first().children("[data-wise-rsp-column='cell']").first();
+    if ($host.length) return $host;
+    return $("#items_tab .wise-rsp-grid-column .jstree-grid-cell").filter(function () {
+      return String($(this).attr("data-jstreegrid") || "") === String(nodeId || "");
+    }).first();
   }
 
   function ensureRspSelectionSummary() {
@@ -875,11 +928,13 @@
       .css("display", effectiveView === "job-performance" ? "" : "none")
       .attr("aria-hidden", effectiveView === "job-performance" ? "false" : "true");
     $switcher.attr("data-wise-commercial-active-view", effectiveView);
+    $(document.body).toggleClass("wise-rsp-calculator-view", effectiveView === "rsp");
   }
 
   function restoreTopCommercialViews() {
     $("#" + CFG.commercialTermsId + ",#" + CFG.jobPerformanceId).css("display", "").removeAttr("aria-hidden");
     $("#" + CFG.topSwitcherId).remove();
+    $(document.body).removeClass("wise-rsp-calculator-view");
   }
 
   function readRecommendedSalePrice(node) {
@@ -2302,7 +2357,7 @@
     state.inventoryUiRefreshTimer = null;
     state.inventoryUpdatedKeys = {};
     $("." + CFG.panelClass).remove();
-    $(".wise-rsp-row-control,#" + CFG.rspSummaryId).remove();
+    $(".wise-rsp-row-control,#" + CFG.rspSummaryId + ",#items_tab [data-wise-rsp-column]").remove();
     $("[data-wise-commercial-original-label]").each(function () {
       var $label = $(this);
       var separator = $label.children(".jstree-grid-separator").detach();
@@ -2360,6 +2415,12 @@
       ".wise-supplying-commercial-active .jstree-grid-column.wise-supplying-commercial-hidden-column,.wise-supplying-commercial-active .jstree-grid-column[data-wise-commercial-column='unit']{display:none!important;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='unit'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='unit'],.wise-supplying-commercial-active table.supplying_list_heads .wise-supplying-commercial-hidden-column,.wise-supplying-commercial-active table.cust_node .wise-supplying-commercial-hidden-column{display:none!important;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='revenue'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='revenue']{text-align:right;}",
+      ".wise-supplying-commercial-active [data-wise-rsp-column]{display:none!important;}",
+      ".wise-supplying-commercial-active.wise-rsp-calculator-view table [data-wise-rsp-column]{display:table-cell!important;}",
+      ".wise-supplying-commercial-active.wise-rsp-calculator-view .jstree-grid-column[data-wise-rsp-column]{display:block!important;}",
+      ".wise-rsp-column-header,.wise-rsp-column-cell{width:126px;min-width:126px;max-width:126px;text-align:center!important;box-sizing:border-box;}",
+      ".wise-rsp-column-cell,.wise-rsp-grid-column .jstree-grid-cell{position:relative!important;z-index:4!important;}",
+      ".wise-rsp-grid-column{min-width:126px!important;width:126px!important;text-align:center!important;}",
       ".wise-commercial-view-switcher{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 0;padding:6px 8px;border:1px solid #d5dde5;border-radius:7px;background:#f7f9fb;box-sizing:border-box;}",
       ".wise-commercial-view-switcher>span{padding-left:3px;color:#667085;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}.wise-commercial-view-switcher>div{display:flex;gap:3px;padding:3px;border-radius:5px;background:#e8edf2;}",
       ".wise-commercial-view-switcher button{min-width:128px;padding:5px 11px;border:0;border-radius:4px;background:transparent;color:#475467;font-size:11px;font-weight:700;cursor:pointer;}.wise-commercial-view-switcher button.is-active{background:#fff;color:#163a5f;box-shadow:0 1px 3px rgba(16,24,40,.16);}.wise-commercial-view-switcher button:disabled{opacity:.45;cursor:default;}",
@@ -2367,8 +2428,8 @@
       ".wise-rsp-summary-copy{display:flex;flex-direction:column;gap:2px;min-width:0;}.wise-rsp-summary-copy b{font-size:13px;color:#17212b;}.wise-rsp-summary-copy span{font-size:10px;color:#667085;}",
       ".wise-rsp-summary-result{display:flex;align-items:center;justify-content:flex-end;gap:10px;white-space:nowrap;}.wise-rsp-summary-result>span{font-size:11px;color:#475467;}.wise-rsp-summary-result>strong{min-width:88px;text-align:right;font-size:17px;color:#163a5f;}",
       ".wise-rsp-summary-result button{padding:4px 9px;border:1px solid #aebdca;border-radius:4px;background:#fff;color:#344054;font-size:11px;cursor:pointer;}.wise-rsp-summary-result button:disabled{opacity:.45;cursor:default;}",
-      ".wise-rsp-row-control{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 6px;border:1px solid #b8cadb;border-radius:999px;background:#f1f7fc;color:#244b70;font-size:10px;font-weight:700;line-height:16px;vertical-align:middle;white-space:nowrap;cursor:pointer;}",
-      ".wise-rsp-row-control:hover{border-color:#4b8dcc;background:#e7f2fb;}.wise-rsp-row-control input{width:13px;height:13px;margin:0;accent-color:#347db5;cursor:pointer;}.wise-rsp-row-control.is-unavailable{border-color:#d5d9df;background:#f6f7f8;color:#858b94;cursor:default;}.wise-rsp-row-control.is-loading span{opacity:.75;}",
+      ".wise-rsp-row-control{position:relative;z-index:2;display:inline-flex;align-items:center;justify-content:center;gap:5px;width:100%;min-height:22px;margin:0;padding:1px 4px;color:#244b70;font-size:10px;font-weight:700;line-height:16px;vertical-align:middle;white-space:nowrap;cursor:pointer;box-sizing:border-box;pointer-events:auto;}",
+      ".wise-rsp-row-control:hover{background:#e7f2fb;}.wise-rsp-row-control input{position:relative;z-index:3;width:14px;height:14px;margin:0;accent-color:#347db5;cursor:pointer;pointer-events:auto;}.wise-rsp-row-control.is-unavailable{color:#858b94;cursor:default;}.wise-rsp-row-control.is-loading span{opacity:.75;}",
       "." + CFG.panelClass + "{display:grid;grid-template-columns:minmax(190px,1fr) minmax(150px,.55fr) minmax(180px,.7fr);align-items:end;gap:12px;margin:12px 0;padding:12px 14px;border:1px solid #ccd8e5;border-left:4px solid #d4b455;border-radius:8px;background:linear-gradient(135deg,#fffdf8 0%,#f4f7fa 100%);box-sizing:border-box;}",
       "." + CFG.panelClass + ".has-error{border-color:#b42318;}",
       ".wise-line-commercial-heading{display:flex;flex-direction:column;gap:2px;align-self:center;}",

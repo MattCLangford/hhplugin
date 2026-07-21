@@ -165,7 +165,11 @@ function testSourceGuards() {
   assert(commercial.includes("maintainCommercialTopSwitcher"), "RSP and Job Performance should share a display-only view switch");
   assert(commercial.includes("restoreTopCommercialViews"), "removing the RSP enhancement should restore Job Performance visibility");
   assert(commercial.includes('topView: "job-performance"'), "Job Performance should be the default commercial view on each page");
-  assert(commercial.includes("function findRspRowHost"), "RSP controls should use a dedicated item-description host selector");
+  assert(commercial.includes("function ensureRspSelectionColumn"), "RSP controls should use a dedicated supplying-list column");
+  assert(commercial.includes("function findRspColumnHost"), "RSP checkboxes should mount only in the dedicated RSP column");
+  assert(commercial.includes("wise-rsp-calculator-view"), "the RSP column should be visible only in calculator view");
+  assert(commercial.includes('$cell.insertAfter($revenue)'), "native RSP cells should remain immediately after Revenue during redraws");
+  assert(commercial.includes("pointer-events:auto"), "dedicated RSP checkboxes should remain clickable above HireHop row handlers");
   assert(!commercial.includes('.filter(".name_cell,.item_cell.node_desc,.item_cell").last()'), "RSP controls must not fall through to commercial value cells");
 
   const jobGroups = fs.readFileSync(path.join(root, "14-jobgroups.js"), "utf8");

@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-21.8",
+  "version": "2026-07-21.9",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "3.8",
+      "cacheVersion": "3.9",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -120,8 +120,8 @@
     {
       "file": "15-supplyingcommercial.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "1.4",
-      "role": "Proposal Creation depot only: adds line-level Revenue and Markup fields plus inventory-master RSP controls. A display-only switch alternates the independent Job Performance and RSP Calculator summaries without changing either module's data or selection state. The supplying grid remains presented as CoS, Markup and Revenue while native commercial data is preserved.",
+      "cacheVersion": "1.5",
+      "role": "Proposal Creation depot only: adds line-level Revenue and Markup fields plus inventory-master RSP controls. A display-only switch alternates the independent Job Performance and RSP Calculator summaries without changing either module's data or selection state. RSP selection is presented in a dedicated column after Revenue only while the calculator is active. Native commercial data is preserved.",
       "recommendedLoadOrder": 15
     }
   ],
