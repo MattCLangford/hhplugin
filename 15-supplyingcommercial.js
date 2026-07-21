@@ -21,12 +21,13 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.9",
+    version: "2026-07-21.10",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     itemsSaveEndpoint: getHireHopEndpoint("itemsSave", "/php_functions/items_save.php"),
     availabilityEndpoint: getHireHopEndpoint("availabilityList", "/php_functions/availability_list.php"),
+    stockListEndpoint: getHireHopEndpoint("stockList", "/modules/stock/list.php"),
     hireStockListEndpoint: getHireHopEndpoint("hireStockList", "/reports/hire_stock_list.php"),
     salesStockListEndpoint: getHireHopEndpoint("salesStockList", "/modules/consumables/list.php"),
     revenueField: "Revenue",
@@ -37,6 +38,8 @@
     jobPerformanceId: "wise-job-performance",
     commercialTermsId: "wise-commercial-adjustments",
     inventoryCacheTtlMs: 15 * 60 * 1000,
+    inventoryEmptyRetryMs: 60 * 1000,
+    inventoryFailureRetryMs: 60 * 1000,
     inventoryFallbackGapMs: 500,
     inventoryUpdateDebounceMs: 2500,
     refreshDelayMs: 60,
@@ -1888,7 +1891,7 @@
 
   function getInheritedCommercialDefaults(node) {
     var key = getInventoryMasterKey(node);
-    var defaults = key && state.inheritedDefaults[key];
+    var defaults = key && getCachedInheritedDefaults(key);
     return defaults || {
       resolved: false,
       revenue: "",
@@ -1898,6 +1901,21 @@
       markupFound: false,
       rspFound: false
     };
+  }
+
+  function getCachedInheritedDefaults(key) {
+    key = String(key || "");
+    if (!key) return null;
+    var defaults = state.inheritedDefaults[key];
+    if (defaults && defaults.retryAfterAt && Number(defaults.retryAfterAt) <= Date.now()) {
+      delete state.inheritedDefaults[key];
+      defaults = null;
+    }
+    var failure = state.inheritedFailures[key];
+    if (failure && Number(failure.at || 0) + CFG.inventoryFailureRetryMs <= Date.now()) {
+      delete state.inheritedFailures[key];
+    }
+    return defaults || null;
   }
 
   function getInventoryMasterInfo(node) {
@@ -1935,7 +1953,8 @@
   function queueInheritedCommercialDefaults(node) {
     if (!window.fetch) return;
     var info = getInventoryMasterInfo(node);
-    if (!info.key || state.inheritedDefaults[info.key] || state.inheritedRequests[info.key] || state.inheritedFailures[info.key]) return;
+    var cached = info.key && getCachedInheritedDefaults(info.key);
+    if (!info.key || cached || state.inheritedRequests[info.key] || state.inheritedFailures[info.key]) return;
 
     state.inheritedRequests[info.key] = requestInventoryCommercialDefaults(info)
       .then(function (defaults) {
@@ -1964,15 +1983,20 @@
   function requestInventoryCommercialDefaults(info) {
     var requests = getSharedRequestManager();
     if (!requests) return resolveInventoryCommercialDefaults(info);
-    return requests.request("inventory-defaults:" + info.key, function () {
+    return requests.request("inventory-defaults:v2:" + info.key, function () {
       return resolveInventoryCommercialDefaults(info);
     }, {
       priority: -20,
       pauseWhenHidden: true,
       minGapMs: getHireHopNumberValue("timings", "readMinGapMs", 1250),
       cacheTtlMs: CFG.inventoryCacheTtlMs,
-      sessionCache: true
+      sessionCache: true,
+      shouldCache: hasInventoryCommercialDefaults
     });
+  }
+
+  function hasInventoryCommercialDefaults(defaults) {
+    return !!(defaults && (defaults.revenueFound || defaults.markupFound || defaults.rspFound));
   }
 
   function queueInventoryDefaultsUpdatedEvent(key, defaults) {
@@ -2092,7 +2116,18 @@
       stock_id: info.listId,
       list_id: info.listId
     };
-    var urls = [];
+    var urls = [CFG.stockListEndpoint + "?" + $.param({
+      local: local,
+      tz: getInventoryTimezone(),
+      page: 1,
+      rows: 10,
+      unq: info.listId,
+      head: 0,
+      USE_CATEGORY_TREE: 0,
+      del: 1,
+      show_hidden: 1,
+      inc_virtual: 1
+    })];
     if (info.categoryId) {
       urls.push(CFG.availabilityEndpoint + "?" + $.param($.extend({}, common, { cats: JSON.stringify([Number(info.categoryId) || info.categoryId]) })));
       urls.push(CFG.availabilityEndpoint + "?" + $.param($.extend({}, common, { cat: info.categoryId })));
@@ -2182,7 +2217,16 @@
   }
 
   function resolvedEmptyCommercialDefaults() {
-    return { resolved: true, revenue: "", markup: "", rsp: "", revenueFound: false, markupFound: false, rspFound: false };
+    return {
+      resolved: true,
+      revenue: "",
+      markup: "",
+      rsp: "",
+      revenueFound: false,
+      markupFound: false,
+      rspFound: false,
+      retryAfterAt: Date.now() + CFG.inventoryEmptyRetryMs
+    };
   }
 
   function normaliseInventoryId(value) {
@@ -2418,9 +2462,9 @@
       ".wise-supplying-commercial-active [data-wise-rsp-column]{display:none!important;}",
       ".wise-supplying-commercial-active.wise-rsp-calculator-view table [data-wise-rsp-column]{display:table-cell!important;}",
       ".wise-supplying-commercial-active.wise-rsp-calculator-view .jstree-grid-column[data-wise-rsp-column]{display:block!important;}",
-      ".wise-rsp-column-header,.wise-rsp-column-cell{width:126px;min-width:126px;max-width:126px;text-align:center!important;box-sizing:border-box;}",
+      ".wise-rsp-column-header,.wise-rsp-column-cell{width:96px;min-width:96px;max-width:96px;text-align:center!important;box-sizing:border-box;}",
       ".wise-rsp-column-cell,.wise-rsp-grid-column .jstree-grid-cell{position:relative!important;z-index:4!important;}",
-      ".wise-rsp-grid-column{min-width:126px!important;width:126px!important;text-align:center!important;}",
+      ".wise-rsp-grid-column{min-width:96px!important;width:96px!important;text-align:center!important;}",
       ".wise-commercial-view-switcher{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 0 0;padding:6px 8px;border:1px solid #d5dde5;border-radius:7px;background:#f7f9fb;box-sizing:border-box;}",
       ".wise-commercial-view-switcher>span{padding-left:3px;color:#667085;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;}.wise-commercial-view-switcher>div{display:flex;gap:3px;padding:3px;border-radius:5px;background:#e8edf2;}",
       ".wise-commercial-view-switcher button{min-width:128px;padding:5px 11px;border:0;border-radius:4px;background:transparent;color:#475467;font-size:11px;font-weight:700;cursor:pointer;}.wise-commercial-view-switcher button.is-active{background:#fff;color:#163a5f;box-shadow:0 1px 3px rgba(16,24,40,.16);}.wise-commercial-view-switcher button:disabled{opacity:.45;cursor:default;}",

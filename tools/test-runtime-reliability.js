@@ -106,6 +106,23 @@ async function testRequestManager() {
   }, { minGapMs: 0, cacheTtlMs: 1000, sessionCache: true });
   assert.strictEqual(calls, 1, "fresh cached requests should not execute again");
 
+  let conditionalCalls = 0;
+  const conditionalOptions = {
+    minGapMs: 0,
+    cacheTtlMs: 1000,
+    sessionCache: true,
+    shouldCache: value => value.cache === true
+  };
+  await requests.request("conditional-cache", () => {
+    conditionalCalls += 1;
+    return Promise.resolve({ cache: false });
+  }, conditionalOptions);
+  await requests.request("conditional-cache", () => {
+    conditionalCalls += 1;
+    return Promise.resolve({ cache: false });
+  }, conditionalOptions);
+  assert.strictEqual(conditionalCalls, 2, "a successful empty lookup should be able to opt out of caching");
+
   let active = 0;
   let maxActive = 0;
   function serialFactory(value) {
@@ -160,8 +177,11 @@ function testSourceGuards() {
   assert(!preview.includes("wise-rsp-selection-summary"), "Job Performance must not own, replace or remove the RSP calculator");
 
   const commercial = fs.readFileSync(path.join(root, "15-supplyingcommercial.js"), "utf8");
-  assert(commercial.includes("inventory-defaults:"), "inventory defaults should use the shared keyed request queue");
+  assert(commercial.includes("inventory-defaults:v2:"), "inventory defaults should use a versioned shared request key");
   assert(commercial.includes("sessionCache: true"), "inventory defaults should use session-level caching");
+  assert(commercial.includes("shouldCache: hasInventoryCommercialDefaults"), "empty inventory responses must not be cached as durable defaults");
+  assert(commercial.includes('stockListEndpoint: getHireHopEndpoint("stockList", "/modules/stock/list.php")'), "RSP lookup should use HireHop's stock record endpoint");
+  assert(commercial.includes("unq: info.listId"), "stock lookup should request the exact inventory master ID");
   assert(commercial.includes("maintainCommercialTopSwitcher"), "RSP and Job Performance should share a display-only view switch");
   assert(commercial.includes("restoreTopCommercialViews"), "removing the RSP enhancement should restore Job Performance visibility");
   assert(commercial.includes('topView: "job-performance"'), "Job Performance should be the default commercial view on each page");

@@ -9,7 +9,7 @@
    * This module names the HireHop UI surfaces and endpoints the editor depends on.
    */
   var hirehop = {
-    version: "2026-07-21.6",
+    version: "2026-07-21.10",
     purpose: "Centralises HireHop selectors, endpoints, depot gating, request control, retry timings, search helpers, and tree item prefixes.",
 
     selectors: {
@@ -997,7 +997,13 @@
         .then(function () { return task.factory(); })
         .then(function (value) {
           stats.completed += 1;
-          writeCache(task.key, value, task.options);
+          var shouldCache = true;
+          try {
+            if (typeof task.options.shouldCache === "function") shouldCache = !!task.options.shouldCache(value);
+          } catch (err) {
+            shouldCache = false;
+          }
+          if (shouldCache) writeCache(task.key, value, task.options);
           record("complete", task.key);
           finishTask(task);
           task.resolve(value);
