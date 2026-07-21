@@ -8,6 +8,7 @@
  * - Uses HireHop's native line Total as CoS, then shows Markup and Revenue.
  * - Calculates either Revenue from Markup or whole-number Markup from Revenue.
  * - Uses inventory Revenue/Markup as defaults until a line-level field exists.
+ * - Shows inventory-master RSP per component and totals checked component rows.
  * - Keeps legacy Unit Price/Discount/Flag/Total values intact in HireHop.
  * ======================================================================== */
 (function () {
@@ -20,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-20.11",
+    version: "2026-07-21.1",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -30,6 +31,8 @@
     salesStockListEndpoint: getHireHopEndpoint("salesStockList", "/modules/consumables/list.php"),
     revenueField: "Revenue",
     markupField: "Markup",
+    rspField: "RSP",
+    rspSummaryId: "wise-rsp-selection-summary",
     refreshDelayMs: 60,
     recoveryIntervalMs: 1200,
     recoveryChecks: 18,
@@ -59,7 +62,8 @@
     inheritedRequests: {},
     projectedRows: 0,
     gridFound: false,
-    projectedColumns: []
+    projectedColumns: [],
+    rspSelected: {}
   };
 
   boot();
@@ -103,6 +107,22 @@
         var node = data && data.node;
         if (node && isInventoryLine(node)) state.lastSelectedNodeId = String(node.id || "");
       })
+      .on("mousedown.wiseSupplyingCommercial click.wiseSupplyingCommercial dblclick.wiseSupplyingCommercial", ".wise-rsp-row-control", function (event) {
+        event.stopPropagation();
+      })
+      .on("change.wiseSupplyingCommercial", ".wise-rsp-select", function () {
+        var nodeId = String($(this).attr("data-wise-rsp-node-id") || "");
+        if (!nodeId) return;
+        if (this.checked && !this.disabled) state.rspSelected[nodeId] = true;
+        else delete state.rspSelected[nodeId];
+        renderRspSelectionSummary();
+      })
+      .on("click.wiseSupplyingCommercial", "#" + CFG.rspSummaryId + " [data-wise-rsp-clear]", function (event) {
+        event.preventDefault();
+        state.rspSelected = {};
+        $(".wise-rsp-select").prop("checked", false);
+        renderRspSelectionSummary();
+      })
       .on(
         "ready.jstree.wiseSupplyingCommercial refresh.jstree.wiseSupplyingCommercial " +
         "redraw.jstree.wiseSupplyingCommercial load_node.jstree.wiseSupplyingCommercial " +
@@ -131,6 +151,7 @@
 
     $(document.body).addClass("wise-supplying-commercial-active");
     projectSupplyingGrid();
+    refreshRspSelectionUi();
     enhanceOpenItemDialog();
   }
 
@@ -621,6 +642,186 @@
       }
     } catch (err) {}
     return nodes;
+  }
+
+  /* ----------------------- Recommended sale price ---------------------- */
+
+  function refreshRspSelectionUi() {
+    var tree = getTree();
+    var nodes = getAllTreeNodes(tree);
+    var present = {};
+
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (!isInventoryLine(node)) continue;
+      present[String(node.id)] = true;
+      renderRspRowControl(node);
+    }
+
+    Object.keys(state.rspSelected).forEach(function (nodeId) {
+      if (!present[nodeId]) delete state.rspSelected[nodeId];
+    });
+
+    $(".wise-rsp-row-control").each(function () {
+      var nodeId = String($(this).attr("data-wise-rsp-node-id") || "");
+      if (!present[nodeId]) $(this).remove();
+    });
+
+    ensureRspSelectionSummary();
+    renderRspSelectionSummary(nodes);
+  }
+
+  function renderRspRowControl(node) {
+    var nodeId = String(node && node.id || "");
+    var element = nodeId && document.getElementById(nodeId);
+    if (!element) return;
+
+    var $element = $(element);
+    var $host = $element.find("table.cust_node tr").first().children("td,th")
+      .filter(".name_cell,.item_cell.node_desc,.item_cell").last();
+    if (!$host.length) $host = $element.children(".jstree-anchor").first();
+    if (!$host.length) $host = $element.find(".jstree-anchor").first();
+    if (!$host.length) return;
+
+    var rsp = readRecommendedSalePrice(node);
+    var raw = normaliseMoneyInput(rsp.value);
+    var available = raw != null && raw !== "";
+    var quantity = readSupplyingQuantity(node);
+    var lineTotal = available ? Number(raw) * quantity : null;
+    var label = !rsp.resolved && !available ? "RSP …" : (available ? "RSP " + formatSterling(raw) + " ea" : "RSP —");
+    var title = available
+      ? "Select for kit/bundle total · Qty " + formatQuantity(quantity) + " · line RSP " + formatSterling(lineTotal)
+      : (!rsp.resolved ? "Loading recommended sale price" : "No RSP is set on this inventory component");
+
+    var $control = $host.find(".wise-rsp-row-control").filter(function () {
+      return String($(this).attr("data-wise-rsp-node-id") || "") === nodeId;
+    }).first();
+    if (!$control.length) {
+      $control = $('<label class="wise-rsp-row-control"><input type="checkbox" class="wise-rsp-select"><span></span></label>')
+        .attr("data-wise-rsp-node-id", nodeId)
+        .appendTo($host);
+      $control.on("mousedown click dblclick", function (event) { event.stopPropagation(); });
+    }
+
+    var $input = $control.find(".wise-rsp-select").first();
+    $input.attr("data-wise-rsp-node-id", nodeId).prop("disabled", !available);
+    if (!available) delete state.rspSelected[nodeId];
+    $input.prop("checked", available && !!state.rspSelected[nodeId]);
+    if ($control.attr("title") !== title) $control.attr("title", title);
+    if ($control.find("span").text() !== label) $control.find("span").text(label);
+    $control.toggleClass("is-unavailable", !available).toggleClass("is-loading", !rsp.resolved && !available);
+  }
+
+  function ensureRspSelectionSummary() {
+    var $summary = $("#" + CFG.rspSummaryId);
+    if ($summary.length) return $summary;
+
+    $summary = $(
+      '<section id="' + CFG.rspSummaryId + '" class="wise-rsp-summary" aria-live="polite">' +
+        '<div class="wise-rsp-summary-copy"><b>Recommended sale price</b>' +
+          '<span>Select component RSP checkboxes to price a kit or bundle.</span></div>' +
+        '<div class="wise-rsp-summary-result"><span data-wise-rsp-selection-count>No components selected</span>' +
+          '<strong data-wise-rsp-selection-total>£0.00</strong>' +
+          '<button type="button" data-wise-rsp-clear disabled>Clear</button></div>' +
+      '</section>'
+    );
+
+    var $anchor = getNativeSupplyingHeaderTable();
+    if (!$anchor.length) $anchor = getGridWrapper(getTree());
+    if (!$anchor.length) $anchor = $("#items_tab .jstree").first();
+    if ($anchor.length) $summary.insertBefore($anchor);
+    else $("#items_tab").append($summary);
+    return $summary;
+  }
+
+  function renderRspSelectionSummary(nodes) {
+    var $summary = ensureRspSelectionSummary();
+    if (!$summary.length) return;
+    nodes = nodes || getAllTreeNodes(getTree());
+    var byId = {};
+    for (var i = 0; i < nodes.length; i++) byId[String(nodes[i].id || "")] = nodes[i];
+
+    var lineCount = 0;
+    var unitCount = 0;
+    var total = 0;
+    Object.keys(state.rspSelected).forEach(function (nodeId) {
+      var node = byId[nodeId];
+      if (!node || !isInventoryLine(node)) {
+        delete state.rspSelected[nodeId];
+        return;
+      }
+      var rsp = normaliseMoneyInput(readRecommendedSalePrice(node).value);
+      if (rsp == null || rsp === "") {
+        delete state.rspSelected[nodeId];
+        return;
+      }
+      var quantity = readSupplyingQuantity(node);
+      lineCount += 1;
+      unitCount += quantity;
+      total += Number(rsp) * quantity;
+    });
+
+    var countText = lineCount
+      ? lineCount + " component " + (lineCount === 1 ? "line" : "lines") + " · " + formatQuantity(unitCount) + " " + (unitCount === 1 ? "unit" : "units")
+      : "No components selected";
+    $summary.find("[data-wise-rsp-selection-count]").text(countText);
+    $summary.find("[data-wise-rsp-selection-total]").text(formatSterling(Math.round(total * 100) / 100));
+    $summary.find("[data-wise-rsp-clear]").prop("disabled", lineCount === 0);
+  }
+
+  function readRecommendedSalePrice(node) {
+    var sources = getNodeDataSources(node);
+    var bag = {};
+    for (var i = 0; i < sources.length; i++) {
+      bag = $.extend(true, bag, parseCustomFieldBag(sources[i].CUSTOM_FIELDS || sources[i].custom_fields || sources[i].customFields));
+    }
+    var line = readCustomFieldResult(bag, sources, CFG.rspField);
+    var lineValue = normaliseMoneyInput(line.value);
+    var inherited = getInheritedCommercialDefaults(node);
+    if ((lineValue == null || lineValue === "") && !inherited.resolved) queueInheritedCommercialDefaults(node);
+    var value = lineValue != null && lineValue !== "" ? lineValue : inherited.rsp;
+    return {
+      value: value == null ? "" : value,
+      found: (lineValue != null && lineValue !== "") || !!inherited.rspFound,
+      inherited: !(lineValue != null && lineValue !== "") && !!inherited.rspFound,
+      resolved: (lineValue != null && lineValue !== "") || !!inherited.resolved
+    };
+  }
+
+  function readSupplyingQuantity(node) {
+    var sources = getNodeDataSources(node);
+    var keys = ["QTY", "qty", "QUANTITY", "quantity", "AMOUNT", "amount"];
+    for (var s = 0; s < sources.length; s++) {
+      for (var k = 0; k < keys.length; k++) {
+        var parsed = parseSupplyingQuantity(sources[s][keys[k]]);
+        if (parsed != null) return parsed;
+      }
+    }
+
+    var element = node && node.id ? document.getElementById(String(node.id)) : null;
+    if (element) {
+      var $quantity = $(element).find(".qty_cell,.column_QTY,[data-field='QTY'],[data-field='qty']").first();
+      var domQuantity = parseSupplyingQuantity($quantity.is("input") ? $quantity.val() : $quantity.text());
+      if (domQuantity != null) return domQuantity;
+    }
+
+    var text = stripInventoryTitleMarkup(node && node.text);
+    var match = text.match(/^\s*(\d+(?:\.\d+)?)\s*(?:x|×)\s+/i);
+    return match ? Number(match[1]) : 1;
+  }
+
+  function parseSupplyingQuantity(value) {
+    if (value == null || value === "") return null;
+    if ($.isPlainObject(value) && Object.prototype.hasOwnProperty.call(value, "value")) value = value.value;
+    var text = $.trim(String(value)).replace(/,/g, "");
+    if (!/^\d+(?:\.\d+)?$/.test(text)) return null;
+    var number = Number(text);
+    return isFinite(number) && number >= 0 ? number : null;
+  }
+
+  function formatQuantity(value) {
+    var number = Number(value) || 0;
+    return Number.isInteger(number) ? String(number) : String(Math.round(number * 100) / 100);
   }
 
   function isInventoryLine(node) {
@@ -1524,8 +1725,10 @@
       resolved: false,
       revenue: "",
       markup: "",
+      rsp: "",
       revenueFound: false,
-      markupFound: false
+      markupFound: false,
+      rspFound: false
     };
   }
 
@@ -1708,21 +1911,24 @@
     var sources = [custom, record];
     var revenue = readCustomFieldResult(custom, sources, CFG.revenueField);
     var markup = readCustomFieldResult(custom, sources, CFG.markupField);
+    var rsp = readCustomFieldResult(custom, sources, CFG.rspField);
     return {
       matched: true,
-      foundCommercial: revenue.found || markup.found,
+      foundCommercial: revenue.found || markup.found || rsp.found,
       defaults: {
         resolved: true,
         revenue: revenue.found ? revenue.value : "",
         markup: markup.found ? markup.value : "",
+        rsp: rsp.found ? rsp.value : "",
         revenueFound: revenue.found,
-        markupFound: markup.found
+        markupFound: markup.found,
+        rspFound: rsp.found
       }
     };
   }
 
   function resolvedEmptyCommercialDefaults() {
-    return { resolved: true, revenue: "", markup: "", revenueFound: false, markupFound: false };
+    return { resolved: true, revenue: "", markup: "", rsp: "", revenueFound: false, markupFound: false, rspFound: false };
   }
 
   function normaliseInventoryId(value) {
@@ -1891,6 +2097,7 @@
   function removeEnhancements() {
     stopCosWatcher();
     $("." + CFG.panelClass).remove();
+    $(".wise-rsp-row-control,#" + CFG.rspSummaryId).remove();
     $("[data-wise-commercial-original-label]").each(function () {
       var $label = $(this);
       var separator = $label.children(".jstree-grid-separator").detach();
@@ -1917,6 +2124,7 @@
     state.projectedRows = 0;
     state.gridFound = false;
     state.projectedColumns = [];
+    state.rspSelected = {};
   }
 
   function restoreNativeSupplyingGrid() {
@@ -1947,6 +2155,12 @@
       ".wise-supplying-commercial-active .jstree-grid-column.wise-supplying-commercial-hidden-column,.wise-supplying-commercial-active .jstree-grid-column[data-wise-commercial-column='unit']{display:none!important;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='unit'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='unit'],.wise-supplying-commercial-active table.supplying_list_heads .wise-supplying-commercial-hidden-column,.wise-supplying-commercial-active table.cust_node .wise-supplying-commercial-hidden-column{display:none!important;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='revenue'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='revenue']{text-align:right;}",
+      ".wise-rsp-summary{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:8px 0;padding:9px 12px;border:1px solid #cbd8e6;border-left:4px solid #4b8dcc;border-radius:7px;background:#f7fafc;box-sizing:border-box;}",
+      ".wise-rsp-summary-copy{display:flex;flex-direction:column;gap:2px;min-width:0;}.wise-rsp-summary-copy b{font-size:13px;color:#17212b;}.wise-rsp-summary-copy span{font-size:10px;color:#667085;}",
+      ".wise-rsp-summary-result{display:flex;align-items:center;justify-content:flex-end;gap:10px;white-space:nowrap;}.wise-rsp-summary-result>span{font-size:11px;color:#475467;}.wise-rsp-summary-result>strong{min-width:88px;text-align:right;font-size:17px;color:#163a5f;}",
+      ".wise-rsp-summary-result button{padding:4px 9px;border:1px solid #aebdca;border-radius:4px;background:#fff;color:#344054;font-size:11px;cursor:pointer;}.wise-rsp-summary-result button:disabled{opacity:.45;cursor:default;}",
+      ".wise-rsp-row-control{display:inline-flex;align-items:center;gap:4px;margin-left:8px;padding:2px 6px;border:1px solid #b8cadb;border-radius:999px;background:#f1f7fc;color:#244b70;font-size:10px;font-weight:700;line-height:16px;vertical-align:middle;white-space:nowrap;cursor:pointer;}",
+      ".wise-rsp-row-control:hover{border-color:#4b8dcc;background:#e7f2fb;}.wise-rsp-row-control input{width:13px;height:13px;margin:0;accent-color:#347db5;cursor:pointer;}.wise-rsp-row-control.is-unavailable{border-color:#d5d9df;background:#f6f7f8;color:#858b94;cursor:default;}.wise-rsp-row-control.is-loading span{opacity:.75;}",
       "." + CFG.panelClass + "{display:grid;grid-template-columns:minmax(190px,1fr) minmax(150px,.55fr) minmax(180px,.7fr);align-items:end;gap:12px;margin:12px 0;padding:12px 14px;border:1px solid #ccd8e5;border-left:4px solid #d4b455;border-radius:8px;background:linear-gradient(135deg,#fffdf8 0%,#f4f7fa 100%);box-sizing:border-box;}",
       "." + CFG.panelClass + ".has-error{border-color:#b42318;}",
       ".wise-line-commercial-heading{display:flex;flex-direction:column;gap:2px;align-self:center;}",
@@ -1957,7 +2171,7 @@
       ".wise-commercial-input-wrap:focus-within{border-color:#4b8dcc;box-shadow:0 0 0 2px rgba(75,141,204,.14);}",
       ".wise-commercial-input-wrap em{color:#667085;font-size:12px;font-style:normal;}",
       ".wise-commercial-input{min-width:0;width:100%;height:26px!important;padding:0!important;border:0!important;outline:0!important;background:transparent!important;text-align:right;font:inherit!important;color:#17212b!important;box-shadow:none!important;}",
-      "@media(max-width:760px){." + CFG.panelClass + "{grid-template-columns:1fr 1fr;}.wise-line-commercial-heading{grid-column:1/-1;}}"
+      "@media(max-width:760px){." + CFG.panelClass + "{grid-template-columns:1fr 1fr;}.wise-line-commercial-heading{grid-column:1/-1;}.wise-rsp-summary{align-items:flex-start;flex-direction:column;}.wise-rsp-summary-result{width:100%;justify-content:space-between;}}"
     ].join("");
     $("head").append('<style id="' + CFG.styleId + '">' + css + "</style>");
   }
@@ -2047,7 +2261,7 @@
     for (var i = 0; i < sources.length; i++) {
       Object.keys(sources[i]).forEach(function (key) {
         var name = normaliseCustomFieldName(key);
-        if ((name === "revenue" || name === "markup") && matchingKeys.indexOf(key) === -1) matchingKeys.push(key);
+        if ((name === "revenue" || name === "markup" || name === "rsp") && matchingKeys.indexOf(key) === -1) matchingKeys.push(key);
       });
     }
     return {
@@ -2067,7 +2281,9 @@
       inventoryMaster: getInventoryMasterInfo(node || { data: {} }),
       inheritedDefaults: getInheritedCommercialDefaults(node || { data: {} }),
       matchingKeys: matchingKeys,
-      commercial: readCommercialFields(node || { data: {} })
+      commercial: readCommercialFields(node || { data: {} }),
+      recommendedSalePrice: readRecommendedSalePrice(node || { data: {} }),
+      quantity: readSupplyingQuantity(node || { data: {} })
     };
   }
 
@@ -2077,6 +2293,7 @@
     calculateRevenue: calculateRevenue,
     calculateMarkup: calculateMarkup,
     getCommercialFields: function (node) { return readCommercialFields(node || { data: {} }); },
+    getRecommendedSalePrice: function (node) { return readRecommendedSalePrice(node || { data: {} }); },
     inspect: inspectCommercialContext,
     describe: function () {
       return {
@@ -2087,7 +2304,8 @@
         gridFound: state.gridFound,
         projectedColumns: state.projectedColumns.slice(),
         itemEditorEnhanced: !!$("." + CFG.panelClass).length,
-        fields: { revenue: CFG.revenueField, markup: CFG.markupField },
+        fields: { revenue: CFG.revenueField, markup: CFG.markupField, rsp: CFG.rspField },
+        selectedRspLines: Object.keys(state.rspSelected).length,
         saveBridge: typeof $.ajaxPrefilter === "function" ? "ajax-prefilter-and-form-fields" : "form-fields"
       };
     }
