@@ -7,7 +7,7 @@ Do not hand-edit the current string or source table. Update `manifest.json` firs
 ## Current String
 
 ```text
-https://mattclangford.github.io/hhplugin/0-loader.js?v=3.6;
+https://mattclangford.github.io/hhplugin/0-loader.js?v=3.7;
 ```
 
 ## Source Table

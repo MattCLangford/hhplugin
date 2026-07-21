@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.6",
+    version: "2026-07-21.7",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
@@ -700,10 +700,7 @@
     if (!element) return;
 
     var $element = $(element);
-    var $host = $element.find("table.cust_node tr").first().children("td,th")
-      .filter(".name_cell,.item_cell.node_desc,.item_cell").last();
-    if (!$host.length) $host = $element.children(".jstree-anchor").first();
-    if (!$host.length) $host = $element.find(".jstree-anchor").first();
+    var $host = findRspRowHost($element);
     if (!$host.length) return;
 
     var rsp = readRecommendedSalePrice(node);
@@ -716,7 +713,7 @@
       ? "Select for kit/bundle total · Qty " + formatQuantity(quantity) + " · line RSP " + formatSterling(lineTotal)
       : (!rsp.resolved ? "Loading recommended sale price" : "No RSP is set on this inventory component");
 
-    var $control = $host.find(".wise-rsp-row-control").filter(function () {
+    var $control = $element.find(".wise-rsp-row-control").filter(function () {
       return String($(this).attr("data-wise-rsp-node-id") || "") === nodeId;
     }).first();
     if (!$control.length) {
@@ -725,6 +722,7 @@
         .appendTo($host);
       $control.on("mousedown click dblclick", function (event) { event.stopPropagation(); });
     }
+    if ($control.parent().get(0) !== $host.get(0)) $control.detach().appendTo($host);
 
     var $input = $control.find(".wise-rsp-select").first();
     $input.attr("data-wise-rsp-node-id", nodeId).prop("disabled", !available);
@@ -733,6 +731,24 @@
     if ($control.attr("title") !== title) $control.attr("title", title);
     if ($control.find("span").text() !== label) $control.find("span").text(label);
     $control.toggleClass("is-unavailable", !available).toggleClass("is-loading", !rsp.resolved && !available);
+  }
+
+  function findRspRowHost($element) {
+    var $row = $element.find("table.cust_node tr").first();
+    var $cells = $row.children("td,th").filter(function () {
+      return !$(this).attr("data-wise-commercial-column");
+    });
+    var $host = $cells.filter(".item_cell.node_desc,.node_desc").last();
+    if (!$host.length) $host = $cells.filter(".name_cell").last();
+    if (!$host.length) {
+      $host = $cells.filter(function () {
+        return $(this).find(".jstree-anchor").length > 0;
+      }).first();
+    }
+    if (!$host.length && $cells.length) $host = $cells.first();
+    if (!$host.length) $host = $element.children(".jstree-anchor").first();
+    if (!$host.length) $host = $element.find(".jstree-anchor").first();
+    return $host;
   }
 
   function ensureRspSelectionSummary() {

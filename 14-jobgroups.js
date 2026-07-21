@@ -24,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-07-21.5", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-07-21.7", maintainRecoveryMs: 5000 };
 
   var GROUPS = [
     {
@@ -378,21 +378,28 @@
   }
 
   function findJobInfoRoot() {
-    if (state.lastRoot && document.documentElement.contains(state.lastRoot)) return $(state.lastRoot);
+    if (state.lastRoot && document.documentElement.contains(state.lastRoot)) {
+      var $lastRoot = $(state.lastRoot);
+      if ($lastRoot.is(":visible") && looksLikeJobInfo($lastRoot)) return $lastRoot;
+      state.lastRoot = null;
+    }
     var selectors = ["#job_info", "#job_details", "#job_detail", "#job_info_container", "#details_tab", "[data-page='job-details']"];
     for (var i = 0; i < selectors.length; i++) {
-      var $candidate = $(selectors[i]).first();
+      var $candidate = $(selectors[i]).filter(":visible").first();
       if (looksLikeJobInfo($candidate)) return $candidate;
     }
 
     var $best = $();
     var bestSize = Infinity;
-    $("label,b,strong,td,th,span").each(function () {
-      if (normaliseLabel(getOwnText(this)) !== "job id") return;
+    $("label,b,strong,td,th,span,div").each(function () {
+      var label = normaliseLabel(getOwnText(this));
+      var isJobId = label === "job id" || label.indexOf("job id ") === 0;
+      var isAnchorField = label === "kit booking start" || label === "job memo";
+      if (!isJobId && !isAnchorField) return;
       var node = this.parentNode;
-      for (var depth = 0; node && node !== document.body && depth < 12; depth += 1, node = node.parentNode) {
+      for (var depth = 0; node && node !== document.body && depth < 16; depth += 1, node = node.parentNode) {
         var $candidate = $(node);
-        if (!looksLikeJobInfo($candidate)) continue;
+        if (!$candidate.is(":visible") || !looksLikeJobInfo($candidate)) continue;
         var size = $candidate.find("*").length;
         if (size < bestSize) { $best = $candidate; bestSize = size; }
       }

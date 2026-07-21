@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-21.6",
+    version: "2026-07-21.7",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -25,8 +25,8 @@
       projectJourney: { file: "11-projectjourney.js", version: "0.7" },
       projectGroups: { file: "12-projectgroups.js", version: "0.13" },
       proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.8" },
-      jobGroups: { file: "14-jobgroups.js", version: "0.9" },
-      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "1.3" }
+      jobGroups: { file: "14-jobgroups.js", version: "1.0" },
+      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "1.4" }
     }
   };
 
@@ -156,12 +156,16 @@
     if (isHomePage()) loadAfterShared(["captrack"]);
     if (hasProjectOrJobTabs()) loadAfterShared(["checklist", "projectJourney", "jobGroups"]);
     if (hasProjectJobsPage()) loadAfterShared(["projectJobs", "projectGroups"]);
-    if (hasJobDetailsPage()) loadAfterShared(["jobGroups"]);
+    if (hasJobDetailsPage()) {
+      loadAfterShared(["jobGroups"]).then(function () {
+        callModuleMethod("jobGroups", window.__wiseJobGroups, "refresh");
+      });
+    }
     if (hasAutopullDialog()) loadIndependent(["autopull"]);
   }
 
   function loadProposalSupplyingBundle() {
-    loadAfterShared(["docprev", "meta", "layout", "editor", "stage", "proposalPageIcons", "supplyingCommercial"]);
+    return loadAfterShared(["docprev", "meta", "layout", "editor", "stage", "proposalPageIcons", "supplyingCommercial"]);
   }
 
   function loadAfterShared(keys) {
@@ -347,20 +351,32 @@
     var candidates = [
       document.getElementById("job_info"),
       document.getElementById("job_details"),
-      document.getElementById("details_tab")
+      document.getElementById("job_detail"),
+      document.getElementById("job_info_container"),
+      document.getElementById("details_tab"),
+      query(document, "[data-page='job-details']")
     ];
 
     for (var i = 0; i < candidates.length; i++) {
       var candidate = candidates[i];
       if (!candidate || closest(candidate, "#items_tab") || closest(candidate, "#proj_info")) continue;
       if (query(candidate, "#proj_info") || query(candidate, "#gbox_jobs_grid")) continue;
-      var text = normaliseText(candidate.textContent || "");
-      if (text.indexOf("job id") !== -1 &&
-          (text.indexOf("kit booking") !== -1 || text.indexOf("job memo") !== -1 || text.indexOf("client reference") !== -1)) {
-        return true;
-      }
+      if (looksLikeJobDetailsText(candidate.textContent || "")) return true;
     }
+
+    // Some HireHop job-detail variants do not provide a stable content ID.
+    // Use the full, distinctive native field signature as a safe fallback.
+    // Loading the module is non-destructive unless it independently finds a
+    // valid Proposal Creation job-details root.
+    if (document.body && looksLikeJobDetailsText(document.body.textContent || "")) return true;
     return false;
+  }
+
+  function looksLikeJobDetailsText(value) {
+    var text = normaliseText(value);
+    return text.indexOf("job id") !== -1 &&
+      text.indexOf("kit booking start") !== -1 &&
+      countContains(text, ["job memo", "client reference", "price structure", "warehouse name"]) >= 2;
   }
 
   function hasProjectOrJobTabs() {
@@ -411,8 +427,8 @@
 
   function nodeMayAffectRoutes(node) {
     if (!node || node.nodeType !== 1) return false;
-    return matches(node, "#items_tab,#details_tab,#proj_info,#job_info,#job_details,#gbox_jobs_grid,#tabs,.hh-framework_tabs,.ui-tabs,.ui-tabs-nav,.ui-dialog,.ui-dialog-content,.auto_add_check") ||
-      !!query(node, "#items_tab,#details_tab,#proj_info,#job_info,#job_details,#gbox_jobs_grid,#tabs,.hh-framework_tabs,.ui-tabs,.ui-tabs-nav,.ui-dialog,.ui-dialog-content,.auto_add_check");
+    return matches(node, "#items_tab,#details_tab,#proj_info,#job_info,#job_details,#job_detail,#job_info_container,[data-page='job-details'],#gbox_jobs_grid,#tabs,.hh-framework_tabs,.ui-tabs,.ui-tabs-nav,.ui-dialog,.ui-dialog-content,.auto_add_check") ||
+      !!query(node, "#items_tab,#details_tab,#proj_info,#job_info,#job_details,#job_detail,#job_info_container,[data-page='job-details'],#gbox_jobs_grid,#tabs,.hh-framework_tabs,.ui-tabs,.ui-tabs-nav,.ui-dialog,.ui-dialog-content,.auto_add_check");
   }
 
   function countContains(text, needles) {

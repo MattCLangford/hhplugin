@@ -143,7 +143,10 @@ function testSourceGuards() {
   assert(loader.includes("loadIndependent"), "loader should initialize independent modules independently");
   assert(loader.includes("nextRetryAt"), "loader should retain module retry cooldown state");
   assert(loader.includes("refreshSupplyingModuleHealth"), "loader should refresh module health after HireHop replaces the supplying root");
+  assert(loader.includes('return loadAfterShared(["docprev"'), "supplying health recovery should receive the bundle load promise");
   assert(loader.includes("Loading them without that dependency"), "dependent modules must not initialize before the shared module");
+  assert(loader.includes("looksLikeJobDetailsText(document.body.textContent"), "ID-less job-detail pages should still load the grouped front-page module");
+  assert(loader.includes('callModuleMethod("jobGroups"'), "an already-loaded job layout should refresh after HireHop route changes");
 
   const shared = fs.readFileSync(path.join(root, "5-hirehop.js"), "utf8");
   assert(shared.includes('allowedIds: ["14"]'), "Proposal Creation depot ID should be an explicit stable gate");
@@ -161,6 +164,11 @@ function testSourceGuards() {
   assert(commercial.includes("maintainCommercialTopSwitcher"), "RSP and Job Performance should share a display-only view switch");
   assert(commercial.includes("restoreTopCommercialViews"), "removing the RSP enhancement should restore Job Performance visibility");
   assert(commercial.includes('topView: "job-performance"'), "Job Performance should be the default commercial view on each page");
+  assert(commercial.includes("function findRspRowHost"), "RSP controls should use a dedicated item-description host selector");
+  assert(!commercial.includes('.filter(".name_cell,.item_cell.node_desc,.item_cell").last()'), "RSP controls must not fall through to commercial value cells");
+
+  const jobGroups = fs.readFileSync(path.join(root, "14-jobgroups.js"), "utf8");
+  assert(jobGroups.includes('label.indexOf("job id ") === 0'), "combined Job ID label/value cells should be accepted as job-detail anchors");
 
   const journey = fs.readFileSync(path.join(root, "11-projectjourney.js"), "utf8");
   const buildJourney = journey.slice(journey.indexOf("function buildJourneyHtml"), journey.indexOf("function buildHeaderSummary"));
