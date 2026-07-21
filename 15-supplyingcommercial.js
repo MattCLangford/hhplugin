@@ -3,8 +3,8 @@
  * ---------------------------------------------------------------------------
  * Proposal Creation depot only.
  *
- * - Adds line-level Revenue and Markup custom-field inputs to HireHop's native
- *   hire/sales item editor without replacing the native save workflow.
+ * - Adds a line-level Proposal button that opens a dedicated Revenue/Markup
+ *   editor without depending on HireHop's reused native item popup.
  * - Uses HireHop's native line Total as CoS, then shows Markup and Revenue.
  * - Calculates either Revenue from Markup or whole-number Markup from Revenue.
  * - Uses inventory Revenue/Markup as defaults until a line-level field exists.
@@ -21,9 +21,10 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.16",
+    version: "2026-07-21.17",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
+    editorDialogId: "wise-proposal-commercial-dialog",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     itemsSaveEndpoint: getHireHopEndpoint("itemsSave", "/php_functions/items_save.php"),
     availabilityEndpoint: getHireHopEndpoint("availabilityList", "/php_functions/availability_list.php"),
@@ -43,8 +44,7 @@
     inventoryFallbackGapMs: 500,
     inventoryUpdateDebounceMs: 2500,
     refreshDelayMs: 60,
-    dialogRetryDelaysMs: [0, 50, 160, 400, 900, 1800, 3200, 5200],
-    commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, rsp: 96 },
+    commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, proposal: 76, rsp: 96 },
     rspSelectionRetentionMs: 15 * 1000,
     recoveryIntervalMs: 1200,
     recoveryChecks: 18,
@@ -97,10 +97,8 @@
 
   function boot() {
     installStyles();
-    installAjaxSaveBridge();
-    installNativeSaveCapture();
+    installLineCommercialEditorCapture();
     bindEvents();
-    installDialogObserver();
     scheduleRefresh(0);
 
     state.recoveryTimer = setInterval(function () {
@@ -116,41 +114,12 @@
 
   function bindEvents() {
     $(window).on("load.wiseSupplyingCommercial focus.wiseSupplyingCommercial", function () {
-      installDialogObserver();
       scheduleRefresh(CFG.refreshDelayMs);
-      queueDialogMaintenanceChecks([0, 120, 500]);
     });
 
     $(document)
       .on("ajaxComplete.wiseSupplyingCommercial", function () {
-        installDialogObserver();
         scheduleRefresh(CFG.refreshDelayMs);
-        scheduleDialogMaintenance(CFG.refreshDelayMs);
-      })
-      .on("visibilitychange.wiseSupplyingCommercial", function () {
-        if (document.hidden) return;
-        installDialogObserver();
-        queueDialogMaintenanceChecks([0, 120, 500]);
-      })
-      .on("dialogopen.wiseSupplyingCommercial", ".ui-dialog-content", function () {
-        queueDialogMaintenanceChecks();
-      })
-      .on("dialogclose.wiseSupplyingCommercial", ".ui-dialog-content", function () {
-        var $closedDialog = $(this).closest(".ui-dialog,[role='dialog']");
-        var closedActiveEditor = !!($closedDialog.length && state.activeDialog === $closedDialog.get(0));
-        var containedCommercialPanel = $closedDialog.find("." + CFG.panelClass).length > 0;
-        $closedDialog.find("." + CFG.panelClass).remove();
-        if (closedActiveEditor || containedCommercialPanel) {
-          stopCosWatcher();
-          state.activeDialog = null;
-          state.activeItemKey = "";
-        }
-        queueDialogMaintenanceChecks([0, 120]);
-      })
-      .on("click.wiseSupplyingCommercialPopup dblclick.wiseSupplyingCommercialPopup", "#items_tab", function (event) {
-        var action = normaliseText(buttonText(closestActionElement(event.target)));
-        var itemInteraction = event.type === "dblclick" || action === "edit";
-        if (itemInteraction) queueDialogMaintenanceChecks();
       })
       .on("select_node.jstree.wiseSupplyingCommercial changed.jstree.wiseSupplyingCommercial", CFG.tree, function (event, data) {
         var node = data && data.node;
@@ -254,7 +223,6 @@
 
   function refresh() {
     var root = document.getElementById("items_tab");
-    installDialogObserver();
     maintainObserver(root);
 
     if (!root || !isProposalCreationDepot()) {
@@ -264,10 +232,11 @@
 
     $(document.body).addClass("wise-supplying-commercial-active");
     projectSupplyingGrid();
+    ensureProposalEditColumn();
+    renderProposalEditButtons();
     refreshRspSelectionUi();
     maintainCommercialTopSwitcher();
     scheduleSupplyingColumnAlignment(0);
-    enhanceOpenItemDialog();
   }
 
   function maintainObserver(root) {
@@ -397,12 +366,14 @@
     setCommercialGeometry($headerTable.find("[data-wise-commercial-column='cos']"), widths.cos);
     setCommercialGeometry($headerTable.find("[data-wise-commercial-column='markup']"), widths.markup);
     setCommercialGeometry($headerTable.find("[data-wise-commercial-column='revenue']"), widths.revenue);
+    setCommercialGeometry($headerTable.find("[data-wise-proposal-column='header']"), widths.proposal);
     setCommercialGeometry($headerTable.find("[data-wise-rsp-column='header']"), widths.rsp);
 
     var $rows = $("#items_tab table.cust_node:visible");
     setCommercialGeometry($rows.find("[data-wise-commercial-column='cos']"), widths.cos);
     setCommercialGeometry($rows.find("[data-wise-commercial-column='markup']"), widths.markup);
     setCommercialGeometry($rows.find("[data-wise-commercial-column='revenue']"), widths.revenue);
+    setCommercialGeometry($rows.find("[data-wise-proposal-column='cell']"), widths.proposal);
     setCommercialGeometry($rows.find("[data-wise-rsp-column='cell']"), widths.rsp);
     alignNativeHeaderToRows($headerTable, $rows);
   }
@@ -413,6 +384,7 @@
     setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-commercial-column='cos']"), widths.cos);
     setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-commercial-column='markup']"), widths.markup);
     setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-commercial-column='revenue']"), widths.revenue);
+    setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-proposal-column='grid']"), widths.proposal);
     setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-rsp-column='grid']"), widths.rsp);
   }
 
@@ -439,8 +411,8 @@
 
   function alignNativeHeaderToRows($headerTable, $rows) {
     var rspVisible = $(document.body).hasClass("wise-rsp-calculator-view");
-    var headerSelector = rspVisible ? "[data-wise-rsp-column='header']" : "[data-wise-commercial-column='revenue']";
-    var rowSelector = rspVisible ? "[data-wise-rsp-column='cell']" : "[data-wise-commercial-column='revenue']";
+    var headerSelector = rspVisible ? "[data-wise-rsp-column='header']" : "[data-wise-proposal-column='header']";
+    var rowSelector = rspVisible ? "[data-wise-rsp-column='cell']" : "[data-wise-proposal-column='cell']";
     var $headerLast = $headerTable.find(headerSelector).filter(":visible").first();
     if (!$headerLast.length) return;
 
@@ -540,7 +512,7 @@
 
   function projectNativeSupplyingGrid(tree, $headerTable) {
     var $headerRow = $headerTable.find("tr").first();
-    var $headers = $headerRow.children("th,td").not("[data-wise-rsp-column]");
+    var $headers = $headerRow.children("th,td").not("[data-wise-rsp-column],[data-wise-proposal-column]");
     if (!$headers.length) return;
 
     rememberNativeCellOrder($headers);
@@ -638,7 +610,7 @@
   function markNativeSupplyingBodyCells($tables, headerCount, columns) {
     $tables.each(function () {
       var $row = $(this).find("tr").first();
-      var $cells = $row.children("td,th").not("[data-wise-rsp-column]");
+      var $cells = $row.children("td,th").not("[data-wise-rsp-column],[data-wise-proposal-column]");
       if (!$cells.length) return;
       rememberNativeCellOrder($cells);
       var offset = Math.max(0, $cells.length - headerCount);
@@ -1020,6 +992,99 @@
     $control.toggleClass("is-unavailable", !available).toggleClass("is-loading", !rsp.resolved && !available);
   }
 
+  function ensureProposalEditColumn() {
+    var $nativeHeader = getNativeSupplyingHeaderTable();
+    if ($nativeHeader.length) {
+      ensureNativeProposalEditColumn($nativeHeader);
+      return;
+    }
+    ensureGridProposalEditColumn(getGridWrapper(getTree()));
+  }
+
+  function ensureNativeProposalEditColumn($headerTable) {
+    var $headerRow = $headerTable.find("tr").first();
+    var $header = $headerRow.children("[data-wise-proposal-column='header']").first();
+    var $revenueHeader = $headerRow.children("[data-wise-commercial-column='revenue']").first();
+    if (!$header.length) $header = $('<th class="wise-proposal-column-header" data-wise-proposal-column="header"><div>Proposal</div></th>');
+    if ($revenueHeader.length && $header.prev().get(0) !== $revenueHeader.get(0)) $header.insertAfter($revenueHeader);
+    else if (!$header.parent().length) $header.appendTo($headerRow);
+
+    $("#items_tab table.cust_node").each(function () {
+      var $row = $(this).find("tr").first();
+      if (!$row.length) return;
+      var $revenue = $row.children("[data-wise-commercial-column='revenue']").first();
+      var $cell = $row.children("[data-wise-proposal-column='cell']").first();
+      if (!$cell.length) $cell = $('<td class="wise-proposal-column-cell" data-wise-proposal-column="cell"></td>');
+      if ($revenue.length && $cell.prev().get(0) !== $revenue.get(0)) $cell.insertAfter($revenue);
+      else if (!$cell.parent().length) $cell.appendTo($row);
+    });
+  }
+
+  function ensureGridProposalEditColumn($wrapper) {
+    if (!$wrapper || !$wrapper.length) return;
+    var $column = $wrapper.find(".wise-proposal-grid-column[data-wise-proposal-column='grid']").first();
+    var $revenue = $wrapper.find(".jstree-grid-column[data-wise-commercial-column='revenue']").first();
+    if (!$column.length && $revenue.length) {
+      $column = $revenue.clone(false, false)
+        .removeAttr("id data-wise-commercial-column data-wise-commercial-original-index")
+        .attr("data-wise-proposal-column", "grid")
+        .addClass("wise-proposal-grid-column");
+      var columnClasses = String($column.attr("class") || "").split(/\s+/).filter(function (name) {
+        return !/^jstree-grid-column-\d+$/.test(name);
+      });
+      $column.attr("class", columnClasses.join(" "));
+      $column.find("[id]").removeAttr("id");
+      $column.find("[data-wise-commercial-original-label]").removeAttr("data-wise-commercial-original-label");
+      var $header = getGridColumnHeader($column);
+      var $separator = $header.children(".jstree-grid-separator").detach();
+      $header.empty().text("Proposal");
+      if ($separator.length) $header.append($separator);
+      $column.find(".jstree-grid-cell").empty();
+      $column.insertAfter($revenue);
+    } else if ($column.length && $revenue.length && $column.prev().get(0) !== $revenue.get(0)) {
+      $column.insertAfter($revenue);
+    }
+  }
+
+  function renderProposalEditButtons() {
+    var tree = getTree();
+    var nodes = getAllTreeNodes(tree);
+    var present = {};
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (!isInventoryLine(node)) continue;
+      var nodeId = String(node.id || "");
+      var $host = findProposalColumnHost(nodeId);
+      if (!nodeId || !$host.length) continue;
+      present[nodeId] = true;
+      var $button = $host.find(".wise-proposal-edit-button").first();
+      if (!$button.length) {
+        $host.empty();
+        $button = $('<button type="button" class="wise-proposal-edit-button"><span aria-hidden="true">✎</span><b>Edit</b></button>').appendTo($host);
+      }
+      $button.attr({
+        "data-wise-proposal-node-id": nodeId,
+        "title": "Edit proposal Markup and Revenue for this line",
+        "aria-label": "Edit proposal commercial fields for this line"
+      });
+    }
+    $("#items_tab .wise-proposal-edit-button").each(function () {
+      var nodeId = String($(this).attr("data-wise-proposal-node-id") || "");
+      if (!present[nodeId]) $(this).remove();
+    });
+  }
+
+  function findProposalColumnHost(nodeId) {
+    var element = nodeId && document.getElementById(nodeId);
+    var $host = element
+      ? $(element).find("table.cust_node tr").first().children("[data-wise-proposal-column='cell']").first()
+      : $();
+    if ($host.length) return $host;
+    return $("#items_tab .wise-proposal-grid-column .jstree-grid-cell").filter(function () {
+      return String($(this).attr("data-jstreegrid") || "") === String(nodeId || "");
+    }).first();
+  }
+
   function ensureRspSelectionColumn() {
     var $nativeHeader = getNativeSupplyingHeaderTable();
     if ($nativeHeader.length) {
@@ -1033,21 +1098,25 @@
     var $headerRow = $headerTable.find("tr").first();
     var $header = $headerRow.children("[data-wise-rsp-column]").first();
     var $revenueHeader = $headerRow.children("[data-wise-commercial-column='revenue']").first();
+    var $proposalHeader = $headerRow.children("[data-wise-proposal-column='header']").first();
+    var $anchorHeader = $proposalHeader.length ? $proposalHeader : $revenueHeader;
     if (!$header.length) {
       $header = $('<th class="wise-rsp-column-header" data-wise-rsp-column="header"><div>RSP</div></th>');
-      if ($revenueHeader.length) $header.insertAfter($revenueHeader);
+      if ($anchorHeader.length) $header.insertAfter($anchorHeader);
       else $header.appendTo($headerRow);
-    } else if ($revenueHeader.length && $header.prev().get(0) !== $revenueHeader.get(0)) {
-      $header.insertAfter($revenueHeader);
+    } else if ($anchorHeader.length && $header.prev().get(0) !== $anchorHeader.get(0)) {
+      $header.insertAfter($anchorHeader);
     }
 
     $("#items_tab table.cust_node").each(function () {
       var $row = $(this).find("tr").first();
       if (!$row.length) return;
       var $revenue = $row.children("[data-wise-commercial-column='revenue']").first();
+      var $proposal = $row.children("[data-wise-proposal-column='cell']").first();
+      var $anchor = $proposal.length ? $proposal : $revenue;
       var $cell = $row.children("[data-wise-rsp-column]").first();
       if (!$cell.length) $cell = $('<td class="wise-rsp-column-cell" data-wise-rsp-column="cell"></td>');
-      if ($revenue.length && $cell.prev().get(0) !== $revenue.get(0)) $cell.insertAfter($revenue);
+      if ($anchor.length && $cell.prev().get(0) !== $anchor.get(0)) $cell.insertAfter($anchor);
       else if (!$cell.parent().length) $cell.appendTo($row);
     });
   }
@@ -1056,6 +1125,8 @@
     if (!$wrapper || !$wrapper.length) return;
     var $column = $wrapper.find(".wise-rsp-grid-column[data-wise-rsp-column='grid']").first();
     var $revenue = $wrapper.find(".jstree-grid-column[data-wise-commercial-column='revenue']").first();
+    var $proposal = $wrapper.find(".jstree-grid-column[data-wise-proposal-column='grid']").first();
+    var $anchor = $proposal.length ? $proposal : $revenue;
     if (!$column.length && $revenue.length) {
       $column = $revenue.clone(false, false)
         .removeAttr("id data-wise-commercial-column data-wise-commercial-original-index")
@@ -1072,9 +1143,9 @@
       $header.empty().text("RSP");
       if ($separator.length) $header.append($separator);
       $column.find(".jstree-grid-cell").empty();
-      $column.insertAfter($revenue);
-    } else if ($column.length && $revenue.length && $column.prev().get(0) !== $revenue.get(0)) {
-      $column.insertAfter($revenue);
+      $column.insertAfter($anchor);
+    } else if ($column.length && $anchor.length && $column.prev().get(0) !== $anchor.get(0)) {
+      $column.insertAfter($anchor);
     }
   }
 
@@ -1322,6 +1393,224 @@
     kind = Number(kind);
     if (kind === 1 || kind === 2) return true;
     return /^[bc](?:_|-)?\d+/i.test(String(node.id || ""));
+  }
+
+  /* --------------------- Dedicated commercial editor ------------------- */
+
+  function installLineCommercialEditorCapture() {
+    document.addEventListener("pointerdown", function (event) {
+      var button = findProposalEditButton(event.target);
+      if (button) event.stopPropagation();
+    }, true);
+
+    document.addEventListener("click", function (event) {
+      var button = findProposalEditButton(event.target);
+      if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+      if (!isProposalCreationDepot()) return;
+      openLineCommercialEditor(String($(button).attr("data-wise-proposal-node-id") || ""));
+    }, true);
+  }
+
+  function findProposalEditButton(target) {
+    var element = target && target.nodeType === 1 ? target : (target && target.parentElement);
+    return element ? $(element).closest(".wise-proposal-edit-button").get(0) : null;
+  }
+
+  function openLineCommercialEditor(nodeId) {
+    var tree = getTree();
+    var node = null;
+    try { node = tree && tree.get_node(String(nodeId || "")); } catch (err) {}
+    if (!node || !isInventoryLine(node)) return;
+
+    closeLineCommercialEditor();
+    var commercial = readCommercialFields(node);
+    commercial.cos = readLineCos($(), node);
+    var lineId = getSupplyingLineDataId(node);
+    var title = getSupplyingLineTitle(node) || "Supplying line";
+    var $dialog = $('<div id="' + CFG.editorDialogId + '" class="wise-proposal-commercial-dialog"></div>')
+      .attr("data-wise-proposal-node-id", String(node.id || ""))
+      .append('<input type="hidden" name="item_id" value="' + escapeAttr(lineId) + '">')
+      .append($(commercialPanelHtml(commercial)).addClass("wise-commercial-standalone-fields"))
+      .appendTo(document.body);
+    var $panel = $dialog.find("." + CFG.panelClass).first();
+    $panel.attr("data-wise-commercial-item-key", "item:" + lineId);
+    bindCommercialCalculations($panel);
+    initialiseCommercialCalculations($panel);
+
+    if (!$.fn || typeof $.fn.dialog !== "function") {
+      $dialog.remove();
+      if (window.alert) window.alert("The proposal commercial editor could not be opened. Please refresh the page and try again.");
+      return;
+    }
+
+    $dialog.dialog({
+      title: "Proposal commercial fields — " + title,
+      modal: true,
+      width: 510,
+      minWidth: 420,
+      resizable: false,
+      closeOnEscape: true,
+      buttons: [
+        {
+          text: "Save",
+          class: "wise-proposal-commercial-save",
+          click: function () { saveLineCommercialEditor($dialog, node); }
+        },
+        {
+          text: "Cancel",
+          click: function () { $dialog.dialog("close"); }
+        }
+      ],
+      open: function () {
+        $dialog.find('[data-wise-commercial-field="Markup"]').trigger("focus").select();
+      },
+      close: function () {
+        setTimeout(function () {
+          try { $dialog.dialog("destroy"); } catch (err) {}
+          $dialog.remove();
+        }, 0);
+      }
+    });
+  }
+
+  function closeLineCommercialEditor() {
+    var $existing = $("#" + CFG.editorDialogId);
+    if (!$existing.length) return;
+    try { $existing.dialog("close"); } catch (err) { $existing.remove(); }
+  }
+
+  function saveLineCommercialEditor($dialog, node) {
+    if ($dialog.attr("data-wise-commercial-saving") === "1") return;
+    var values = readLineCommercialEditorValues($dialog, node);
+    if (!values) return;
+    var lineId = getSupplyingLineDataId(node);
+    if (!lineId) {
+      setLineCommercialEditorStatus($dialog, "This supplying line has no stable HireHop ID, so it could not be saved.", true);
+      return;
+    }
+
+    $dialog.attr("data-wise-commercial-saving", "1");
+    setLineCommercialEditorBusy($dialog, true);
+    setLineCommercialEditorStatus($dialog, "Saving proposal fields…", false);
+    $.ajax({
+      url: CFG.itemsSaveEndpoint,
+      type: "POST",
+      dataType: "text",
+      data: buildLineCommercialSavePayload(node, values)
+    }).done(function (responseText) {
+      var error = readLineCommercialSaveError(responseText);
+      if (error) {
+        $dialog.removeAttr("data-wise-commercial-saving");
+        setLineCommercialEditorBusy($dialog, false);
+        setLineCommercialEditorStatus($dialog, error, true);
+        return;
+      }
+      applyPendingSaveToTree({
+        nodeId: String(node.id || ""),
+        dataId: lineId,
+        revenue: values.revenue,
+        markup: values.markup
+      });
+      scheduleRefresh(0);
+      $(document).trigger("wise:supplying-commercial-line-saved", [String(node.id || ""), values]);
+      $dialog.dialog("close");
+    }).fail(function (xhr, status, errorThrown) {
+      $dialog.removeAttr("data-wise-commercial-saving");
+      setLineCommercialEditorBusy($dialog, false);
+      var message = readLineCommercialSaveError(xhr && xhr.responseText) || errorThrown || status || "The proposal fields could not be saved.";
+      setLineCommercialEditorStatus($dialog, String(message), true);
+    });
+  }
+
+  function readLineCommercialEditorValues($dialog, node) {
+    var $panel = $dialog.find("." + CFG.panelClass).first();
+    var lastEdited = String($panel.attr("data-wise-commercial-last-edited") || "");
+    if (!lastEdited) {
+      var initialRevenue = $.trim(String($panel.find('[data-wise-commercial-field="Revenue"]').val() || ""));
+      var initialMarkup = $.trim(String($panel.find('[data-wise-commercial-field="Markup"]').val() || ""));
+      if (initialMarkup && !initialRevenue) lastEdited = CFG.markupField;
+      else if (initialRevenue && !initialMarkup) lastEdited = CFG.revenueField;
+    }
+    if (lastEdited && !syncCommercialCalculations($panel, lastEdited, true)) {
+      showValidationError(
+        $dialog,
+        lastEdited === CFG.revenueField
+          ? "Revenue must be a valid money value. Markup is not required when there is no CoS."
+          : "Revenue could not be calculated from the supplied markup.",
+        lastEdited
+      );
+      return null;
+    }
+
+    var revenue = normaliseMoneyInput($panel.find('[data-wise-commercial-field="Revenue"]').val());
+    var markup = normaliseIntegerInput($panel.find('[data-wise-commercial-field="Markup"]').val());
+    if (revenue == null) {
+      showValidationError($dialog, "Revenue must be a valid money value.", CFG.revenueField);
+      return null;
+    }
+    if (markup == null) {
+      showValidationError($dialog, "Markup must be a whole number.", CFG.markupField);
+      return null;
+    }
+
+    var customFields = collectNodeCustomFields(node);
+    setCustomField(customFields, CFG.revenueField, revenue);
+    setCustomField(customFields, CFG.markupField, markup);
+    return { revenue: revenue, markup: markup, customFields: customFields };
+  }
+
+  function buildLineCommercialSavePayload(node, values) {
+    var data = node && node.data ? node.data : {};
+    return {
+      id: getSupplyingLineDataId(node),
+      kind: String(Number(data.kind == null ? data.KIND : data.kind) || 0),
+      custom_fields: values && values.customFields ? values.customFields : {}
+    };
+  }
+
+  function getSupplyingLineDataId(node) {
+    var sources = getNodeDataSources(node);
+    for (var i = 0; i < sources.length; i++) {
+      var value = firstDefinedValue(sources[i], ["ID", "id", "ITEM_ID", "item_id", "LINE_ID", "line_id"]);
+      if (value !== "") return normaliseInventoryId(value);
+    }
+    return normaliseInventoryId(node && node.id);
+  }
+
+  function getSupplyingLineTitle(node) {
+    var sources = getNodeDataSources(node);
+    for (var i = 0; i < sources.length; i++) {
+      var title = firstDefinedValue(sources[i], ["alt_title", "ALT_TITLE", "title", "TITLE", "name", "NAME"]);
+      if (title !== "") return stripInventoryTitleMarkup(title);
+    }
+    return stripInventoryTitleMarkup(node && node.text).replace(/^\s*\d+(?:\.\d+)?\s*(?:x|×)\s+/i, "");
+  }
+
+  function setLineCommercialEditorBusy($dialog, busy) {
+    $dialog.find("input").prop("disabled", !!busy);
+    $dialog.closest(".ui-dialog").find(".ui-dialog-buttonpane button").prop("disabled", !!busy);
+  }
+
+  function setLineCommercialEditorStatus($dialog, message, isError) {
+    var $panel = $dialog.find("." + CFG.panelClass).first();
+    setCalculationStatus($panel, String(message || ""), !!isError);
+  }
+
+  function readLineCommercialSaveError(responseText) {
+    var text = $.trim(String(responseText == null ? "" : responseText));
+    var json = null;
+    if (text) {
+      try { json = JSON.parse(text); } catch (err) {}
+    }
+    if (text && json == null) return "HireHop returned an unexpected response. Refresh the list and try again.";
+    var value = json && json.error != null ? json.error : (json && json.warning != null ? json.warning : "");
+    if (String(value) === "327" || text === "327") return "HireHop is temporarily rate limiting saves. Wait a minute and try again.";
+    if (String(value) === "3" || text === "3") return "HireHop could not identify the supplying line. Refresh the list and try again.";
+    if (value !== "") return String(value);
+    return "";
   }
 
   /* ---------------------------- Native dialog --------------------------- */
@@ -2843,6 +3132,7 @@
 
   function removeEnhancements() {
     stopCosWatcher();
+    closeLineCommercialEditor();
     restoreTopCommercialViews();
     if (state.inventoryUpdateTimer) clearTimeout(state.inventoryUpdateTimer);
     if (state.inventoryUiRefreshTimer) clearTimeout(state.inventoryUiRefreshTimer);
@@ -2857,7 +3147,7 @@
     state.rspReconcileTimers = {};
     restoreCommercialGeometry();
     $("." + CFG.panelClass).remove();
-    $(".wise-rsp-row-control,#" + CFG.rspSummaryId + ",#items_tab [data-wise-rsp-column]").remove();
+    $(".wise-rsp-row-control,#" + CFG.rspSummaryId + ",#items_tab [data-wise-rsp-column],#items_tab [data-wise-proposal-column]").remove();
     $("[data-wise-commercial-original-label]").each(function () {
       var $label = $(this);
       var separator = $label.children(".jstree-grid-separator").detach();
@@ -2919,6 +3209,11 @@
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='cos'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='cos']{width:96px;min-width:96px;max-width:96px;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='markup']{width:64px;min-width:64px;max-width:64px;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='revenue'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='revenue']{width:88px;min-width:88px;max-width:88px;}",
+      ".wise-proposal-column-header,.wise-proposal-column-cell{width:76px;min-width:76px;max-width:76px;text-align:center!important;vertical-align:middle!important;box-sizing:border-box;}",
+      ".wise-proposal-grid-column{min-width:76px!important;width:76px!important;text-align:center!important;}",
+      ".wise-proposal-column-cell,.wise-proposal-grid-column .jstree-grid-cell{position:relative!important;z-index:5!important;}",
+      ".wise-proposal-edit-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;width:64px;min-height:23px;padding:2px 6px;border:1px solid #aebdca;border-radius:4px;background:#fff;color:#244b70;font-size:10px;font-weight:700;line-height:16px;cursor:pointer;box-sizing:border-box;pointer-events:auto;}",
+      ".wise-proposal-edit-button:hover,.wise-proposal-edit-button:focus{border-color:#4b8dcc;background:#e7f2fb;outline:none;box-shadow:0 0 0 2px rgba(75,141,204,.14);}.wise-proposal-edit-button span{font-size:13px;line-height:1;}.wise-proposal-edit-button b{font:inherit;}",
       ".wise-supplying-commercial-active [data-wise-rsp-column]{display:none!important;}",
       ".wise-supplying-commercial-active.wise-rsp-calculator-view table [data-wise-rsp-column]{display:table-cell!important;}",
       ".wise-supplying-commercial-active.wise-rsp-calculator-view .jstree-grid-column[data-wise-rsp-column]{display:block!important;}",
@@ -2945,6 +3240,7 @@
       ".wise-commercial-input-wrap:focus-within{border-color:#4b8dcc;box-shadow:0 0 0 2px rgba(75,141,204,.14);}",
       ".wise-commercial-input-wrap em{color:#667085;font-size:12px;font-style:normal;}",
       ".wise-commercial-input{min-width:0;width:100%;height:26px!important;padding:0!important;border:0!important;outline:0!important;background:transparent!important;text-align:right;font:inherit!important;color:#17212b!important;box-shadow:none!important;}",
+      ".wise-proposal-commercial-dialog{padding:8px 12px!important;overflow:visible!important;}.wise-proposal-commercial-dialog .wise-commercial-standalone-fields{grid-template-columns:1fr 1fr;margin:0;padding:14px;}.wise-proposal-commercial-dialog .wise-line-commercial-heading{grid-column:1/-1;}.wise-proposal-commercial-dialog+.ui-dialog-buttonpane .wise-proposal-commercial-save{font-weight:700;}",
       "@media(max-width:760px){." + CFG.panelClass + "{grid-template-columns:1fr 1fr;}.wise-line-commercial-heading{grid-column:1/-1;}.wise-commercial-view-switcher{align-items:flex-start;flex-direction:column;}.wise-commercial-view-switcher>div{width:100%;box-sizing:border-box;}.wise-commercial-view-switcher button{flex:1;min-width:0;}.wise-rsp-summary{align-items:flex-start;flex-direction:column;}.wise-rsp-summary-result{width:100%;justify-content:space-between;}}"
     ].join("");
     $("head").append('<style id="' + CFG.styleId + '">' + css + "</style>");

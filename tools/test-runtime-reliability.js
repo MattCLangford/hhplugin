@@ -175,9 +175,15 @@ function testCommercialTextMarkup() {
   const nodeSourcesEnd = commercial.indexOf("  function parseCustomFieldBag", nodeSourcesStart);
   const titleStart = commercial.indexOf("  function looksLikeItemEditorTitle");
   const titleEnd = commercial.indexOf("  function findDialogAncestor", titleStart);
+  const partialSaveStart = commercial.indexOf("  function buildLineCommercialSavePayload");
+  const partialSaveEnd = commercial.indexOf("  function getSupplyingLineDataId", partialSaveStart);
+  const lineIdStart = partialSaveEnd;
+  const lineIdEnd = commercial.indexOf("  function getSupplyingLineTitle", lineIdStart);
+  const inventoryIdStart = commercial.indexOf("  function normaliseInventoryId");
+  const inventoryIdEnd = commercial.indexOf("  function collectNodeCustomFields", inventoryIdStart);
   const normaliseTextStart = commercial.indexOf("  function normaliseText");
   const normaliseTextEnd = commercial.indexOf("  function escapeAttr", normaliseTextStart);
-  assert([readerStart, readerEnd, nameStart, nameEnd, moneyStart, moneyEnd, integerStart, integerEnd, revenueStart, revenueEnd, rspTotalStart, rspTotalEnd, firstDefinedStart, firstDefinedEnd, nodeSourcesStart, nodeSourcesEnd, titleStart, titleEnd, normaliseTextStart, normaliseTextEnd].every(index => index >= 0), "commercial test helpers should be discoverable");
+  assert([readerStart, readerEnd, nameStart, nameEnd, moneyStart, moneyEnd, integerStart, integerEnd, revenueStart, revenueEnd, rspTotalStart, rspTotalEnd, firstDefinedStart, firstDefinedEnd, nodeSourcesStart, nodeSourcesEnd, titleStart, titleEnd, partialSaveStart, partialSaveEnd, lineIdStart, lineIdEnd, inventoryIdStart, inventoryIdEnd, normaliseTextStart, normaliseTextEnd].every(index => index >= 0), "commercial test helpers should be discoverable");
 
   const context = vm.createContext({
     result: null,
@@ -205,6 +211,9 @@ function testCommercialTextMarkup() {
       commercial.slice(nodeSourcesStart, nodeSourcesEnd) +
       commercial.slice(rspTotalStart, rspTotalEnd) +
       commercial.slice(titleStart, titleEnd) +
+      commercial.slice(partialSaveStart, partialSaveEnd) +
+      commercial.slice(lineIdStart, lineIdEnd) +
+      commercial.slice(inventoryIdStart, inventoryIdEnd) +
       commercial.slice(normaliseTextStart, normaliseTextEnd) +
       '; result = {' +
         'field: readCustomFieldResult({ Markup: { value: "0" }, "items:_Markup": { value: "-100" } }, [], "Markup"),' +
@@ -219,6 +228,7 @@ function testCommercialTextMarkup() {
         'salesTitle: looksLikeItemEditorTitle("Edit - Sales Item"),' +
         'genericTitle: looksLikeItemEditorTitle("Edit Item"),' +
         'jobTitle: looksLikeItemEditorTitle("Edit Job")' +
+        ',partialPayload: buildLineCommercialSavePayload({ id: "b42", data: { ID: 42, kind: 1, QTY: 9, TOTAL: 250 } }, { customFields: { Revenue: "400", Markup: "60" } })' +
       '};',
     context
   );
@@ -235,6 +245,9 @@ function testCommercialTextMarkup() {
   assert.strictEqual(context.result.salesTitle, true, "punctuated sales-item titles should be detected");
   assert.strictEqual(context.result.genericTitle, true, "a reused generic Edit Item title should be detected");
   assert.strictEqual(context.result.jobTitle, false, "non-item editors should not match the commercial popup title detector");
+  assert.deepStrictEqual(Object.keys(context.result.partialPayload).sort(), ["custom_fields", "id", "kind"], "standalone commercial saves should contain only routing identity and custom fields");
+  assert.strictEqual(context.result.partialPayload.id, "42", "standalone commercial saves should use the stable HireHop line ID");
+  assert.strictEqual(context.result.partialPayload.kind, "1", "standalone commercial saves should retain the supplying-line kind");
 }
 
 function testSourceGuards() {
@@ -271,21 +284,20 @@ function testSourceGuards() {
   assert(commercial.includes('scope === "items" || scope === "item" || scope === "line"'), "line-level namespaced fields should outrank generic row properties");
   assert(commercial.includes('replace(/[−–—]/g, "-")'), "text markups should accept common minus characters");
   assert(commercial.includes("refreshAfterAt: Date.now() + CFG.inventoryCacheTtlMs"), "successful inventory defaults should eventually refresh in a long-lived page");
-  assert(commercial.includes("function installDialogObserver"), "item editors should be observed outside the supplying-list DOM root");
-  assert(commercial.includes("dialogObserverRoot === document.body"), "the popup observer should recover if HireHop replaces the document body");
-  assert(commercial.includes("characterData: true"), "reused popup title and content changes should trigger editor recovery");
-  assert(commercial.includes("function queueDialogMaintenanceChecks"), "item editor opening should receive bounded delayed recovery checks");
-  assert(commercial.includes("1800, 3200, 5200"), "popup recovery should remain active during slower reused-dialog rebuilds");
-  assert(commercial.includes("function scoreItemEditorDialog"), "item editor detection should have a structural fallback beyond exact title text");
-  assert(commercial.includes("function getActiveDialogContent"), "reused dialog wrappers should target their current visible content pane");
-  assert(commercial.includes('if ($visible.length) return $visible.last()'), "the newest visible popup content should outrank hidden stale panes");
-  assert(commercial.includes("!looksLikeItemDialogShell($owner)"), "stale commercial fields should not remain in an unrelated reused dialog");
-  assert(commercial.includes("looksLikeEditItemTrigger(event.target)"), "Edit actions should trigger recovery from the capture phase");
-  assert(commercial.includes('addEventListener("dblclick"'), "row double-click recovery should not depend on bubbling through HireHop handlers");
-  assert(commercial.includes("closedActiveEditor || containedCommercialPanel"), "unrelated dialog closes must not reset the active commercial editor");
-  assert(commercial.includes("click.wiseSupplyingCommercialPopup dblclick.wiseSupplyingCommercialPopup"), "native Edit and row double-click interactions should trigger popup recovery");
+  const commercialBoot = commercial.slice(commercial.indexOf("  function boot"), commercial.indexOf("  function bindEvents"));
+  assert(commercialBoot.includes("installLineCommercialEditorCapture"), "the line-level Proposal button should own commercial editing");
+  assert(!commercialBoot.includes("installDialogObserver"), "commercial editing must not depend on observing HireHop's native item popup");
+  assert(!commercialBoot.includes("installNativeSaveCapture"), "commercial editing must not depend on HireHop's native Save button");
+  assert(!commercialBoot.includes("installAjaxSaveBridge"), "commercial editing must use its own partial custom-field save");
+  assert(commercial.includes("function ensureProposalEditColumn"), "supplying lines should receive a dedicated Proposal edit column");
+  assert(commercial.includes("function renderProposalEditButtons"), "inventory lines should receive Proposal edit buttons");
+  assert(commercial.includes("function openLineCommercialEditor"), "Proposal buttons should open the dedicated commercial editor");
+  assert(commercial.includes("function buildLineCommercialSavePayload"), "the dedicated editor should build a minimal partial-update payload");
+  const partialSave = commercial.slice(commercial.indexOf("  function buildLineCommercialSavePayload"), commercial.indexOf("  function getSupplyingLineDataId"));
+  assert(partialSave.includes("custom_fields"), "the line editor should post the merged custom-field bag");
+  assert(!/\b(?:qty|unit_price|price|memo|parent)\s*:/.test(partialSave), "the partial save must not resubmit unrelated native hire-item values");
   assert(commercial.includes("function alignSupplyingCommercialColumns"), "commercial columns should share a dedicated alignment pass");
-  assert(commercial.includes("commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, rsp: 96 }"), "commercial header and row widths should use one geometry contract");
+  assert(commercial.includes("commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, proposal: 76, rsp: 96 }"), "commercial header and row widths should use one geometry contract");
   assert(commercial.includes("function alignNativeHeaderToRows"), "separate native header and row tables should be geometrically reconciled");
   assert(commercial.includes("function maintainAlignmentObserver"), "column alignment should recover after supplying-layout resizes");
   assert(commercial.includes("restoreCommercialGeometry"), "removing the enhancement should restore native inline geometry");
@@ -305,7 +317,7 @@ function testSourceGuards() {
   assert(commercial.includes("function ensureRspSelectionColumn"), "RSP controls should use a dedicated supplying-list column");
   assert(commercial.includes("function findRspColumnHost"), "RSP checkboxes should mount only in the dedicated RSP column");
   assert(commercial.includes("wise-rsp-calculator-view"), "the RSP column should be visible only in calculator view");
-  assert(commercial.includes('$cell.insertAfter($revenue)'), "native RSP cells should remain immediately after Revenue during redraws");
+  assert(commercial.includes('$cell.insertAfter($anchor)'), "native RSP cells should remain after the Proposal action during redraws");
   assert(commercial.includes("pointer-events:auto"), "dedicated RSP checkboxes should remain clickable above HireHop row handlers");
   assert(!commercial.includes('.filter(".name_cell,.item_cell.node_desc,.item_cell").last()'), "RSP controls must not fall through to commercial value cells");
 
