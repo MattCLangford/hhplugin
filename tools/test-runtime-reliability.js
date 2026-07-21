@@ -163,12 +163,26 @@ function testCommercialTextMarkup() {
   const nameEnd = commercial.indexOf("  /* ------------------------------ Formatting", nameStart);
   const integerStart = commercial.indexOf("  function normaliseIntegerInput");
   const integerEnd = commercial.indexOf("  function rawMoney", integerStart);
+  const moneyStart = commercial.indexOf("  function normaliseMoneyInput");
+  const moneyEnd = integerStart;
   const revenueStart = commercial.indexOf("  function calculateRevenue");
   const revenueEnd = commercial.indexOf("  function calculateMarkup", revenueStart);
-  assert([readerStart, readerEnd, nameStart, nameEnd, integerStart, integerEnd, revenueStart, revenueEnd].every(index => index >= 0), "commercial test helpers should be discoverable");
+  const rspTotalStart = commercial.indexOf("  function calculateRspLineTotal");
+  const rspTotalEnd = commercial.indexOf("  function isInventoryLine", rspTotalStart);
+  const firstDefinedStart = commercial.indexOf("  function firstDefinedValue");
+  const firstDefinedEnd = commercial.indexOf("  function stripInventoryTitleMarkup", firstDefinedStart);
+  const nodeSourcesStart = commercial.indexOf("  function getNodeDataSources");
+  const nodeSourcesEnd = commercial.indexOf("  function parseCustomFieldBag", nodeSourcesStart);
+  const titleStart = commercial.indexOf("  function looksLikeItemEditorTitle");
+  const titleEnd = commercial.indexOf("  function findDialogAncestor", titleStart);
+  const normaliseTextStart = commercial.indexOf("  function normaliseText");
+  const normaliseTextEnd = commercial.indexOf("  function escapeAttr", normaliseTextStart);
+  assert([readerStart, readerEnd, nameStart, nameEnd, moneyStart, moneyEnd, integerStart, integerEnd, revenueStart, revenueEnd, rspTotalStart, rspTotalEnd, firstDefinedStart, firstDefinedEnd, nodeSourcesStart, nodeSourcesEnd, titleStart, titleEnd, normaliseTextStart, normaliseTextEnd].every(index => index >= 0), "commercial test helpers should be discoverable");
 
   const context = vm.createContext({
     result: null,
+    CFG: { rspSelectionRetentionMs: 15000 },
+    state: { rspSelected: { "line:missing": true }, rspSelectionMissingSince: {} },
     $: {
       trim: value => String(value == null ? "" : value).trim(),
       isPlainObject: value => !!value && typeof value === "object" && !Array.isArray(value)
@@ -182,15 +196,29 @@ function testCommercialTextMarkup() {
     isFinite
   });
   vm.runInContext(
-    commercial.slice(readerStart, readerEnd) +
+      commercial.slice(readerStart, readerEnd) +
       commercial.slice(nameStart, nameEnd) +
+      commercial.slice(moneyStart, moneyEnd) +
       commercial.slice(integerStart, integerEnd) +
       commercial.slice(revenueStart, revenueEnd) +
+      commercial.slice(firstDefinedStart, firstDefinedEnd) +
+      commercial.slice(nodeSourcesStart, nodeSourcesEnd) +
+      commercial.slice(rspTotalStart, rspTotalEnd) +
+      commercial.slice(titleStart, titleEnd) +
+      commercial.slice(normaliseTextStart, normaliseTextEnd) +
       '; result = {' +
         'field: readCustomFieldResult({ Markup: { value: "0" }, "items:_Markup": { value: "-100" } }, [], "Markup"),' +
         'ascii: normaliseIntegerInput("-100"),' +
         'unicode: normaliseIntegerInput("−100"),' +
-        'revenue: calculateRevenue(84, "-100")' +
+        'revenue: calculateRevenue(84, "-100"),' +
+        'rspLineTotal: calculateRspLineTotal("100.00", 2),' +
+        'selectionKey: getRspSelectionKey({ id: "temporary-node", data: { ID: 42 } }),' +
+        'retainedMissing: retainMissingRspSelection("line:missing"),' +
+        'stillSelected: !!state.rspSelected["line:missing"],' +
+        'hireTitle: looksLikeItemEditorTitle("Edit Hire Item"),' +
+        'salesTitle: looksLikeItemEditorTitle("Edit - Sales Item"),' +
+        'genericTitle: looksLikeItemEditorTitle("Edit Item"),' +
+        'jobTitle: looksLikeItemEditorTitle("Edit Job")' +
       '};',
     context
   );
@@ -199,6 +227,14 @@ function testCommercialTextMarkup() {
   assert.strictEqual(context.result.ascii, "-100", "text markup should preserve an ASCII negative value");
   assert.strictEqual(context.result.unicode, "-100", "text markup should normalise a Unicode minus value");
   assert.strictEqual(context.result.revenue, 0, "-100 markup should calculate zero revenue");
+  assert.strictEqual(context.result.rspLineTotal, 200, "two units at £100 RSP should display and total as a £200 line");
+  assert.strictEqual(context.result.selectionKey, "line:42", "RSP selection should use the stable supplying-line ID instead of a transient node ID");
+  assert.strictEqual(context.result.retainedMissing, true, "a row missing during redraw should enter the retention window");
+  assert.strictEqual(context.result.stillSelected, true, "the first missing-row refresh must not erase an RSP selection");
+  assert.strictEqual(context.result.hireTitle, true, "the native hire-item title should be detected");
+  assert.strictEqual(context.result.salesTitle, true, "punctuated sales-item titles should be detected");
+  assert.strictEqual(context.result.genericTitle, true, "a reused generic Edit Item title should be detected");
+  assert.strictEqual(context.result.jobTitle, false, "non-item editors should not match the commercial popup title detector");
 }
 
 function testSourceGuards() {
@@ -232,6 +268,26 @@ function testSourceGuards() {
   assert(commercial.includes('scope === "items" || scope === "item" || scope === "line"'), "line-level namespaced fields should outrank generic row properties");
   assert(commercial.includes('replace(/[−–—]/g, "-")'), "text markups should accept common minus characters");
   assert(commercial.includes("refreshAfterAt: Date.now() + CFG.inventoryCacheTtlMs"), "successful inventory defaults should eventually refresh in a long-lived page");
+  assert(commercial.includes("function installDialogObserver"), "item editors should be observed outside the supplying-list DOM root");
+  assert(commercial.includes("function queueDialogMaintenanceChecks"), "item editor opening should receive bounded delayed recovery checks");
+  assert(commercial.includes("function scoreItemEditorDialog"), "item editor detection should have a structural fallback beyond exact title text");
+  assert(commercial.includes("closedActiveEditor || containedCommercialPanel"), "unrelated dialog closes must not reset the active commercial editor");
+  assert(commercial.includes("click.wiseSupplyingCommercialPopup dblclick.wiseSupplyingCommercialPopup"), "native Edit and row double-click interactions should trigger popup recovery");
+  assert(commercial.includes("function alignSupplyingCommercialColumns"), "commercial columns should share a dedicated alignment pass");
+  assert(commercial.includes("commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, rsp: 96 }"), "commercial header and row widths should use one geometry contract");
+  assert(commercial.includes("function alignNativeHeaderToRows"), "separate native header and row tables should be geometrically reconciled");
+  assert(commercial.includes("function maintainAlignmentObserver"), "column alignment should recover after supplying-layout resizes");
+  assert(commercial.includes("restoreCommercialGeometry"), "removing the enhancement should restore native inline geometry");
+  assert(commercial.includes("formatSterling(lineTotal)"), "the RSP column should display the quantity-extended line value");
+  assert(commercial.includes("total += calculateRspLineTotal(rsp, quantity)"), "the RSP summary should add each quantity-extended line exactly once");
+  assert(commercial.includes('addEventListener("click", handleRspSelectionCapture, true)'), "RSP selection should be captured before HireHop row click handlers");
+  assert(commercial.includes("function getRspSelectionKey"), "RSP selection should survive row redraws through a stable line identity");
+  assert(commercial.includes("function queueRspUiReconciliation"), "RSP controls should receive bounded post-click redraw reconciliation");
+  assert(commercial.includes("function setImportantStyle"), "commercial geometry updates should be idempotent to avoid mutation-refresh loops");
+  assert(commercial.includes("isManagedCommercialGeometryMutation"), "managed geometry mutations should not trigger full supplying refreshes");
+  assert(commercial.includes("function retainMissingRspSelection"), "RSP selections should survive a short missing-row redraw window");
+  assert(commercial.includes("if (!available && rsp.resolved)"), "an unresolved loading RSP must not erase an existing selection");
+  assert(commercial.includes("if (rspResult.resolved) removeRspSelection(selectionKey)"), "the calculator should remove a selection only after RSP absence is resolved");
   assert(commercial.includes("maintainCommercialTopSwitcher"), "RSP and Job Performance should share a display-only view switch");
   assert(commercial.includes("restoreTopCommercialViews"), "removing the RSP enhancement should restore Job Performance visibility");
   assert(commercial.includes('topView: "job-performance"'), "Job Performance should be the default commercial view on each page");
