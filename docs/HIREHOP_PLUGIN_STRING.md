@@ -36,7 +36,7 @@ These files are not included directly in the HireHop company config string. `0-l
 | 12 | `12-projectgroups.js` | `0.13` | `lazy-project-details` | yes |
 | 13 | `13-proposalpageicons.js` | `0.8` | `lazy-supplying-list-proposal-creation` | yes |
 | 14 | `14-jobgroups.js` | `1.1` | `lazy-job-details` | yes |
-| 15 | `15-supplyingcommercial.js` | `2.3` | `lazy-supplying-list-proposal-creation` | yes |
+| 15 | `15-supplyingcommercial.js` | `2.4` | `lazy-supplying-list-proposal-creation` | yes |
 
 ## Maintenance Rule
 

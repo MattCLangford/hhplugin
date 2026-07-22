@@ -26,7 +26,7 @@
       projectGroups: { file: "12-projectgroups.js", version: "0.13" },
       proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.8" },
       jobGroups: { file: "14-jobgroups.js", version: "1.1" },
-      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "2.3" }
+      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "2.4" }
     }
   };
 

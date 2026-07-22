@@ -285,19 +285,21 @@ function testSourceGuards() {
   assert(commercial.includes('replace(/[−–—]/g, "-")'), "text markups should accept common minus characters");
   assert(commercial.includes("refreshAfterAt: Date.now() + CFG.inventoryCacheTtlMs"), "successful inventory defaults should eventually refresh in a long-lived page");
   const commercialBoot = commercial.slice(commercial.indexOf("  function boot"), commercial.indexOf("  function bindEvents"));
-  assert(commercialBoot.includes("installLineCommercialEditorCapture"), "the line-level Proposal button should own commercial editing");
+  assert(commercialBoot.includes("installLineCommercialEditorCapture"), "the line-level Revenue icon should own commercial editing");
   assert(!commercialBoot.includes("installDialogObserver"), "commercial editing must not depend on observing HireHop's native item popup");
   assert(!commercialBoot.includes("installNativeSaveCapture"), "commercial editing must not depend on HireHop's native Save button");
   assert(!commercialBoot.includes("installAjaxSaveBridge"), "commercial editing must use its own partial custom-field save");
-  assert(commercial.includes("function ensureProposalEditColumn"), "supplying lines should receive a dedicated Proposal edit column");
-  assert(commercial.includes("function renderProposalEditButtons"), "inventory lines should receive Proposal edit buttons");
-  assert(commercial.includes("function openLineCommercialEditor"), "Proposal buttons should open the dedicated commercial editor");
+  assert(commercial.includes("function removeLegacyProposalEditColumns"), "the retired Proposal edit column should be removed");
+  assert(commercial.includes("function renderProposalEditButtons"), "inventory Revenue cells should receive compact edit controls");
+  assert(commercial.includes("wise-revenue-edit-host"), "the edit control should share the projected Revenue value host");
+  assert(!commercial.includes("<b>Edit</b>"), "the Revenue edit control should remain icon-only");
+  assert(commercial.includes("function openLineCommercialEditor"), "Revenue edit icons should open the dedicated commercial editor");
   assert(commercial.includes("function buildLineCommercialSavePayload"), "the dedicated editor should build a minimal partial-update payload");
   const partialSave = commercial.slice(commercial.indexOf("  function buildLineCommercialSavePayload"), commercial.indexOf("  function getSupplyingLineDataId"));
   assert(partialSave.includes("custom_fields"), "the line editor should post the merged custom-field bag");
   assert(!/\b(?:qty|unit_price|price|memo|parent)\s*:/.test(partialSave), "the partial save must not resubmit unrelated native hire-item values");
   assert(commercial.includes("function alignSupplyingCommercialColumns"), "commercial columns should share a dedicated alignment pass");
-  assert(commercial.includes("commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, proposal: 76, rsp: 96 }"), "commercial header and row widths should use one geometry contract");
+  assert(commercial.includes("commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, rsp: 96 }"), "commercial header and row widths should use one geometry contract without a separate edit column");
   assert(commercial.includes("function alignNativeHeaderToRows"), "separate native header and row tables should be geometrically reconciled");
   assert(commercial.includes("function maintainAlignmentObserver"), "column alignment should recover after supplying-layout resizes");
   assert(commercial.includes("restoreCommercialGeometry"), "removing the enhancement should restore native inline geometry");
@@ -317,7 +319,7 @@ function testSourceGuards() {
   assert(commercial.includes("function ensureRspSelectionColumn"), "RSP controls should use a dedicated supplying-list column");
   assert(commercial.includes("function findRspColumnHost"), "RSP checkboxes should mount only in the dedicated RSP column");
   assert(commercial.includes("wise-rsp-calculator-view"), "the RSP column should be visible only in calculator view");
-  assert(commercial.includes('$cell.insertAfter($anchor)'), "native RSP cells should remain after the Proposal action during redraws");
+  assert(commercial.includes('$cell.insertAfter($anchor)'), "native RSP cells should remain after Revenue during redraws");
   assert(commercial.includes("pointer-events:auto"), "dedicated RSP checkboxes should remain clickable above HireHop row handlers");
   assert(!commercial.includes('.filter(".name_cell,.item_cell.node_desc,.item_cell").last()'), "RSP controls must not fall through to commercial value cells");
 

@@ -3,8 +3,8 @@
  * ---------------------------------------------------------------------------
  * Proposal Creation depot only.
  *
- * - Adds a line-level Proposal button that opens a dedicated Revenue/Markup
- *   editor without depending on HireHop's reused native item popup.
+ * - Adds a compact edit icon beside each line's Revenue that opens a dedicated
+ *   Revenue/Markup editor without depending on HireHop's reused native popup.
  * - Uses HireHop's native line Total as CoS, then shows Markup and Revenue.
  * - Calculates either Revenue from Markup or whole-number Markup from Revenue.
  * - Uses inventory Revenue/Markup as defaults until a line-level field exists.
@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-21.17",
+    version: "2026-07-22.1",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     editorDialogId: "wise-proposal-commercial-dialog",
@@ -44,7 +44,7 @@
     inventoryFallbackGapMs: 500,
     inventoryUpdateDebounceMs: 2500,
     refreshDelayMs: 60,
-    commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, proposal: 76, rsp: 96 },
+    commercialColumnWidths: { cos: 96, markup: 64, revenue: 88, rsp: 96 },
     rspSelectionRetentionMs: 15 * 1000,
     recoveryIntervalMs: 1200,
     recoveryChecks: 18,
@@ -231,8 +231,8 @@
     }
 
     $(document.body).addClass("wise-supplying-commercial-active");
+    removeLegacyProposalEditColumns();
     projectSupplyingGrid();
-    ensureProposalEditColumn();
     renderProposalEditButtons();
     refreshRspSelectionUi();
     maintainCommercialTopSwitcher();
@@ -366,14 +366,12 @@
     setCommercialGeometry($headerTable.find("[data-wise-commercial-column='cos']"), widths.cos);
     setCommercialGeometry($headerTable.find("[data-wise-commercial-column='markup']"), widths.markup);
     setCommercialGeometry($headerTable.find("[data-wise-commercial-column='revenue']"), widths.revenue);
-    setCommercialGeometry($headerTable.find("[data-wise-proposal-column='header']"), widths.proposal);
     setCommercialGeometry($headerTable.find("[data-wise-rsp-column='header']"), widths.rsp);
 
     var $rows = $("#items_tab table.cust_node:visible");
     setCommercialGeometry($rows.find("[data-wise-commercial-column='cos']"), widths.cos);
     setCommercialGeometry($rows.find("[data-wise-commercial-column='markup']"), widths.markup);
     setCommercialGeometry($rows.find("[data-wise-commercial-column='revenue']"), widths.revenue);
-    setCommercialGeometry($rows.find("[data-wise-proposal-column='cell']"), widths.proposal);
     setCommercialGeometry($rows.find("[data-wise-rsp-column='cell']"), widths.rsp);
     alignNativeHeaderToRows($headerTable, $rows);
   }
@@ -384,7 +382,6 @@
     setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-commercial-column='cos']"), widths.cos);
     setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-commercial-column='markup']"), widths.markup);
     setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-commercial-column='revenue']"), widths.revenue);
-    setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-proposal-column='grid']"), widths.proposal);
     setCommercialGeometry($wrapper.find(".jstree-grid-column[data-wise-rsp-column='grid']"), widths.rsp);
   }
 
@@ -411,8 +408,8 @@
 
   function alignNativeHeaderToRows($headerTable, $rows) {
     var rspVisible = $(document.body).hasClass("wise-rsp-calculator-view");
-    var headerSelector = rspVisible ? "[data-wise-rsp-column='header']" : "[data-wise-proposal-column='header']";
-    var rowSelector = rspVisible ? "[data-wise-rsp-column='cell']" : "[data-wise-proposal-column='cell']";
+    var headerSelector = rspVisible ? "[data-wise-rsp-column='header']" : "[data-wise-commercial-column='revenue']";
+    var rowSelector = rspVisible ? "[data-wise-rsp-column='cell']" : "[data-wise-commercial-column='revenue']";
     var $headerLast = $headerTable.find(headerSelector).filter(":visible").first();
     if (!$headerLast.length) return;
 
@@ -992,58 +989,8 @@
     $control.toggleClass("is-unavailable", !available).toggleClass("is-loading", !rsp.resolved && !available);
   }
 
-  function ensureProposalEditColumn() {
-    var $nativeHeader = getNativeSupplyingHeaderTable();
-    if ($nativeHeader.length) {
-      ensureNativeProposalEditColumn($nativeHeader);
-      return;
-    }
-    ensureGridProposalEditColumn(getGridWrapper(getTree()));
-  }
-
-  function ensureNativeProposalEditColumn($headerTable) {
-    var $headerRow = $headerTable.find("tr").first();
-    var $header = $headerRow.children("[data-wise-proposal-column='header']").first();
-    var $revenueHeader = $headerRow.children("[data-wise-commercial-column='revenue']").first();
-    if (!$header.length) $header = $('<th class="wise-proposal-column-header" data-wise-proposal-column="header"><div>Proposal</div></th>');
-    if ($revenueHeader.length && $header.prev().get(0) !== $revenueHeader.get(0)) $header.insertAfter($revenueHeader);
-    else if (!$header.parent().length) $header.appendTo($headerRow);
-
-    $("#items_tab table.cust_node").each(function () {
-      var $row = $(this).find("tr").first();
-      if (!$row.length) return;
-      var $revenue = $row.children("[data-wise-commercial-column='revenue']").first();
-      var $cell = $row.children("[data-wise-proposal-column='cell']").first();
-      if (!$cell.length) $cell = $('<td class="wise-proposal-column-cell" data-wise-proposal-column="cell"></td>');
-      if ($revenue.length && $cell.prev().get(0) !== $revenue.get(0)) $cell.insertAfter($revenue);
-      else if (!$cell.parent().length) $cell.appendTo($row);
-    });
-  }
-
-  function ensureGridProposalEditColumn($wrapper) {
-    if (!$wrapper || !$wrapper.length) return;
-    var $column = $wrapper.find(".wise-proposal-grid-column[data-wise-proposal-column='grid']").first();
-    var $revenue = $wrapper.find(".jstree-grid-column[data-wise-commercial-column='revenue']").first();
-    if (!$column.length && $revenue.length) {
-      $column = $revenue.clone(false, false)
-        .removeAttr("id data-wise-commercial-column data-wise-commercial-original-index")
-        .attr("data-wise-proposal-column", "grid")
-        .addClass("wise-proposal-grid-column");
-      var columnClasses = String($column.attr("class") || "").split(/\s+/).filter(function (name) {
-        return !/^jstree-grid-column-\d+$/.test(name);
-      });
-      $column.attr("class", columnClasses.join(" "));
-      $column.find("[id]").removeAttr("id");
-      $column.find("[data-wise-commercial-original-label]").removeAttr("data-wise-commercial-original-label");
-      var $header = getGridColumnHeader($column);
-      var $separator = $header.children(".jstree-grid-separator").detach();
-      $header.empty().text("Proposal");
-      if ($separator.length) $header.append($separator);
-      $column.find(".jstree-grid-cell").empty();
-      $column.insertAfter($revenue);
-    } else if ($column.length && $revenue.length && $column.prev().get(0) !== $revenue.get(0)) {
-      $column.insertAfter($revenue);
-    }
+  function removeLegacyProposalEditColumns() {
+    $("#items_tab [data-wise-proposal-column]").remove();
   }
 
   function renderProposalEditButtons() {
@@ -1059,8 +1006,7 @@
       present[nodeId] = true;
       var $button = $host.find(".wise-proposal-edit-button").first();
       if (!$button.length) {
-        $host.empty();
-        $button = $('<button type="button" class="wise-proposal-edit-button"><span aria-hidden="true">✎</span><b>Edit</b></button>').appendTo($host);
+        $button = $('<button type="button" class="wise-proposal-edit-button"><span aria-hidden="true">✎</span></button>').appendTo($host);
       }
       $button.attr({
         "data-wise-proposal-node-id": nodeId,
@@ -1076,13 +1022,18 @@
 
   function findProposalColumnHost(nodeId) {
     var element = nodeId && document.getElementById(nodeId);
-    var $host = element
-      ? $(element).find("table.cust_node tr").first().children("[data-wise-proposal-column='cell']").first()
+    var $cell = element
+      ? $(element).find("table.cust_node tr").first().children("[data-wise-commercial-column='revenue']").first()
       : $();
-    if ($host.length) return $host;
-    return $("#items_tab .wise-proposal-grid-column .jstree-grid-cell").filter(function () {
-      return String($(this).attr("data-jstreegrid") || "") === String(nodeId || "");
-    }).first();
+    if (!$cell.length) {
+      $cell = $("#items_tab .jstree-grid-column[data-wise-commercial-column='revenue'] .jstree-grid-cell").filter(function () {
+        return String($(this).attr("data-jstreegrid") || "") === String(nodeId || "");
+      }).first();
+    }
+    if (!$cell.length) return $();
+    var $value = $cell.find(".wise-commercial-projected-value").first();
+    var $host = $value.length ? $value.parent() : $cell;
+    return $host.addClass("wise-revenue-edit-host");
   }
 
   function ensureRspSelectionColumn() {
@@ -1098,8 +1049,7 @@
     var $headerRow = $headerTable.find("tr").first();
     var $header = $headerRow.children("[data-wise-rsp-column]").first();
     var $revenueHeader = $headerRow.children("[data-wise-commercial-column='revenue']").first();
-    var $proposalHeader = $headerRow.children("[data-wise-proposal-column='header']").first();
-    var $anchorHeader = $proposalHeader.length ? $proposalHeader : $revenueHeader;
+    var $anchorHeader = $revenueHeader;
     if (!$header.length) {
       $header = $('<th class="wise-rsp-column-header" data-wise-rsp-column="header"><div>RSP</div></th>');
       if ($anchorHeader.length) $header.insertAfter($anchorHeader);
@@ -1112,8 +1062,7 @@
       var $row = $(this).find("tr").first();
       if (!$row.length) return;
       var $revenue = $row.children("[data-wise-commercial-column='revenue']").first();
-      var $proposal = $row.children("[data-wise-proposal-column='cell']").first();
-      var $anchor = $proposal.length ? $proposal : $revenue;
+      var $anchor = $revenue;
       var $cell = $row.children("[data-wise-rsp-column]").first();
       if (!$cell.length) $cell = $('<td class="wise-rsp-column-cell" data-wise-rsp-column="cell"></td>');
       if ($anchor.length && $cell.prev().get(0) !== $anchor.get(0)) $cell.insertAfter($anchor);
@@ -1125,8 +1074,7 @@
     if (!$wrapper || !$wrapper.length) return;
     var $column = $wrapper.find(".wise-rsp-grid-column[data-wise-rsp-column='grid']").first();
     var $revenue = $wrapper.find(".jstree-grid-column[data-wise-commercial-column='revenue']").first();
-    var $proposal = $wrapper.find(".jstree-grid-column[data-wise-proposal-column='grid']").first();
-    var $anchor = $proposal.length ? $proposal : $revenue;
+    var $anchor = $revenue;
     if (!$column.length && $revenue.length) {
       $column = $revenue.clone(false, false)
         .removeAttr("id data-wise-commercial-column data-wise-commercial-original-index")
@@ -3147,7 +3095,8 @@
     state.rspReconcileTimers = {};
     restoreCommercialGeometry();
     $("." + CFG.panelClass).remove();
-    $(".wise-rsp-row-control,#" + CFG.rspSummaryId + ",#items_tab [data-wise-rsp-column],#items_tab [data-wise-proposal-column]").remove();
+    $(".wise-rsp-row-control,#" + CFG.rspSummaryId + ",#items_tab [data-wise-rsp-column],#items_tab [data-wise-proposal-column],#items_tab .wise-proposal-edit-button").remove();
+    $("#items_tab .wise-revenue-edit-host").removeClass("wise-revenue-edit-host");
     $("[data-wise-commercial-original-label]").each(function () {
       var $label = $(this);
       var separator = $label.children(".jstree-grid-separator").detach();
@@ -3209,11 +3158,10 @@
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='cos'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='cos']{width:96px;min-width:96px;max-width:96px;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='markup'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='markup']{width:64px;min-width:64px;max-width:64px;}",
       ".wise-supplying-commercial-active table.supplying_list_heads [data-wise-commercial-column='revenue'],.wise-supplying-commercial-active table.cust_node [data-wise-commercial-column='revenue']{width:88px;min-width:88px;max-width:88px;}",
-      ".wise-proposal-column-header,.wise-proposal-column-cell{width:76px;min-width:76px;max-width:76px;text-align:center!important;vertical-align:middle!important;box-sizing:border-box;}",
-      ".wise-proposal-grid-column{min-width:76px!important;width:76px!important;text-align:center!important;}",
-      ".wise-proposal-column-cell,.wise-proposal-grid-column .jstree-grid-cell{position:relative!important;z-index:5!important;}",
-      ".wise-proposal-edit-button{display:inline-flex;align-items:center;justify-content:center;gap:4px;width:64px;min-height:23px;padding:2px 6px;border:1px solid #aebdca;border-radius:4px;background:#fff;color:#244b70;font-size:10px;font-weight:700;line-height:16px;cursor:pointer;box-sizing:border-box;pointer-events:auto;}",
-      ".wise-proposal-edit-button:hover,.wise-proposal-edit-button:focus{border-color:#4b8dcc;background:#e7f2fb;outline:none;box-shadow:0 0 0 2px rgba(75,141,204,.14);}.wise-proposal-edit-button span{font-size:13px;line-height:1;}.wise-proposal-edit-button b{font:inherit;}",
+      ".wise-revenue-edit-host{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:2px;min-width:0;}",
+      ".wise-revenue-edit-host>.wise-commercial-projected-value{flex:1 1 auto;width:auto;min-width:0;}",
+      ".wise-proposal-edit-button{display:inline-flex;flex:0 0 18px;align-items:center;justify-content:center;width:18px;height:18px;margin:0;padding:0;border:0;border-radius:3px;background:transparent;color:#667085;font-size:12px;line-height:1;opacity:.68;cursor:pointer;box-sizing:border-box;pointer-events:auto;}",
+      ".wise-proposal-edit-button:hover,.wise-proposal-edit-button:focus{background:#e7f2fb;color:#244b70;opacity:1;outline:none;box-shadow:0 0 0 1px rgba(75,141,204,.22);}.wise-proposal-edit-button span{display:block;line-height:1;}",
       ".wise-supplying-commercial-active [data-wise-rsp-column]{display:none!important;}",
       ".wise-supplying-commercial-active.wise-rsp-calculator-view table [data-wise-rsp-column]{display:table-cell!important;}",
       ".wise-supplying-commercial-active.wise-rsp-calculator-view .jstree-grid-column[data-wise-rsp-column]{display:block!important;}",
