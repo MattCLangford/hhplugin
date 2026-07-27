@@ -250,6 +250,71 @@ function testCommercialTextMarkup() {
   assert.strictEqual(context.result.partialPayload.kind, "1", "standalone commercial saves should retain the supplying-line kind");
 }
 
+function testExternalModBridge() {
+  const source = fs.readFileSync(path.join(root, "16-externalmod.js"), "utf8");
+
+  function runWithUrl(url, isProposalCreation) {
+    const appended = [];
+    const head = {
+      appendChild(node) {
+        node.parentNode = head;
+        appended.push(node);
+      },
+      removeChild(node) {
+        node.parentNode = null;
+      }
+    };
+    const document = {
+      currentScript: { src: "https://example.test/hhplugin/16-externalmod.js?v=0.1" },
+      head,
+      documentElement: head,
+      createElement() { return {}; }
+    };
+    const window = {
+      document,
+      URL,
+      WiseProposalSectionBuilderHireHop: {
+        depot: {
+          isProposalCreation() { return isProposalCreation !== false; }
+        }
+      }
+    };
+    const context = vm.createContext({
+      window,
+      document,
+      console: { warn() {} },
+      URL,
+      Number,
+      String,
+      RegExp,
+      isFinite,
+      setTimeout() { return 1; },
+      clearTimeout() {}
+    });
+    vm.runInContext(source.replace('url: ""', `url: ${JSON.stringify(url)}`), context);
+    return { window, appended };
+  }
+
+  const disabled = runWithUrl("");
+  assert.strictEqual(disabled.appended.length, 0, "a blank external mod URL should not inject a script");
+  assert.strictEqual(disabled.window.WiseHireHopExternalMod.status, "not-configured", "a blank URL should report that configuration is required");
+
+  const unsafe = runWithUrl("javascript:alert(1)");
+  assert.strictEqual(unsafe.appended.length, 0, "a non-HTTPS external mod URL should be rejected");
+  assert.strictEqual(unsafe.window.WiseHireHopExternalMod.status, "failed", "an unsafe URL should expose a failed diagnostic state");
+
+  const otherDepot = runWithUrl("https://mods.example.test/unique.js", false);
+  assert.strictEqual(otherDepot.appended.length, 0, "the external mod URL should not be requested outside Proposal Creation");
+  assert.strictEqual(otherDepot.window.WiseHireHopExternalMod.status, "blocked-depot", "a non-Proposal Creation depot should expose a blocked diagnostic state");
+
+  const safe = runWithUrl("https://mods.example.test/unique.js?company=wise");
+  assert.strictEqual(safe.appended.length, 1, "a valid HTTPS mod URL should inject exactly one script");
+  assert.strictEqual(safe.appended[0].referrerPolicy, "no-referrer", "the external request should not disclose its HireHop page URL");
+  safe.appended[0].onload();
+  safe.window.WiseHireHopExternalMod.retry();
+  assert.strictEqual(safe.appended.length, 1, "a loaded external mod should not be injected twice");
+}
+
 function testSourceGuards() {
   const loader = fs.readFileSync(path.join(root, "0-loader.js"), "utf8");
   assert(loader.includes("loadIndependent"), "loader should initialize independent modules independently");
@@ -260,6 +325,16 @@ function testSourceGuards() {
   assert(loader.includes("looksLikeJobDetailsText(document.body.textContent"), "ID-less job-detail pages should still load the grouped front-page module");
   assert(loader.includes('callModuleMethod("jobGroups"'), "an already-loaded job layout should refresh after HireHop route changes");
   assert(loader.includes("isNonDetailJobTabCurrent() || isSupplyingPanelCurrent()"), "the job-details route fallback must yield to every non-detail job tab");
+  assert(loader.includes('loadAfterShared(["externalMod"])'), "the external mod bridge should wait for the shared authoritative depot detector");
+  assert(loader.includes('callModuleMethod("externalMod"'), "the external mod bridge should recheck its depot gate after HireHop route changes");
+
+  const externalMod = fs.readFileSync(path.join(root, "16-externalmod.js"), "utf8");
+  assert(externalMod.includes('url: ""'), "the external mod should remain disabled until its URL is explicitly configured");
+  assert(externalMod.includes('parsed.protocol !== "https:"'), "the external mod bridge should reject non-HTTPS script URLs");
+  assert(externalMod.includes("parsed.username || parsed.password"), "the external mod bridge should reject URL-embedded credentials");
+  assert(externalMod.includes("shared.depot.isProposalCreation()"), "the external mod URL should only load in Proposal Creation");
+  assert(externalMod.includes("script.integrity = integrity"), "the external mod bridge should support optional Subresource Integrity");
+  assert(externalMod.includes("state.status === \"loading\" || state.status === \"loaded\""), "the external mod bridge should prevent duplicate script loads");
 
   const shared = fs.readFileSync(path.join(root, "5-hirehop.js"), "utf8");
   assert(shared.includes('allowedIds: ["14"]'), "Proposal Creation depot ID should be an explicit stable gate");
@@ -350,6 +425,7 @@ function testSourceGuards() {
 
 (async function run() {
   testSourceGuards();
+  testExternalModBridge();
   testCommercialTextMarkup();
   await testRequestManager();
   console.log("Runtime reliability tests passed.");

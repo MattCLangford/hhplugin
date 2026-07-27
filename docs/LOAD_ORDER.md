@@ -29,6 +29,9 @@ The loader does not start shared-dependent modules until `5-hirehop.js` is avail
 13. `13-proposalpageicons.js`
 14. `14-jobgroups.js`
 15. `15-supplyingcommercial.js`
+16. `16-externalmod.js`
+
+`16-externalmod.js` is a Proposal Creation depot-only bridge for one additional trusted mod while keeping `0-loader.js` as the only HireHop company-config URL. The loader starts the shared authoritative depot detector first, and the bridge does not request the configured external URL unless that detector identifies Proposal Creation. Paste the complete HTTPS mod URL into the clearly marked `CONFIG.url` value near the top of the bridge file. Leave the value blank to keep the external mod disabled. If the mod owner provides a Subresource Integrity hash, it can be pasted into `CONFIG.integrity`; otherwise leave that setting blank. The bridge rejects non-HTTPS URLs and embedded credentials, prevents duplicate loading, and contains download failures so the Wise modules continue normally. Because the external script must work inside HireHop, it has the same page access as the other mods and should only be enabled when its source is trusted.
 
 `11-projectjourney.js` loads on the project/job tab route, but it only installs the Journey tab when it detects the project tab set.
 

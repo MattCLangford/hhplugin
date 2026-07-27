@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-21.18",
+    version: "2026-07-21.20",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -26,7 +26,8 @@
       projectGroups: { file: "12-projectgroups.js", version: "0.13" },
       proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.8" },
       jobGroups: { file: "14-jobgroups.js", version: "1.1" },
-      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "2.4" }
+      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "2.4" },
+      externalMod: { file: "16-externalmod.js", version: "0.2" }
     }
   };
 
@@ -142,6 +143,12 @@
       scheduleRouteCheck(250);
       return;
     }
+
+    // The external bridge uses the shared authoritative depot detector and
+    // requests its configured URL only in Proposal Creation.
+    loadAfterShared(["externalMod"]).then(function () {
+      callModuleMethod("externalMod", window.WiseHireHopExternalMod, "check");
+    });
 
     var nextSupplyingRoot = document.getElementById("items_tab");
     if (nextSupplyingRoot) {
