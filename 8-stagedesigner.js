@@ -10,7 +10,7 @@
   var HIREHOP_MODULE_GLOBAL = "WiseProposalSectionBuilderHireHop";
 
   var CFG = {
-    version: "2026-07-21.6",
+    version: "2026-07-21.7",
     buttonId: "wise-stage-designer-button",
     stylesId: "wise-stage-designer-styles",
     overlayId: "wise-stage-designer-overlay",
@@ -112,6 +112,8 @@
   }
 
   function maintainToolbarButton() {
+    if (deactivateInProposalCreation()) return;
+
     var $host = findToolbarHost();
     if (!$host.length) return;
 
@@ -136,6 +138,8 @@
   }
 
   function openDesigner() {
+    if (deactivateInProposalCreation()) return;
+
     $("#" + CFG.overlayId).remove();
     state.target = resolveStageTarget();
     state.currentSpec = state.target && state.target.spec ? normaliseSpec(state.target.spec) : defaultSpec();
@@ -167,6 +171,24 @@
     state.target = null;
     state.currentSpec = null;
     state.saving = false;
+  }
+
+  function deactivateInProposalCreation() {
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    var blocked = false;
+    try {
+      blocked = !!(shared && shared.depot &&
+        typeof shared.depot.isProposalCreation === "function" &&
+        shared.depot.isProposalCreation());
+    } catch (ignore) {}
+    if (!blocked) return false;
+
+    $("#" + CFG.buttonId + ",#" + CFG.overlayId).remove();
+    $(document).off("keydown.wiseStageDesigner");
+    state.target = null;
+    state.currentSpec = null;
+    state.saving = false;
+    return true;
   }
 
   function buildModalHtml(spec, kit, target) {
@@ -3475,6 +3497,7 @@
     describe: function () {
       return {
         version: CFG.version,
+        blockedInProposalCreation: deactivateInProposalCreation(),
         toolbarButtonFound: !!document.getElementById(CFG.buttonId),
         role: "Simple metric/imperial staging spec designer that caches live HireHop stock and generates supplying-list rows from width, depth, height, live/custom carpet colour, fascia sides, live/custom fascia colour, and stair units.",
         assumptions: {

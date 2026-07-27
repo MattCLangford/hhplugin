@@ -291,7 +291,7 @@ function testExternalModBridge() {
       setTimeout() { return 1; },
       clearTimeout() {}
     });
-    vm.runInContext(source.replace('url: ""', `url: ${JSON.stringify(url)}`), context);
+    vm.runInContext(source.replace(/url:\s*"[^"\r\n]*"/, `url: ${JSON.stringify(url)}`), context);
     return { window, appended };
   }
 
@@ -315,6 +315,44 @@ function testExternalModBridge() {
   assert.strictEqual(safe.appended.length, 1, "a loaded external mod should not be injected twice");
 }
 
+function testLoaderDepotRestrictions() {
+  const loader = fs.readFileSync(path.join(root, "0-loader.js"), "utf8");
+  const start = loader.indexOf("  function filterModulesForActiveDepot");
+  const end = loader.indexOf("  function refreshSupplyingModuleHealth", start);
+  assert(start >= 0 && end > start, "the loader depot filter should be discoverable");
+
+  function filter(isProposalCreation) {
+    const context = vm.createContext({
+      result: null,
+      moduleState: {},
+      CFG: { scripts: { stage: { file: "8-stagedesigner.js" } } },
+      window: {
+        WiseProposalSectionBuilderHireHop: {
+          depot: { isProposalCreation() { return isProposalCreation; } }
+        }
+      },
+      Date
+    });
+    vm.runInContext(
+      loader.slice(start, end) +
+      '; result = filterModulesForActiveDepot(["docprev", "stage", "supplyingCommercial"]);',
+      context
+    );
+    return Array.from(context.result);
+  }
+
+  assert.deepStrictEqual(
+    filter(true),
+    ["docprev", "supplyingCommercial"],
+    "Proposal Creation should exclude only Stage Designer from the supplying bundle"
+  );
+  assert.deepStrictEqual(
+    filter(false),
+    ["docprev", "stage", "supplyingCommercial"],
+    "every other depot should retain Stage Designer"
+  );
+}
+
 function testSourceGuards() {
   const loader = fs.readFileSync(path.join(root, "0-loader.js"), "utf8");
   assert(loader.includes("loadIndependent"), "loader should initialize independent modules independently");
@@ -327,9 +365,11 @@ function testSourceGuards() {
   assert(loader.includes("isNonDetailJobTabCurrent() || isSupplyingPanelCurrent()"), "the job-details route fallback must yield to every non-detail job tab");
   assert(loader.includes('loadAfterShared(["externalMod"])'), "the external mod bridge should wait for the shared authoritative depot detector");
   assert(loader.includes('callModuleMethod("externalMod"'), "the external mod bridge should recheck its depot gate after HireHop route changes");
+  assert(loader.includes("filterModulesForActiveDepot(keys)"), "shared-dependent modules should pass through depot restrictions");
+  assert(loader.includes('return key !== "stage"'), "Stage Designer should be excluded from Proposal Creation before its script is requested");
 
   const externalMod = fs.readFileSync(path.join(root, "16-externalmod.js"), "utf8");
-  assert(externalMod.includes('url: ""'), "the external mod should remain disabled until its URL is explicitly configured");
+  assert(/url:\s*"[^"\r\n]*"/.test(externalMod), "the external mod should retain one quoted URL configuration field");
   assert(externalMod.includes('parsed.protocol !== "https:"'), "the external mod bridge should reject non-HTTPS script URLs");
   assert(externalMod.includes("parsed.username || parsed.password"), "the external mod bridge should reject URL-embedded credentials");
   assert(externalMod.includes("shared.depot.isProposalCreation()"), "the external mod URL should only load in Proposal Creation");
@@ -340,6 +380,11 @@ function testSourceGuards() {
   assert(shared.includes('allowedIds: ["14"]'), "Proposal Creation depot ID should be an explicit stable gate");
   assert(shared.includes("function findSupplyingToolbarHost"), "toolbar discovery should use native action detection instead of child position");
   assert(!shared.includes('toolbarHost: "#items_tab > div:first-child"'), "commercial UI inserted above the toolbar must not break toolbar discovery");
+
+  const stage = fs.readFileSync(path.join(root, "8-stagedesigner.js"), "utf8");
+  assert(stage.includes("function deactivateInProposalCreation"), "Stage Designer should have a runtime Proposal Creation guard");
+  assert(stage.includes('$("#" + CFG.buttonId + ",#" + CFG.overlayId).remove()'), "Stage Designer should remove existing UI after a depot change into Proposal Creation");
+  assert(stage.includes("if (deactivateInProposalCreation()) return;"), "Stage Designer entry points should stop in Proposal Creation");
 
   const preview = fs.readFileSync(path.join(root, "1-docprev.js"), "utf8");
   assert(preview.includes("maintainPreviewUi"), "preview UI should recover after supplying-root replacement");
@@ -426,6 +471,7 @@ function testSourceGuards() {
 (async function run() {
   testSourceGuards();
   testExternalModBridge();
+  testLoaderDepotRestrictions();
   testCommercialTextMarkup();
   await testRequestManager();
   console.log("Runtime reliability tests passed.");

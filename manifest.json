@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-21.20",
+  "version": "2026-07-21.21",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "5.0",
+      "cacheVersion": "5.1",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -70,9 +70,9 @@
     },
     {
       "file": "8-stagedesigner.js",
-      "status": "lazy-supplying-list",
-      "cacheVersion": "2.3",
-      "role": "Metric/imperial staging designer using the shared priority request queue, preferred per-category catalogue calls and conditional fallbacks. Generated rows and visual behaviour are preserved; writes remain throttled, bounded and Retry-After aware.",
+      "status": "lazy-supplying-list-except-proposal-creation",
+      "cacheVersion": "2.4",
+      "role": "Metric/imperial staging designer for every depot except Proposal Creation, using the shared priority request queue, preferred per-category catalogue calls and conditional fallbacks. The loader does not request this module in Proposal Creation, and its own runtime gate removes its UI if an existing session changes into that depot. Generated rows and visual behaviour are otherwise preserved; writes remain throttled, bounded and Retry-After aware.",
       "recommendedLoadOrder": 8
     },
     {

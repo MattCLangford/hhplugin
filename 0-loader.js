@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-07-21.20",
+    version: "2026-07-21.21",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -19,7 +19,7 @@
       layout: { file: "4-layout.js", version: "0.2" },
       editor: { file: "6-editor2.js", version: "1.8", enabled: false },
       captrack: { file: "7-captrack.js", version: "3.1" },
-      stage: { file: "8-stagedesigner.js", version: "2.3" },
+      stage: { file: "8-stagedesigner.js", version: "2.4" },
       checklist: { file: "9-jobchecklist.js", version: "1.2" },
       projectJobs: { file: "10-projectjobs-qol.js", version: "1.0" },
       projectJourney: { file: "11-projectjourney.js", version: "0.7" },
@@ -177,7 +177,7 @@
 
   function loadAfterShared(keys) {
     return loadScript("hirehop").then(
-      function () { return loadIndependent(keys); },
+      function () { return loadIndependent(filterModulesForActiveDepot(keys)); },
       function (error) {
         // These modules read the shared selectors, depot rules and request
         // service during bootstrap. Loading them without that dependency can
@@ -186,6 +186,27 @@
         return [];
       }
     );
+  }
+
+  function filterModulesForActiveDepot(keys) {
+    if (keys.indexOf("stage") === -1) return keys;
+
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    var isProposalCreation = false;
+    try {
+      isProposalCreation = !!(shared && shared.depot &&
+        typeof shared.depot.isProposalCreation === "function" &&
+        shared.depot.isProposalCreation());
+    } catch (ignore) {}
+    if (!isProposalCreation) return keys;
+
+    moduleState.stage = {
+      status: "blocked-depot",
+      at: Date.now(),
+      file: CFG.scripts.stage.file,
+      reason: "Stage Designer is disabled in Proposal Creation."
+    };
+    return keys.filter(function (key) { return key !== "stage"; });
   }
 
   function refreshSupplyingModuleHealth() {

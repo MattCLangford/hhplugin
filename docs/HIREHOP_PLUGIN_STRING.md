@@ -7,14 +7,14 @@ Do not hand-edit the current string or source table. Update `manifest.json` firs
 ## Current String
 
 ```text
-https://mattclangford.github.io/hhplugin/0-loader.js?v=5.0;
+https://mattclangford.github.io/hhplugin/0-loader.js?v=5.1;
 ```
 
 ## Source Table
 
 | Order | File | Cache version |
 | --- | --- | --- |
-| 1 | `0-loader.js` | `5.0` |
+| 1 | `0-loader.js` | `5.1` |
 
 ## Lazy Loaded Runtime Modules
 
@@ -29,7 +29,7 @@ These files are not included directly in the HireHop company config string. `0-l
 | 5 | `4-layout.js` | `0.2` | `lazy-supplying-list-module` | yes |
 | 6 | `6-editor2.js` | `1.8` | `disabled-ready-to-enable` | no |
 | 7 | `7-captrack.js` | `3.1` | `lazy-home-page` | yes |
-| 8 | `8-stagedesigner.js` | `2.3` | `lazy-supplying-list` | yes |
+| 8 | `8-stagedesigner.js` | `2.4` | `lazy-supplying-list-except-proposal-creation` | yes |
 | 9 | `9-jobchecklist.js` | `1.2` | `lazy-project-job-tabs` | yes |
 | 10 | `10-projectjobs-qol.js` | `1.0` | `lazy-project-details` | yes |
 | 11 | `11-projectjourney.js` | `0.7` | `lazy-project-tabs` | yes |
@@ -72,4 +72,4 @@ On a supplying-list page, the proposal bundle should lazy-load. Inspect the resu
 window.WiseHireHopEnhancementLoader.loaded
 ```
 
-Enabled supplying-list modules such as `hirehop`, `docprev`, and `stage` should be `true`. A disabled module such as `editor` should be absent.
+Enabled supplying-list modules such as `hirehop` and `docprev` should be `true`. `stage` should be absent in Proposal Creation and `true` on supplying lists in other depots. A disabled module such as `editor` should be absent.

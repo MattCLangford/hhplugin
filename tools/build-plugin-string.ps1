@@ -161,7 +161,7 @@ ${fence}js
 window.WiseHireHopEnhancementLoader.loaded
 ${fence}
 
-Enabled supplying-list modules such as ``hirehop``, ``docprev``, and ``stage`` should be ``true``. A disabled module such as ``editor`` should be absent.
+Enabled supplying-list modules such as ``hirehop`` and ``docprev`` should be ``true``. ``stage`` should be absent in Proposal Creation and ``true`` on supplying lists in other depots. A disabled module such as ``editor`` should be absent.
 "@
 
 $outputDir = Split-Path -Parent $OutputPath
