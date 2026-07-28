@@ -21,7 +21,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-22.1",
+    version: "2026-07-28.1",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     editorDialogId: "wise-proposal-commercial-dialog",
@@ -1435,8 +1435,18 @@
     var values = readLineCommercialEditorValues($dialog, node);
     if (!values) return;
     var lineId = getSupplyingLineDataId(node);
+    var lineKind = getSupplyingLineKind(node);
+    var jobId = getSupplyingJobId(node);
     if (!lineId) {
       setLineCommercialEditorStatus($dialog, "This supplying line has no stable HireHop ID, so it could not be saved.", true);
+      return;
+    }
+    if (!lineKind) {
+      setLineCommercialEditorStatus($dialog, "HireHop could not determine whether this is a hire or sales line.", true);
+      return;
+    }
+    if (!jobId) {
+      setLineCommercialEditorStatus($dialog, "HireHop could not identify the current job, so the proposal fields could not be saved.", true);
       return;
     }
 
@@ -1511,21 +1521,67 @@
   }
 
   function buildLineCommercialSavePayload(node, values) {
-    var data = node && node.data ? node.data : {};
     return {
       id: getSupplyingLineDataId(node),
-      kind: String(Number(data.kind == null ? data.KIND : data.kind) || 0),
+      job: getSupplyingJobId(node),
+      kind: getSupplyingLineKind(node),
       custom_fields: values && values.customFields ? values.customFields : {}
     };
   }
 
   function getSupplyingLineDataId(node) {
+    var nodeId = String(node && node.id || "");
+    if (/^[bc](?:_|-)?\d+/i.test(nodeId)) return normaliseInventoryId(nodeId);
+
     var sources = getNodeDataSources(node);
     for (var i = 0; i < sources.length; i++) {
       var value = firstDefinedValue(sources[i], ["ID", "id", "ITEM_ID", "item_id", "LINE_ID", "line_id"]);
       if (value !== "") return normaliseInventoryId(value);
     }
-    return normaliseInventoryId(node && node.id);
+    return normaliseInventoryId(nodeId);
+  }
+
+  function getSupplyingLineKind(node) {
+    var sources = getNodeDataSources(node);
+    for (var i = 0; i < sources.length; i++) {
+      var value = firstDefinedValue(sources[i], ["kind", "KIND"]);
+      var kind = Number(value);
+      if (kind === 1 || kind === 2) return String(kind);
+    }
+
+    var prefix = String(node && node.id || "").match(/^([bc])(?:_|-)?\d+/i);
+    if (!prefix) return "";
+    return prefix[1].toLowerCase() === "b" ? "1" : "2";
+  }
+
+  function getSupplyingJobId(node) {
+    var sources = getNodeDataSources(node);
+    var keys = ["JOB_ID", "job_id", "JOB", "job", "MAIN_ID", "main_id"];
+    for (var i = 0; i < sources.length; i++) {
+      var sourceValue = firstDefinedValue(sources[i], keys);
+      var sourceId = normaliseInventoryId(sourceValue);
+      if (sourceId) return sourceId;
+    }
+
+    var href = String(window.location && window.location.href || "");
+    var match = href.match(/[?&](?:job|job_id|main_id|id)=(\d+)/i) ||
+      href.match(/\/jobs?\/(\d+)(?:\/|$|\?)/i);
+    if (match && match[1]) return match[1];
+
+    var selectors = [
+      "#items_tab input[name='job']", "#items_tab input[name='job_id']",
+      "input[name='main_id']", "#job_id", "#main_id"
+    ];
+    for (var s = 0; s < selectors.length; s++) {
+      var value = $.trim(String($(selectors[s]).first().val() || ""));
+      if (/^\d+$/.test(value)) return value;
+    }
+
+    var windowValues = [window.main_id, window.job_id];
+    for (var w = 0; w < windowValues.length; w++) {
+      if (/^\d+$/.test(String(windowValues[w] || ""))) return String(windowValues[w]);
+    }
+    return "";
   }
 
   function getSupplyingLineTitle(node) {

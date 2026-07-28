@@ -228,7 +228,8 @@ function testCommercialTextMarkup() {
         'salesTitle: looksLikeItemEditorTitle("Edit - Sales Item"),' +
         'genericTitle: looksLikeItemEditorTitle("Edit Item"),' +
         'jobTitle: looksLikeItemEditorTitle("Edit Job")' +
-        ',partialPayload: buildLineCommercialSavePayload({ id: "b42", data: { ID: 42, kind: 1, QTY: 9, TOTAL: 250 } }, { customFields: { Revenue: "400", Markup: "60" } })' +
+        ',partialPayload: buildLineCommercialSavePayload({ id: "b42", data: { ID: 999, JOB_ID: 77, QTY: 9, TOTAL: 250 } }, { customFields: { Revenue: "400", Markup: "60" } })' +
+        ',salesPayload: buildLineCommercialSavePayload({ id: "c_43", data: { JOB: 77 } }, { customFields: {} })' +
       '};',
     context
   );
@@ -245,9 +246,12 @@ function testCommercialTextMarkup() {
   assert.strictEqual(context.result.salesTitle, true, "punctuated sales-item titles should be detected");
   assert.strictEqual(context.result.genericTitle, true, "a reused generic Edit Item title should be detected");
   assert.strictEqual(context.result.jobTitle, false, "non-item editors should not match the commercial popup title detector");
-  assert.deepStrictEqual(Object.keys(context.result.partialPayload).sort(), ["custom_fields", "id", "kind"], "standalone commercial saves should contain only routing identity and custom fields");
-  assert.strictEqual(context.result.partialPayload.id, "42", "standalone commercial saves should use the stable HireHop line ID");
-  assert.strictEqual(context.result.partialPayload.kind, "1", "standalone commercial saves should retain the supplying-line kind");
+  assert.deepStrictEqual(Object.keys(context.result.partialPayload).sort(), ["custom_fields", "id", "job", "kind"], "standalone commercial saves should contain only routing identity and custom fields");
+  assert.strictEqual(context.result.partialPayload.id, "42", "the native tree node ID should outrank an ambiguous row-data ID");
+  assert.strictEqual(context.result.partialPayload.job, "77", "standalone commercial saves should include the current HireHop job routing ID");
+  assert.strictEqual(context.result.partialPayload.kind, "1", "hire rows should derive kind 1 from their native b-prefix when row data omits kind");
+  assert.strictEqual(context.result.salesPayload.id, "43", "underscored native tree IDs should retain their supplying-line ID");
+  assert.strictEqual(context.result.salesPayload.kind, "2", "sales rows should derive kind 2 from their native c-prefix");
 }
 
 function testExternalModBridge() {
