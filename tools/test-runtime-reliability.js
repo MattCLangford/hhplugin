@@ -311,6 +311,48 @@ function testCommercialTextMarkup() {
   assert.strictEqual(context.result.jobPerformanceTotals.lineCount, 5, "Job Performance should exclude only structural rows from its commercial line count");
 }
 
+function testHeadingMarkupTargets() {
+  const commercial = fs.readFileSync(path.join(root, "15-supplyingcommercial.js"), "utf8");
+  const treeStart = commercial.indexOf("  function getAllTreeNodes");
+  const treeEnd = commercial.indexOf("  /* ----------------------- Recommended sale price", treeStart);
+  const lineStart = commercial.indexOf("  function isSupplyingItemLine");
+  const lineEnd = commercial.indexOf("  function hasInventoryMasterLine", lineStart);
+  assert([treeStart, treeEnd, lineStart, lineEnd].every(index => index >= 0), "heading markup target helpers should be discoverable");
+
+  const nodes = {
+    a10: { id: "a10", parent: "#", children: ["b1", "a20"] },
+    b1: { id: "b1", parent: "a10", data: { kind: 1 } },
+    a20: { id: "a20", parent: "a10", children: ["c2"], data: { kind: 0 } },
+    c2: { id: "c2", parent: "a20", data: { kind: 2 } },
+    d3: { id: "d3", parent: "a10", data: { kind: 3 } }
+  };
+  const context = vm.createContext({
+    result: null,
+    nodes,
+    Array,
+    String,
+    Number,
+    RegExp,
+    isFinite
+  });
+  vm.runInContext(
+    commercial.slice(lineStart, lineEnd) +
+    commercial.slice(treeStart, treeEnd) +
+    '; var tree = {' +
+      'get_node: function (id) { return nodes[id] || null; },' +
+      'get_json: function () { return Object.keys(nodes).map(function (id) { return { id: id }; }); }' +
+    '};' +
+    '; result = {' +
+      'declared: getImmediateSupplyingItemChildren(tree, nodes.a10).map(function (node) { return node.id; }),' +
+      'fallback: getImmediateSupplyingItemChildren(tree, { id: "a10" }).map(function (node) { return node.id; })' +
+    '};',
+    context
+  );
+  assert.deepStrictEqual(Array.from(context.result.declared), ["b1"], "a heading batch should include only declared immediate item children");
+  assert.deepStrictEqual(Array.from(context.result.fallback), ["b1", "d3"], "the fallback should include only item rows whose direct parent is the heading");
+  assert(!Array.from(context.result.declared).includes("c2"), "a heading batch must not include item grandchildren");
+}
+
 function testExternalModBridge() {
   const source = fs.readFileSync(path.join(root, "16-externalmod.js"), "utf8");
 
@@ -494,6 +536,17 @@ function testSourceGuards() {
   assert(commercial.includes("wise-revenue-edit-host"), "the edit control should share the projected Revenue value host");
   assert(!commercial.includes("<b>Edit</b>"), "the Revenue edit control should remain icon-only");
   assert(commercial.includes("function openLineCommercialEditor"), "Revenue edit icons should open the dedicated commercial editor");
+  assert(commercial.includes("function renderHeadingMarkupEditButtons"), "headings with direct item children should receive a Markup action");
+  assert(commercial.includes("function getImmediateSupplyingItemChildren"), "heading Markup batches should use an explicit direct-child boundary");
+  assert(commercial.includes("function openHeadingMarkupEditor"), "the heading Markup action should open its dedicated editor");
+  const headingBatch = commercial.slice(
+    commercial.indexOf("  function buildHeadingMarkupUpdates"),
+    commercial.indexOf("  function saveHeadingMarkupEditor")
+  );
+  assert(headingBatch.includes("calculateRevenue(Number(cos), Number(normalisedMarkup))"), "each heading child Revenue should be recalculated from its own CoS");
+  assert(headingBatch.includes("setCustomField(customFields, CFG.revenueField, revenue)"), "heading batches should persist Revenue");
+  assert(headingBatch.includes("setCustomField(customFields, CFG.markupField, normalisedMarkup)"), "heading batches should persist Markup");
+  assert(!/\b(?:qty|unit_price|price|memo|parent)\s*:/.test(headingBatch), "heading Markup batches must not resubmit unrelated native item values");
   assert(preview.includes("wise:supplying-commercial-line-saved.wiseJobPerformance"), "a successful Revenue/Markup save should explicitly refresh Job Performance");
   assert(commercial.includes("function buildLineCommercialSavePayload"), "the dedicated editor should build a minimal partial-update payload");
   const partialSave = commercial.slice(commercial.indexOf("  function buildLineCommercialSavePayload"), commercial.indexOf("  function getSupplyingLineDataId"));
@@ -554,6 +607,7 @@ function testSourceGuards() {
   testExternalModBridge();
   testLoaderDepotRestrictions();
   testCommercialTextMarkup();
+  testHeadingMarkupTargets();
   await testRequestManager();
   console.log("Runtime reliability tests passed.");
 })().catch(error => {

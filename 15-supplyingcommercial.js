@@ -23,10 +23,11 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-28.3",
+    version: "2026-07-28.4",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     editorDialogId: "wise-proposal-commercial-dialog",
+    headingMarkupDialogId: "wise-heading-markup-dialog",
     tree: getHireHopSelector("tree", "#items_tab .jstree"),
     itemsSaveEndpoint: getHireHopEndpoint("itemsSave", "/php_functions/items_save.php"),
     availabilityEndpoint: getHireHopEndpoint("availabilityList", "/php_functions/availability_list.php"),
@@ -920,6 +921,34 @@
     return nodes;
   }
 
+  function getImmediateSupplyingItemChildren(tree, heading) {
+    if (!tree || !heading || !heading.id) return [];
+    var children = [];
+    var seen = {};
+
+    function add(candidate) {
+      var child = candidate;
+      try {
+        if (typeof candidate === "string") child = tree.get_node(candidate);
+      } catch (err) { return; }
+      if (!child || !child.id || seen[child.id] || !isSupplyingItemLine(child)) return;
+      if (String(child.parent || "") !== String(heading.id) &&
+          (!Array.isArray(heading.children) || heading.children.indexOf(child.id) === -1)) return;
+      seen[child.id] = true;
+      children.push(child);
+    }
+
+    var childIds = Array.isArray(heading.children) ? heading.children : [];
+    for (var i = 0; i < childIds.length; i++) add(childIds[i]);
+    if (!children.length) {
+      var nodes = getAllTreeNodes(tree);
+      for (var n = 0; n < nodes.length; n++) {
+        if (String(nodes[n] && nodes[n].parent || "") === String(heading.id)) add(nodes[n]);
+      }
+    }
+    return children;
+  }
+
   /* ----------------------- Recommended sale price ---------------------- */
 
   function refreshRspSelectionUi() {
@@ -1024,22 +1053,58 @@
       var nodeId = String($(this).attr("data-wise-proposal-node-id") || "");
       if (!present[nodeId]) $(this).remove();
     });
+    renderHeadingMarkupEditButtons(tree, nodes);
   }
 
   function findProposalColumnHost(nodeId) {
+    return findCommercialColumnHost(nodeId, "revenue", "wise-revenue-edit-host");
+  }
+
+  function renderHeadingMarkupEditButtons(tree, nodes) {
+    var present = {};
+    for (var i = 0; i < nodes.length; i++) {
+      var heading = nodes[i];
+      if (!heading || isSupplyingItemLine(heading)) continue;
+      var children = getImmediateSupplyingItemChildren(tree, heading);
+      if (!children.length) continue;
+      var nodeId = String(heading.id || "");
+      var $host = findCommercialColumnHost(nodeId, "markup", "wise-heading-markup-edit-host");
+      if (!nodeId || !$host.length) continue;
+      present[nodeId] = true;
+      var $button = $host.find(".wise-heading-markup-edit-button").first();
+      if (!$button.length) {
+        $button = $('<button type="button" class="wise-heading-markup-edit-button"><span aria-hidden="true">%</span></button>').appendTo($host);
+      }
+      $button.attr({
+        "data-wise-heading-node-id": nodeId,
+        "title": "Apply one markup to " + children.length + " direct item" + (children.length === 1 ? "" : "s"),
+        "aria-label": "Apply markup to direct items inside " + (getSupplyingLineTitle(heading) || "this heading")
+      });
+    }
+
+    $("#items_tab .wise-heading-markup-edit-button").each(function () {
+      var nodeId = String($(this).attr("data-wise-heading-node-id") || "");
+      if (!present[nodeId]) {
+        $(this).closest(".wise-heading-markup-edit-host").removeClass("wise-heading-markup-edit-host");
+        $(this).remove();
+      }
+    });
+  }
+
+  function findCommercialColumnHost(nodeId, key, hostClass) {
     var element = nodeId && document.getElementById(nodeId);
     var $cell = element
-      ? $(element).find("table.cust_node tr").first().children("[data-wise-commercial-column='revenue']").first()
+      ? $(element).find("table.cust_node tr").first().children('[data-wise-commercial-column="' + key + '"]').first()
       : $();
     if (!$cell.length) {
-      $cell = $("#items_tab .jstree-grid-column[data-wise-commercial-column='revenue'] .jstree-grid-cell").filter(function () {
+      $cell = $('#items_tab .jstree-grid-column[data-wise-commercial-column="' + key + '"] .jstree-grid-cell').filter(function () {
         return String($(this).attr("data-jstreegrid") || "") === String(nodeId || "");
       }).first();
     }
     if (!$cell.length) return $();
     var $value = $cell.find(".wise-commercial-projected-value").first();
     var $host = $value.length ? $value.parent() : $cell;
-    return $host.addClass("wise-revenue-edit-host");
+    return $host.addClass(hostClass);
   }
 
   function ensureRspSelectionColumn() {
@@ -1360,24 +1425,29 @@
 
   function installLineCommercialEditorCapture() {
     document.addEventListener("pointerdown", function (event) {
-      var button = findProposalEditButton(event.target);
+      var button = findCommercialEditButton(event.target);
       if (button) event.stopPropagation();
     }, true);
 
     document.addEventListener("click", function (event) {
-      var button = findProposalEditButton(event.target);
+      var button = findCommercialEditButton(event.target);
       if (!button) return;
       event.preventDefault();
       event.stopPropagation();
       if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
       if (!isProposalCreationDepot()) return;
-      openLineCommercialEditor(String($(button).attr("data-wise-proposal-node-id") || ""));
+      var $button = $(button);
+      if ($button.hasClass("wise-heading-markup-edit-button")) {
+        openHeadingMarkupEditor(String($button.attr("data-wise-heading-node-id") || ""));
+      } else {
+        openLineCommercialEditor(String($button.attr("data-wise-proposal-node-id") || ""));
+      }
     }, true);
   }
 
-  function findProposalEditButton(target) {
+  function findCommercialEditButton(target) {
     var element = target && target.nodeType === 1 ? target : (target && target.parentElement);
-    return element ? $(element).closest(".wise-proposal-edit-button").get(0) : null;
+    return element ? $(element).closest(".wise-proposal-edit-button,.wise-heading-markup-edit-button").get(0) : null;
   }
 
   function openLineCommercialEditor(nodeId) {
@@ -1386,6 +1456,7 @@
     try { node = tree && tree.get_node(String(nodeId || "")); } catch (err) {}
     if (!node || !isSupplyingItemLine(node)) return;
 
+    closeHeadingMarkupEditor();
     closeLineCommercialEditor();
     var commercial = readCommercialFields(node);
     commercial.cos = readLineCos($(), node);
@@ -1441,6 +1512,223 @@
     var $existing = $("#" + CFG.editorDialogId);
     if (!$existing.length) return;
     try { $existing.dialog("close"); } catch (err) { $existing.remove(); }
+  }
+
+  function openHeadingMarkupEditor(nodeId) {
+    var tree = getTree();
+    var heading = null;
+    try { heading = tree && tree.get_node(String(nodeId || "")); } catch (err) {}
+    if (!heading || isSupplyingItemLine(heading)) return;
+    var children = getImmediateSupplyingItemChildren(tree, heading);
+    if (!children.length) return;
+
+    closeLineCommercialEditor();
+    closeHeadingMarkupEditor();
+    var title = getSupplyingLineTitle(heading) || "Heading";
+    var commonMarkup = readCommonChildMarkup(children);
+    var childLabel = children.length + " direct item" + (children.length === 1 ? "" : "s");
+    var $dialog = $('<div id="' + CFG.headingMarkupDialogId + '" class="wise-heading-markup-dialog"></div>')
+      .attr("data-wise-heading-node-id", String(heading.id || ""))
+      .append(
+        '<section class="wise-heading-markup-panel">' +
+          '<div class="wise-heading-markup-copy">' +
+            '<b>Apply markup to ' + escapeAttr(title) + '</b>' +
+            '<span>This updates ' + escapeAttr(childLabel) + ' immediately inside this heading. Nested headings are not included.</span>' +
+          '</div>' +
+          '<label><span>Markup</span><span class="wise-commercial-input-wrap">' +
+            '<input type="text" inputmode="numeric" autocomplete="off" class="data_cell wise-commercial-input" ' +
+              'data-wise-heading-markup value="' + escapeAttr(commonMarkup) + '">' +
+            '<em>%</em></span></label>' +
+          '<p data-wise-heading-markup-status>Each child Revenue will be recalculated from its displayed CoS.</p>' +
+        '</section>'
+      )
+      .appendTo(document.body);
+
+    if (!$.fn || typeof $.fn.dialog !== "function") {
+      $dialog.remove();
+      if (window.alert) window.alert("The heading markup editor could not be opened. Please refresh the page and try again.");
+      return;
+    }
+
+    $dialog.dialog({
+      title: "Apply markup — " + title,
+      modal: true,
+      width: 470,
+      minWidth: 400,
+      resizable: false,
+      closeOnEscape: true,
+      buttons: [
+        {
+          text: "Apply to " + children.length,
+          class: "wise-heading-markup-save",
+          click: function () { saveHeadingMarkupEditor($dialog, heading, children); }
+        },
+        {
+          text: "Cancel",
+          click: function () { $dialog.dialog("close"); }
+        }
+      ],
+      open: function () {
+        $dialog.find("[data-wise-heading-markup]").trigger("focus").select();
+      },
+      beforeClose: function () {
+        return $dialog.attr("data-wise-commercial-saving") !== "1";
+      },
+      close: function () {
+        setTimeout(function () {
+          try { $dialog.dialog("destroy"); } catch (err) {}
+          $dialog.remove();
+        }, 0);
+      }
+    });
+  }
+
+  function closeHeadingMarkupEditor() {
+    var $existing = $("#" + CFG.headingMarkupDialogId);
+    if (!$existing.length) return;
+    if ($existing.attr("data-wise-commercial-saving") === "1") return;
+    try { $existing.dialog("close"); } catch (err) { $existing.remove(); }
+  }
+
+  function readCommonChildMarkup(children) {
+    var common = null;
+    for (var i = 0; i < children.length; i++) {
+      var markup = normaliseIntegerInput(readCommercialFields(children[i]).markup);
+      markup = markup == null ? "" : markup;
+      if (common == null) common = markup;
+      else if (common !== markup) return "";
+    }
+    return common || "";
+  }
+
+  function buildHeadingMarkupUpdates(children, markup) {
+    var normalisedMarkup = normaliseIntegerInput(markup);
+    var updates = [];
+    var errors = [];
+    if (normalisedMarkup == null || normalisedMarkup === "") {
+      return { markup: normalisedMarkup, updates: updates, errors: ["Enter a whole-number markup."] };
+    }
+
+    for (var i = 0; i < children.length; i++) {
+      var node = children[i];
+      var title = getSupplyingLineTitle(node) || "Supplying line";
+      var cos = normaliseMoneyInput(readLineCos($(), node));
+      var lineId = getSupplyingLineDataId(node);
+      var lineKind = getSupplyingLineKind(node);
+      var jobId = getSupplyingJobId(node);
+      if (cos == null || cos === "") {
+        errors.push(title + " has no readable CoS.");
+        continue;
+      }
+      if (!lineId || !lineKind || !jobId) {
+        errors.push(title + " has incomplete HireHop save identity.");
+        continue;
+      }
+
+      var revenue = calculateRevenue(Number(cos), Number(normalisedMarkup)).toFixed(2);
+      var customFields = collectNodeCustomFields(node);
+      setCustomField(customFields, CFG.revenueField, revenue);
+      setCustomField(customFields, CFG.markupField, normalisedMarkup);
+      var values = { revenue: revenue, markup: normalisedMarkup, customFields: customFields };
+      updates.push({
+        node: node,
+        nodeId: String(node.id || ""),
+        dataId: lineId,
+        values: values,
+        payload: buildLineCommercialSavePayload(node, values)
+      });
+    }
+    return { markup: normalisedMarkup, updates: updates, errors: errors };
+  }
+
+  function saveHeadingMarkupEditor($dialog, heading, children) {
+    if ($dialog.attr("data-wise-commercial-saving") === "1") return;
+    var batch = buildHeadingMarkupUpdates(children, $dialog.find("[data-wise-heading-markup]").val());
+    if (batch.errors.length) {
+      setHeadingMarkupStatus($dialog, batch.errors[0] + (batch.errors.length > 1 ? " " + (batch.errors.length - 1) + " more line(s) could not be prepared." : ""), true);
+      return;
+    }
+    if (!batch.updates.length) {
+      setHeadingMarkupStatus($dialog, "There are no direct item lines to update.", true);
+      return;
+    }
+
+    cancelNativeCommercialReconciliation();
+    $dialog.attr("data-wise-commercial-saving", "1");
+    setLineCommercialEditorBusy($dialog, true);
+    saveNextHeadingMarkupUpdate($dialog, heading, batch, 0);
+  }
+
+  function saveNextHeadingMarkupUpdate($dialog, heading, batch, index) {
+    if (index >= batch.updates.length) {
+      finishHeadingMarkupBatch($dialog, heading, batch, batch.updates.length, "");
+      return;
+    }
+    var update = batch.updates[index];
+    setHeadingMarkupStatus($dialog, "Saving item " + (index + 1) + " of " + batch.updates.length + "…", false);
+    $.ajax({
+      url: CFG.itemsSaveEndpoint,
+      type: "POST",
+      dataType: "text",
+      wiseCommercialStandalone: true,
+      data: update.payload
+    }).done(function (responseText) {
+      var error = readLineCommercialSaveError(responseText);
+      if (error) {
+        finishHeadingMarkupBatch($dialog, heading, batch, index, error);
+        return;
+      }
+      applyPendingSaveToTree({
+        nodeId: update.nodeId,
+        dataId: update.dataId,
+        revenue: update.values.revenue,
+        markup: update.values.markup
+      });
+      if (index + 1 >= batch.updates.length) {
+        finishHeadingMarkupBatch($dialog, heading, batch, batch.updates.length, "");
+        return;
+      }
+      var delay = Math.max(0, getHireHopNumberValue("timings", "writeThrottleMs", 1150));
+      setTimeout(function () {
+        saveNextHeadingMarkupUpdate($dialog, heading, batch, index + 1);
+      }, delay);
+    }).fail(function (xhr, status, errorThrown) {
+      var message = readLineCommercialSaveError(xhr && xhr.responseText) || errorThrown || status || "The item could not be saved.";
+      finishHeadingMarkupBatch($dialog, heading, batch, index, String(message));
+    });
+  }
+
+  function finishHeadingMarkupBatch($dialog, heading, batch, savedCount, error) {
+    $dialog.removeAttr("data-wise-commercial-saving");
+    setLineCommercialEditorBusy($dialog, false);
+    if (savedCount > 0) {
+      scheduleRefresh(0);
+      $(document).trigger("wise:supplying-commercial-line-saved", [
+        String(heading && heading.id || ""),
+        {
+          bulk: true,
+          markup: batch.markup,
+          savedCount: savedCount,
+          nodeIds: batch.updates.slice(0, savedCount).map(function (update) { return update.nodeId; })
+        }
+      ]);
+    }
+    if (error) {
+      setHeadingMarkupStatus(
+        $dialog,
+        "Saved " + savedCount + " of " + batch.updates.length + ". " + error + " You can apply again to retry the batch.",
+        true
+      );
+      return;
+    }
+    setHeadingMarkupStatus($dialog, "Saved " + savedCount + " item" + (savedCount === 1 ? "" : "s") + ".", false);
+    $dialog.dialog("close");
+  }
+
+  function setHeadingMarkupStatus($dialog, message, isError) {
+    $dialog.find("[data-wise-heading-markup-status]")
+      .text(String(message || ""))
+      .toggleClass("has-error", !!isError);
   }
 
   function saveLineCommercialEditor($dialog, node) {
@@ -3395,6 +3683,7 @@
   function removeEnhancements() {
     stopCosWatcher();
     closeLineCommercialEditor();
+    closeHeadingMarkupEditor();
     restoreTopCommercialViews();
     if (state.inventoryUpdateTimer) clearTimeout(state.inventoryUpdateTimer);
     if (state.inventoryUiRefreshTimer) clearTimeout(state.inventoryUiRefreshTimer);
@@ -3409,8 +3698,9 @@
     state.rspReconcileTimers = {};
     restoreCommercialGeometry();
     $("." + CFG.panelClass).remove();
-    $(".wise-rsp-row-control,#" + CFG.rspSummaryId + ",#items_tab [data-wise-rsp-column],#items_tab [data-wise-proposal-column],#items_tab .wise-proposal-edit-button").remove();
+    $(".wise-rsp-row-control,#" + CFG.rspSummaryId + ",#items_tab [data-wise-rsp-column],#items_tab [data-wise-proposal-column],#items_tab .wise-proposal-edit-button,#items_tab .wise-heading-markup-edit-button").remove();
     $("#items_tab .wise-revenue-edit-host").removeClass("wise-revenue-edit-host");
+    $("#items_tab .wise-heading-markup-edit-host").removeClass("wise-heading-markup-edit-host");
     $("[data-wise-commercial-original-label]").each(function () {
       var $label = $(this);
       var separator = $label.children(".jstree-grid-separator").detach();
@@ -3477,6 +3767,9 @@
       ".wise-revenue-edit-host>.wise-commercial-projected-value{flex:1 1 auto;width:auto;min-width:0;}",
       ".wise-proposal-edit-button{display:inline-flex;flex:0 0 18px;align-items:center;justify-content:center;width:18px;height:18px;margin:0;padding:0;border:0;border-radius:3px;background:transparent;color:#667085;font-size:12px;line-height:1;opacity:.68;cursor:pointer;box-sizing:border-box;pointer-events:auto;}",
       ".wise-proposal-edit-button:hover,.wise-proposal-edit-button:focus{background:#e7f2fb;color:#244b70;opacity:1;outline:none;box-shadow:0 0 0 1px rgba(75,141,204,.22);}.wise-proposal-edit-button span{display:block;line-height:1;}",
+      ".wise-heading-markup-edit-host{display:flex!important;align-items:center!important;justify-content:center!important;min-width:0;}.wise-heading-markup-edit-host>.wise-commercial-projected-value{display:none!important;}",
+      ".wise-heading-markup-edit-button{display:inline-flex;align-items:center;justify-content:center;width:22px;height:18px;margin:0;padding:0;border:1px solid #b7c4d1;border-radius:3px;background:#fff;color:#365b7d;font-size:10px;font-weight:800;line-height:1;cursor:pointer;box-sizing:border-box;pointer-events:auto;}",
+      ".wise-heading-markup-edit-button:hover,.wise-heading-markup-edit-button:focus{border-color:#4b8dcc;background:#e7f2fb;color:#244b70;outline:none;box-shadow:0 0 0 1px rgba(75,141,204,.18);}",
       ".wise-supplying-commercial-active [data-wise-rsp-column]{display:none!important;}",
       ".wise-supplying-commercial-active.wise-rsp-calculator-view table [data-wise-rsp-column]{display:table-cell!important;}",
       ".wise-supplying-commercial-active.wise-rsp-calculator-view .jstree-grid-column[data-wise-rsp-column]{display:block!important;}",
@@ -3504,6 +3797,7 @@
       ".wise-commercial-input-wrap em{color:#667085;font-size:12px;font-style:normal;}",
       ".wise-commercial-input{min-width:0;width:100%;height:26px!important;padding:0!important;border:0!important;outline:0!important;background:transparent!important;text-align:right;font:inherit!important;color:#17212b!important;box-shadow:none!important;}",
       ".wise-proposal-commercial-dialog{padding:8px 12px!important;overflow:visible!important;}.wise-proposal-commercial-dialog .wise-commercial-standalone-fields{grid-template-columns:1fr 1fr;margin:0;padding:14px;}.wise-proposal-commercial-dialog .wise-line-commercial-heading{grid-column:1/-1;}.wise-proposal-commercial-dialog+.ui-dialog-buttonpane .wise-proposal-commercial-save{font-weight:700;}",
+      ".wise-heading-markup-dialog{padding:8px 12px!important;overflow:visible!important;}.wise-heading-markup-panel{display:grid;grid-template-columns:minmax(0,1fr) 140px;align-items:end;gap:12px;padding:14px;border:1px solid #ccd8e5;border-left:4px solid #4b8dcc;border-radius:8px;background:#f7fafc;box-sizing:border-box;}.wise-heading-markup-copy{display:flex;flex-direction:column;gap:3px;}.wise-heading-markup-copy b{color:#17212b;font-size:13px;}.wise-heading-markup-copy span{color:#667085;font-size:10px;line-height:1.35;}.wise-heading-markup-panel label{display:grid;gap:4px;color:#344054;font-size:11px;font-weight:700;}.wise-heading-markup-panel p{grid-column:1/-1;margin:0;color:#667085;font-size:10px;}.wise-heading-markup-panel p.has-error{color:#b42318;font-weight:700;}.wise-heading-markup-save{font-weight:700!important;}",
       "@media(max-width:760px){." + CFG.panelClass + "{grid-template-columns:1fr 1fr;}.wise-line-commercial-heading{grid-column:1/-1;}.wise-commercial-view-switcher{align-items:flex-start;flex-direction:column;}.wise-commercial-view-switcher>div{width:100%;box-sizing:border-box;}.wise-commercial-view-switcher button{flex:1;min-width:0;}.wise-rsp-summary{align-items:flex-start;flex-direction:column;}.wise-rsp-summary-result{width:100%;justify-content:space-between;}}"
     ].join("");
     $("head").append('<style id="' + CFG.styleId + '">' + css + "</style>");
