@@ -7,7 +7,8 @@
  *   Revenue/Markup editor without depending on HireHop's reused native popup.
  * - Uses HireHop's native line Total as CoS, then shows Markup and Revenue.
  * - Calculates either Revenue from Markup or whole-number Markup from Revenue.
- * - Uses inventory Revenue/Markup as defaults until a line-level field exists.
+ * - Supports every real supplying item line; headings/subtotals remain excluded.
+ * - Uses master Revenue/Markup defaults whenever a line has an inventory/list ID.
  * - Shows inventory-master RSP per component and totals checked component rows.
  * - Keeps legacy Unit Price/Discount/Flag/Total values intact in HireHop.
  * ======================================================================== */
@@ -21,7 +22,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-28.1",
+    version: "2026-07-28.2",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     editorDialogId: "wise-proposal-commercial-dialog",
@@ -123,7 +124,7 @@
       })
       .on("select_node.jstree.wiseSupplyingCommercial changed.jstree.wiseSupplyingCommercial", CFG.tree, function (event, data) {
         var node = data && data.node;
-        if (node && isInventoryLine(node)) state.lastSelectedNodeId = String(node.id || "");
+        if (node && isSupplyingItemLine(node)) state.lastSelectedNodeId = String(node.id || "");
       })
       .on("mousedown.wiseSupplyingCommercial click.wiseSupplyingCommercial dblclick.wiseSupplyingCommercial", ".wise-rsp-row-control", function (event) {
         event.stopPropagation();
@@ -486,7 +487,7 @@
     var projected = 0;
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
-      if (!isInventoryLine(node)) {
+      if (!isSupplyingItemLine(node)) {
         setGridCellValue(columns.markup, node.id, "—");
         setGridCellValue(columns.revenue, node.id, "—");
         continue;
@@ -543,7 +544,7 @@
     var projected = 0;
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
-      if (!isInventoryLine(node)) {
+      if (!isSupplyingItemLine(node)) {
         setNativeSupplyingCellValue(node, "markup", "—");
         setNativeSupplyingCellValue(node, "revenue", "—");
         continue;
@@ -928,7 +929,7 @@
 
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
-      if (!isInventoryLine(node)) continue;
+      if (!hasInventoryMasterLine(node)) continue;
       var selectionKey = getRspSelectionKey(node);
       present[selectionKey] = String(node.id || "");
       delete state.rspSelectionMissingSince[selectionKey];
@@ -999,7 +1000,7 @@
     var present = {};
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
-      if (!isInventoryLine(node)) continue;
+      if (!isSupplyingItemLine(node)) continue;
       var nodeId = String(node.id || "");
       var $host = findProposalColumnHost(nodeId);
       if (!nodeId || !$host.length) continue;
@@ -1133,7 +1134,7 @@
     nodes = nodes || getAllTreeNodes(getTree());
     var bySelectionKey = {};
     for (var i = 0; i < nodes.length; i++) {
-      if (isInventoryLine(nodes[i])) bySelectionKey[getRspSelectionKey(nodes[i])] = nodes[i];
+      if (hasInventoryMasterLine(nodes[i])) bySelectionKey[getRspSelectionKey(nodes[i])] = nodes[i];
     }
 
     var lineCount = 0;
@@ -1141,7 +1142,7 @@
     var total = 0;
     Object.keys(state.rspSelected).forEach(function (selectionKey) {
       var node = bySelectionKey[selectionKey];
-      if (!node || !isInventoryLine(node)) {
+      if (!node || !hasInventoryMasterLine(node)) {
         retainMissingRspSelection(selectionKey);
         return;
       }
@@ -1334,13 +1335,20 @@
     delete state.rspSelectionMissingSince[selectionKey];
   }
 
-  function isInventoryLine(node) {
-    if (!node || !node.data) return false;
-    var kind = node.data.kind;
-    if (kind == null) kind = node.data.KIND;
-    kind = Number(kind);
-    if (kind === 1 || kind === 2) return true;
-    return /^[bc](?:_|-)?\d+/i.test(String(node.id || ""));
+  function isSupplyingItemLine(node) {
+    if (!node || !node.id || /^(?:#|root)$/i.test(String(node.id))) return false;
+    var data = node.data || {};
+    var kind = data.kind;
+    if (kind == null) kind = data.KIND;
+    if (kind != null && kind !== "") {
+      kind = Number(kind);
+      if (isFinite(kind)) return kind !== 0;
+    }
+    return !/^a(?:_|-)?\d+/i.test(String(node.id));
+  }
+
+  function hasInventoryMasterLine(node) {
+    return isSupplyingItemLine(node) && !!getInventoryMasterKey(node);
   }
 
   /* --------------------- Dedicated commercial editor ------------------- */
@@ -1371,7 +1379,7 @@
     var tree = getTree();
     var node = null;
     try { node = tree && tree.get_node(String(nodeId || "")); } catch (err) {}
-    if (!node || !isInventoryLine(node)) return;
+    if (!node || !isSupplyingItemLine(node)) return;
 
     closeLineCommercialEditor();
     var commercial = readCommercialFields(node);
@@ -1442,7 +1450,7 @@
       return;
     }
     if (!lineKind) {
-      setLineCommercialEditorStatus($dialog, "HireHop could not determine whether this is a hire or sales line.", true);
+      setLineCommercialEditorStatus($dialog, "HireHop could not determine this supplying line's item type.", true);
       return;
     }
     if (!jobId) {
@@ -1531,7 +1539,7 @@
 
   function getSupplyingLineDataId(node) {
     var nodeId = String(node && node.id || "");
-    if (/^[bc](?:_|-)?\d+/i.test(nodeId)) return normaliseInventoryId(nodeId);
+    if (/^[b-z](?:_|-)?\d+/i.test(nodeId)) return normaliseInventoryId(nodeId);
 
     var sources = getNodeDataSources(node);
     for (var i = 0; i < sources.length; i++) {
@@ -1542,16 +1550,16 @@
   }
 
   function getSupplyingLineKind(node) {
+    var prefix = String(node && node.id || "").match(/^([b-z])(?:_|-)?\d+/i);
+    if (prefix) return String("abcdefghijklmnopqrstuvwxyz".indexOf(prefix[1].toLowerCase()));
+
     var sources = getNodeDataSources(node);
     for (var i = 0; i < sources.length; i++) {
       var value = firstDefinedValue(sources[i], ["kind", "KIND"]);
       var kind = Number(value);
-      if (kind === 1 || kind === 2) return String(kind);
+      if (isFinite(kind) && kind > 0 && Math.floor(kind) === kind) return String(kind);
     }
-
-    var prefix = String(node && node.id || "").match(/^([bc])(?:_|-)?\d+/i);
-    if (!prefix) return "";
-    return prefix[1].toLowerCase() === "b" ? "1" : "2";
+    return "";
   }
 
   function getSupplyingJobId(node) {
@@ -1651,7 +1659,7 @@
     if ($existingPanel.length) $existingPanel.remove();
 
     var node = resolveDialogNode($dialog);
-    if (node && !isInventoryLine(node)) return false;
+    if (node && !isSupplyingItemLine(node)) return false;
     var commercial = readCommercialFields(node || { data: {} });
     commercial.cos = readLineCos($dialog, node);
     var $panel = $(commercialPanelHtml(commercial));
@@ -1825,14 +1833,14 @@
     try {
       var selected = tree.get_selected(true) || [];
       for (var i = 0; i < selected.length; i++) {
-        if (isInventoryLine(selected[i])) return selected[i];
+        if (isSupplyingItemLine(selected[i])) return selected[i];
       }
     } catch (err) {}
 
     if (state.lastSelectedNodeId) {
       try {
         var remembered = tree.get_node(state.lastSelectedNodeId);
-        if (remembered && isInventoryLine(remembered)) return remembered;
+        if (remembered && isSupplyingItemLine(remembered)) return remembered;
       } catch (rememberedError) {}
     }
 
@@ -2287,7 +2295,7 @@
     var tree = getTree();
     try {
       var node = tree && tree.get_node(nodeId);
-      if (node && isInventoryLine(node)) state.lastSelectedNodeId = String(node.id || nodeId);
+      if (node && isSupplyingItemLine(node)) state.lastSelectedNodeId = String(node.id || nodeId);
     } catch (err) {}
   }
 
@@ -2574,8 +2582,9 @@
     }
     var revenueLine = readCustomFieldResult(bag, sources, CFG.revenueField);
     var markupLine = readCustomFieldResult(bag, sources, CFG.markupField);
-    var inherited = getInheritedCommercialDefaults(node);
-    if ((!revenueLine.found || !markupLine.found) && !inherited.resolved) {
+    var inheritsMasterDefaults = hasInventoryMasterLine(node);
+    var inherited = inheritsMasterDefaults ? getInheritedCommercialDefaults(node) : resolvedEmptyCommercialDefaults();
+    if (inheritsMasterDefaults && (!revenueLine.found || !markupLine.found) && !inherited.resolved) {
       queueInheritedCommercialDefaults(node);
     }
 
@@ -2584,7 +2593,7 @@
     var revenueInherited = !revenueLine.found && inherited.revenueFound;
     var markupInherited = !markupLine.found && inherited.markupFound;
 
-    // Inventory Markup is the durable default. For a new line, apply it to
+    // Master Markup is the durable default. For a new line, apply it to
     // that line's current CoS so Qty is reflected before the first edit/save.
     if (!revenueLine.found && markup !== "") {
       var cos = normaliseMoneyInput(readLineCos($(), node));
@@ -2637,17 +2646,23 @@
   }
 
   function getInventoryMasterInfo(node) {
-    var data = node && node.data ? node.data : {};
-    var listId = firstDefinedValue(data, ["LIST_ID", "list_id", "STOCK_ID", "stock_id", "SALES_ID", "sales_id"]);
-    var categoryId = firstDefinedValue(data, ["CATEGORY_ID", "category_id", "CAT_ID", "cat_id"]);
-    var title = firstDefinedValue(data, ["alt_title", "ALT_TITLE", "title", "TITLE", "name", "NAME"]);
+    var sources = getNodeDataSources(node);
+    var kind = Number(getSupplyingLineKind(node)) || 0;
+    var listId = "";
+    var categoryId = "";
+    var title = "";
+    for (var i = 0; i < sources.length; i++) {
+      if (listId === "") listId = firstDefinedValue(sources[i], ["LIST_ID", "list_id", "STOCK_ID", "stock_id", "SALES_ID", "sales_id"]);
+      if (categoryId === "") categoryId = firstDefinedValue(sources[i], ["CATEGORY_ID", "category_id", "CAT_ID", "cat_id"]);
+      if (title === "") title = firstDefinedValue(sources[i], ["alt_title", "ALT_TITLE", "title", "TITLE", "name", "NAME"]);
+    }
     title = stripInventoryTitleMarkup(title);
     return {
-      key: listId === "" ? "" : String(Number(node && node.data && node.data.kind) || "") + ":" + String(listId),
+      key: listId === "" ? "" : String(kind) + ":" + String(listId),
       listId: String(listId || ""),
       categoryId: String(categoryId || ""),
       title: title,
-      kind: Number(data.kind == null ? data.KIND : data.kind) || 0
+      kind: kind
     };
   }
 

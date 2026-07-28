@@ -157,6 +157,7 @@ async function testRequestManager() {
 
 function testCommercialTextMarkup() {
   const commercial = fs.readFileSync(path.join(root, "15-supplyingcommercial.js"), "utf8");
+  const preview = fs.readFileSync(path.join(root, "1-docprev.js"), "utf8");
   const readerStart = commercial.indexOf("  function readCustomFieldResult");
   const readerEnd = commercial.indexOf("  function setCustomField", readerStart);
   const nameStart = commercial.indexOf("  function normaliseCustomFieldName");
@@ -168,7 +169,9 @@ function testCommercialTextMarkup() {
   const revenueStart = commercial.indexOf("  function calculateRevenue");
   const revenueEnd = commercial.indexOf("  function calculateMarkup", revenueStart);
   const rspTotalStart = commercial.indexOf("  function calculateRspLineTotal");
-  const rspTotalEnd = commercial.indexOf("  function isInventoryLine", rspTotalStart);
+  const lineTypesStart = commercial.indexOf("  function isSupplyingItemLine");
+  const lineTypesEnd = commercial.indexOf("  /* --------------------- Dedicated commercial editor", lineTypesStart);
+  const rspTotalEnd = lineTypesStart;
   const firstDefinedStart = commercial.indexOf("  function firstDefinedValue");
   const firstDefinedEnd = commercial.indexOf("  function stripInventoryTitleMarkup", firstDefinedStart);
   const nodeSourcesStart = commercial.indexOf("  function getNodeDataSources");
@@ -181,9 +184,15 @@ function testCommercialTextMarkup() {
   const lineIdEnd = commercial.indexOf("  function getSupplyingLineTitle", lineIdStart);
   const inventoryIdStart = commercial.indexOf("  function normaliseInventoryId");
   const inventoryIdEnd = commercial.indexOf("  function collectNodeCustomFields", inventoryIdStart);
+  const jobLineTypeStart = preview.indexOf("  function isJobPerformanceSupplyingItemLine");
+  const jobLineTypeEnd = preview.indexOf("  function getJobPerformanceNodeSources", jobLineTypeStart);
+  const jobTotalsStart = preview.indexOf("  function readSupplyingLineCommercialTotals");
+  const jobTotalsEnd = preview.indexOf("  function getJobPerformanceSupplyingTree", jobTotalsStart);
+  const jobMoneyStart = preview.indexOf("  function parseJobPerformanceMoney");
+  const jobMoneyEnd = preview.indexOf("  function formatJobPerformanceMoney", jobMoneyStart);
   const normaliseTextStart = commercial.indexOf("  function normaliseText");
   const normaliseTextEnd = commercial.indexOf("  function escapeAttr", normaliseTextStart);
-  assert([readerStart, readerEnd, nameStart, nameEnd, moneyStart, moneyEnd, integerStart, integerEnd, revenueStart, revenueEnd, rspTotalStart, rspTotalEnd, firstDefinedStart, firstDefinedEnd, nodeSourcesStart, nodeSourcesEnd, titleStart, titleEnd, partialSaveStart, partialSaveEnd, lineIdStart, lineIdEnd, inventoryIdStart, inventoryIdEnd, normaliseTextStart, normaliseTextEnd].every(index => index >= 0), "commercial test helpers should be discoverable");
+  assert([readerStart, readerEnd, nameStart, nameEnd, moneyStart, moneyEnd, integerStart, integerEnd, revenueStart, revenueEnd, rspTotalStart, rspTotalEnd, lineTypesStart, lineTypesEnd, firstDefinedStart, firstDefinedEnd, nodeSourcesStart, nodeSourcesEnd, titleStart, titleEnd, partialSaveStart, partialSaveEnd, lineIdStart, lineIdEnd, inventoryIdStart, inventoryIdEnd, jobLineTypeStart, jobLineTypeEnd, jobTotalsStart, jobTotalsEnd, jobMoneyStart, jobMoneyEnd, normaliseTextStart, normaliseTextEnd].every(index => index >= 0), "commercial test helpers should be discoverable");
 
   const context = vm.createContext({
     result: null,
@@ -210,11 +219,28 @@ function testCommercialTextMarkup() {
       commercial.slice(firstDefinedStart, firstDefinedEnd) +
       commercial.slice(nodeSourcesStart, nodeSourcesEnd) +
       commercial.slice(rspTotalStart, rspTotalEnd) +
+      commercial.slice(lineTypesStart, lineTypesEnd) +
       commercial.slice(titleStart, titleEnd) +
       commercial.slice(partialSaveStart, partialSaveEnd) +
       commercial.slice(lineIdStart, lineIdEnd) +
       commercial.slice(inventoryIdStart, inventoryIdEnd) +
+      preview.slice(jobLineTypeStart, jobLineTypeEnd) +
+      preview.slice(jobTotalsStart, jobTotalsEnd) +
+      preview.slice(jobMoneyStart, jobMoneyEnd) +
       commercial.slice(normaliseTextStart, normaliseTextEnd) +
+      '; function getJobPerformanceSupplyingTree() { return {}; }' +
+      '; function getJobPerformanceTreeNodes() { return [' +
+        '{ id: "b1", data: { Revenue: 500, TOTAL: 84 } },' +
+        '{ id: "c2", data: { Revenue: 100, TOTAL: 24.5 } },' +
+        '{ id: "d3", data: { Revenue: 200, TOTAL: 100 } },' +
+        '{ id: "e4", data: { Revenue: 700, TOTAL: 350 } },' +
+        '{ id: "f5", data: { Revenue: 60, TOTAL: 50 } },' +
+        '{ id: "a5", data: { Revenue: 9999, TOTAL: 9999 } }' +
+      ']; }' +
+      '; function readJobPerformanceRevenueField(node) { return node.data.Revenue; }' +
+      '; function readJobPerformanceNativeTotal(node) { return node.data.TOTAL; }' +
+      '; function unwrapJobPerformanceValue(value) { return value == null ? "" : value; }' +
+      '; function getInventoryMasterKey(node) { return String(node && node.data && node.data.LIST_ID || ""); }' +
       '; result = {' +
         'field: readCustomFieldResult({ Markup: { value: "0" }, "items:_Markup": { value: "-100" } }, [], "Markup"),' +
         'ascii: normaliseIntegerInput("-100"),' +
@@ -230,6 +256,15 @@ function testCommercialTextMarkup() {
         'jobTitle: looksLikeItemEditorTitle("Edit Job")' +
         ',partialPayload: buildLineCommercialSavePayload({ id: "b42", data: { ID: 999, JOB_ID: 77, QTY: 9, TOTAL: 250 } }, { customFields: { Revenue: "400", Markup: "60" } })' +
         ',salesPayload: buildLineCommercialSavePayload({ id: "c_43", data: { JOB: 77 } }, { customFields: {} })' +
+        ',customPayload: buildLineCommercialSavePayload({ id: "d44", data: { JOB: 77 } }, { customFields: {} })' +
+        ',labourPayload: buildLineCommercialSavePayload({ id: "e-45", data: { JOB: 77 } }, { customFields: {} })' +
+        ',otherPayload: buildLineCommercialSavePayload({ id: "f46", data: { JOB: 77 } }, { customFields: {} })' +
+        ',commercialKinds: ["b1", "c2", "d3", "e4", "f5", "g6"].map(function (id) { return isSupplyingItemLine({ id: id }); })' +
+        ',inventoryMasterKinds: [{ id: "b1", data: { LIST_ID: 10 } }, { id: "c2", data: { LIST_ID: 20 } }, { id: "e3", data: { LIST_ID: 30 } }, { id: "d4", data: {} }].map(function (node) { return hasInventoryMasterLine(node); })' +
+        ',jobPerformanceKinds: ["b1", "c2", "d3", "e4", "f5", "g6"].map(function (id) { return isJobPerformanceSupplyingItemLine({ id: id }); })' +
+        ',blankKindFallback: [isSupplyingItemLine({ id: "b7", data: { kind: "" } }), isJobPerformanceSupplyingItemLine({ id: "b7", data: { kind: "" } })]' +
+        ',unsupportedKinds: ["a1", "root"].map(function (id) { return isSupplyingItemLine({ id: id }); })' +
+        ',jobPerformanceTotals: readSupplyingLineCommercialTotals()' +
       '};',
     context
   );
@@ -252,6 +287,17 @@ function testCommercialTextMarkup() {
   assert.strictEqual(context.result.partialPayload.kind, "1", "hire rows should derive kind 1 from their native b-prefix when row data omits kind");
   assert.strictEqual(context.result.salesPayload.id, "43", "underscored native tree IDs should retain their supplying-line ID");
   assert.strictEqual(context.result.salesPayload.kind, "2", "sales rows should derive kind 2 from their native c-prefix");
+  assert.strictEqual(context.result.customPayload.kind, "3", "custom rows should derive kind 3 from their native d-prefix");
+  assert.strictEqual(context.result.labourPayload.kind, "4", "labour rows should derive kind 4 from their native e-prefix");
+  assert.strictEqual(context.result.otherPayload.kind, "5", "other native supplying items should derive their kind without a commercial allowlist");
+  assert.deepStrictEqual(Array.from(context.result.commercialKinds), [true, true, true, true, true, true], "every non-heading native supplying item kind should expose commercial fields");
+  assert.deepStrictEqual(Array.from(context.result.inventoryMasterKinds), [true, true, true, false], "RSP/default behavior should depend on an actual inventory master rather than an item-type allowlist");
+  assert.deepStrictEqual(Array.from(context.result.jobPerformanceKinds), [true, true, true, true, true, true], "Job Performance should include every non-heading supplying item kind");
+  assert.deepStrictEqual(Array.from(context.result.blankKindFallback), [true, true], "blank kind metadata should fall back to the native item identity rather than filtering out a real line");
+  assert.deepStrictEqual(Array.from(context.result.unsupportedKinds), [false, false], "structural heading/root rows should remain outside the commercial totals to prevent subtotal double-counting");
+  assert.strictEqual(context.result.jobPerformanceTotals.revenue, 1560, "Job Performance should sum Revenue across every supplying item type");
+  assert.strictEqual(context.result.jobPerformanceTotals.cos, 608.5, "Job Performance should sum native CoS across every supplying item type");
+  assert.strictEqual(context.result.jobPerformanceTotals.lineCount, 5, "Job Performance should exclude only structural rows from its commercial line count");
 }
 
 function testExternalModBridge() {
@@ -397,6 +443,14 @@ function testSourceGuards() {
   assert(!preview.includes('doc: "167"'), "proposal preview should not retain the previous QTC document");
   assert(preview.includes('ps: "a4"'), "QTC V4 preview should explicitly request A4 output");
   assert(!preview.includes("wise-rsp-selection-summary"), "Job Performance must not own, replace or remove the RSP calculator");
+  const performanceTotalReader = preview.slice(
+    preview.indexOf("  function readJobPerformanceNativeTotal"),
+    preview.indexOf("  function readJobPerformanceRenderedTotal")
+  );
+  assert(
+    performanceTotalReader.indexOf("readJobPerformanceRenderedTotal") < performanceTotalReader.indexOf('readJobPerformanceSourceValue(sources, "TOTAL")'),
+    "Job Performance CoS must prefer the same rendered row value visible to the user"
+  );
 
   const commercial = fs.readFileSync(path.join(root, "15-supplyingcommercial.js"), "utf8");
   assert(commercial.includes("inventory-defaults:v3:"), "inventory defaults should use a versioned shared request key");
@@ -414,10 +468,11 @@ function testSourceGuards() {
   assert(!commercialBoot.includes("installNativeSaveCapture"), "commercial editing must not depend on HireHop's native Save button");
   assert(!commercialBoot.includes("installAjaxSaveBridge"), "commercial editing must use its own partial custom-field save");
   assert(commercial.includes("function removeLegacyProposalEditColumns"), "the retired Proposal edit column should be removed");
-  assert(commercial.includes("function renderProposalEditButtons"), "inventory Revenue cells should receive compact edit controls");
+  assert(commercial.includes("function renderProposalEditButtons"), "supported commercial Revenue cells should receive compact edit controls");
   assert(commercial.includes("wise-revenue-edit-host"), "the edit control should share the projected Revenue value host");
   assert(!commercial.includes("<b>Edit</b>"), "the Revenue edit control should remain icon-only");
   assert(commercial.includes("function openLineCommercialEditor"), "Revenue edit icons should open the dedicated commercial editor");
+  assert(preview.includes("wise:supplying-commercial-line-saved.wiseJobPerformance"), "a successful Revenue/Markup save should explicitly refresh Job Performance");
   assert(commercial.includes("function buildLineCommercialSavePayload"), "the dedicated editor should build a minimal partial-update payload");
   const partialSave = commercial.slice(commercial.indexOf("  function buildLineCommercialSavePayload"), commercial.indexOf("  function getSupplyingLineDataId"));
   assert(partialSave.includes("custom_fields"), "the line editor should post the merged custom-field bag");

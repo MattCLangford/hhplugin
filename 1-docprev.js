@@ -4,7 +4,7 @@
   if (window.__wiseDocPreviewLoaded) return;
   window.__wiseDocPreviewLoaded = true;
 
-  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-21.7"); } catch (e) {}
+  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-28.1"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -1082,6 +1082,10 @@
       .off("wise:supplying-commercial-defaults-updated.wiseJobPerformance")
       .on("wise:supplying-commercial-defaults-updated.wiseJobPerformance", function () {
         refreshJobPerformanceSoon("inventory-commercial-defaults");
+      })
+      .off("wise:supplying-commercial-line-saved.wiseJobPerformance")
+      .on("wise:supplying-commercial-line-saved.wiseJobPerformance", function () {
+        refreshJobPerformanceSoon("commercial-line-save");
       });
     $("#" + JOB_PERFORMANCE_IFRAME_ID).on("load.wiseJobPerformance", function () {
       try {
@@ -1352,16 +1356,18 @@
 
     for (var i = 0; i < nodes.length; i++) {
       var node = nodes[i];
-      if (!isJobPerformanceInventoryLine(node)) continue;
-      lineCount += 1;
+      if (!isJobPerformanceSupplyingItemLine(node)) continue;
 
       var lineRevenue = parseJobPerformanceMoney(readJobPerformanceRevenueField(node));
+      var lineCos = parseJobPerformanceMoney(readJobPerformanceNativeTotal(node, tree));
+      if (lineRevenue == null && lineCos == null) continue;
+      lineCount += 1;
+
       if (lineRevenue != null) {
         revenue += lineRevenue;
         revenueLineCount += 1;
       }
 
-      var lineCos = parseJobPerformanceMoney(readJobPerformanceNativeTotal(node, tree));
       if (lineCos != null) cos += lineCos;
     }
 
@@ -1425,13 +1431,16 @@
     return nodes;
   }
 
-  function isJobPerformanceInventoryLine(node) {
-    if (!node || !node.data) return false;
-    var kind = node.data.kind;
-    if (kind == null) kind = node.data.KIND;
-    kind = Number(kind);
-    if (kind === 1 || kind === 2) return true;
-    return /^[bc](?:_|-)?\d+/i.test(String(node.id || ""));
+  function isJobPerformanceSupplyingItemLine(node) {
+    if (!node || !node.id || /^(?:#|root)$/i.test(String(node.id))) return false;
+    var data = node.data || {};
+    var kind = data.kind;
+    if (kind == null) kind = data.KIND;
+    if (kind != null && kind !== "") {
+      kind = Number(kind);
+      if (isFinite(kind)) return kind !== 0;
+    }
+    return !/^a(?:_|-)?\d+/i.test(String(node.id));
   }
 
   function getJobPerformanceNodeSources(node) {
@@ -1715,7 +1724,7 @@
       ", client commission " + (metrics.clientCommissionAmount || formatJobPerformanceMoney(0)) +
       ". Total adjustments " + (metrics.adjustments || formatJobPerformanceMoney(0)) +
       ", GP " + metrics.gp +
-      " (" + currentGpText + "). " + (metrics.lineCount == null ? "" : metrics.lineCount + " inventory lines. ") +
+      " (" + currentGpText + "). " + (metrics.lineCount == null ? "" : metrics.lineCount + " commercial lines. ") +
       "Job Track flag: " + (metrics.sourceStatus || "not set") + "."
     );
     releaseJobPerformanceFrame(jobPerformanceLoadToken);
