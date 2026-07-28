@@ -23,7 +23,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-28.4",
+    version: "2026-07-28.5",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     editorDialogId: "wise-proposal-commercial-dialog",
@@ -1688,10 +1688,10 @@
         finishHeadingMarkupBatch($dialog, heading, batch, batch.updates.length, "");
         return;
       }
-      var delay = Math.max(0, getHireHopNumberValue("timings", "writeThrottleMs", 1150));
-      setTimeout(function () {
-        saveNextHeadingMarkupUpdate($dialog, heading, batch, index + 1);
-      }, delay);
+      // HireHop's existing-line save contract accepts one item identity per
+      // request. Continue as soon as the server acknowledges this line rather
+      // than imposing the shared 1.15-second write gap between batch items.
+      saveNextHeadingMarkupUpdate($dialog, heading, batch, index + 1);
     }).fail(function (xhr, status, errorThrown) {
       var message = readLineCommercialSaveError(xhr && xhr.responseText) || errorThrown || status || "The item could not be saved.";
       finishHeadingMarkupBatch($dialog, heading, batch, index, String(message));

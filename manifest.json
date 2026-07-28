@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-28.4",
+  "version": "2026-07-28.5",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "5.5",
+      "cacheVersion": "5.6",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -120,8 +120,8 @@
     {
       "file": "15-supplyingcommercial.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "2.8",
-      "role": "Proposal Creation depot only: displays line-level Revenue and Markup for every non-heading supplying item, plus inventory-master RSP controls for master-backed rows. A compact pen icon beside each item line's Revenue opens a standalone Markup/Revenue editor, while a percentage action on a structural heading applies one Markup to every immediate item child and recalculates each child's Revenue from its own displayed CoS; nested headings and their descendants are deliberately excluded. Both editors are independent of HireHop's reused native item popup and do not add a separate table column. Saving posts only the native tree-derived line identity and item kind, current job routing ID and merged custom-field bag, so Qty, dates, price, memo, parent and other native item values are not resubmitted. After a successful native item-popup save, an existing Revenue remains fixed while Markup is recalculated from the newly rendered CoS and persisted through the same minimal custom-field-only update. Namespaced line custom fields take precedence over generic row properties, and text Markup values support negative whole numbers such as -100. Job Performance reads the same row Revenue and native CoS values displayed in the list for absolute consistency, excluding only structural heading/root rows to prevent subtotal double-counting. RSP selection and inherited defaults depend on an actual inventory/list master rather than a commercial item-type allowlist. A display-only switch alternates the independent Job Performance and RSP Calculator summaries without changing either module's data or selection state. Native commercial data is preserved.",
+      "cacheVersion": "2.9",
+      "role": "Proposal Creation depot only: displays line-level Revenue and Markup for every non-heading supplying item, plus inventory-master RSP controls for master-backed rows. A compact pen icon beside each item line's Revenue opens a standalone Markup/Revenue editor, while a percentage action on a structural heading applies one Markup to every immediate item child and recalculates each child's Revenue from its own displayed CoS; nested headings and their descendants are deliberately excluded. Heading batches continue immediately after each server acknowledgement, without the shared per-write delay. Both editors are independent of HireHop's reused native item popup and do not add a separate table column. Saving posts only the native tree-derived line identity and item kind, current job routing ID and merged custom-field bag, so Qty, dates, price, memo, parent and other native item values are not resubmitted. After a successful native item-popup save, an existing Revenue remains fixed while Markup is recalculated from the newly rendered CoS and persisted through the same minimal custom-field-only update. Namespaced line custom fields take precedence over generic row properties, and text Markup values support negative whole numbers such as -100. Job Performance reads the same row Revenue and native CoS values displayed in the list for absolute consistency, excluding only structural heading/root rows to prevent subtotal double-counting. RSP selection and inherited defaults depend on an actual inventory/list master rather than a commercial item-type allowlist. A display-only switch alternates the independent Job Performance and RSP Calculator summaries without changing either module's data or selection state. Native commercial data is preserved.",
       "recommendedLoadOrder": 15
     },
     {

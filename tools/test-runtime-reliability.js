@@ -547,6 +547,12 @@ function testSourceGuards() {
   assert(headingBatch.includes("setCustomField(customFields, CFG.revenueField, revenue)"), "heading batches should persist Revenue");
   assert(headingBatch.includes("setCustomField(customFields, CFG.markupField, normalisedMarkup)"), "heading batches should persist Markup");
   assert(!/\b(?:qty|unit_price|price|memo|parent)\s*:/.test(headingBatch), "heading Markup batches must not resubmit unrelated native item values");
+  const headingSaver = commercial.slice(
+    commercial.indexOf("  function saveNextHeadingMarkupUpdate"),
+    commercial.indexOf("  function finishHeadingMarkupBatch")
+  );
+  assert(!headingSaver.includes("writeThrottleMs"), "heading Markup batches should not impose the shared per-line write delay");
+  assert(headingSaver.includes("saveNextHeadingMarkupUpdate($dialog, heading, batch, index + 1)"), "the next heading child should save immediately after acknowledgement");
   assert(preview.includes("wise:supplying-commercial-line-saved.wiseJobPerformance"), "a successful Revenue/Markup save should explicitly refresh Job Performance");
   assert(commercial.includes("function buildLineCommercialSavePayload"), "the dedicated editor should build a minimal partial-update payload");
   const partialSave = commercial.slice(commercial.indexOf("  function buildLineCommercialSavePayload"), commercial.indexOf("  function getSupplyingLineDataId"));
