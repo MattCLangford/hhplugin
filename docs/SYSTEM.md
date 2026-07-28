@@ -24,6 +24,8 @@ It also owns multi-source Proposal Creation depot resolution, docked/undocked su
 
 Job Performance and the RSP Calculator remain independent modules. A segmented commercial-view switch changes only their visibility at the top of the supplying list; it does not move ownership, clear RSP selections, recalculate Job Performance, or remove either module. Job Performance is the default whenever a supplying page is opened; users explicitly switch to the RSP Calculator when needed.
 
+Revenue and Markup are stored in each supplying line's HireHop custom-field bag, even for native item types whose editor does not expose those fields. The standalone Revenue editor owns direct commercial changes. When a user instead saves HireHop's native item popup, `15-supplyingcommercial.js` leaves the saved Revenue fixed, waits for the line's updated CoS, recalculates Markup from that new cost, and writes only the merged commercial custom fields. For example, £500 Revenue against a CoS changed from £100 to £250 becomes 100% Markup while Revenue remains £500. The follow-up write is tagged and excluded from native-save detection to prevent a save loop.
+
 `2-apselall.js` is a small helper for a repetitive native popup action across all depots. It should remain independent and boring in the best possible way.
 
 `3-meta.js` owns the shared `WisePageMeta` envelope and editor/template identifiers. Load it before the main editor so metadata names stay explicit and easy to audit.

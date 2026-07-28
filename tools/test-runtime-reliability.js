@@ -168,6 +168,8 @@ function testCommercialTextMarkup() {
   const moneyEnd = integerStart;
   const revenueStart = commercial.indexOf("  function calculateRevenue");
   const revenueEnd = commercial.indexOf("  function calculateMarkup", revenueStart);
+  const markupStart = revenueEnd;
+  const markupEnd = commercial.indexOf("  function setCalculationStatus", markupStart);
   const rspTotalStart = commercial.indexOf("  function calculateRspLineTotal");
   const lineTypesStart = commercial.indexOf("  function isSupplyingItemLine");
   const lineTypesEnd = commercial.indexOf("  /* --------------------- Dedicated commercial editor", lineTypesStart);
@@ -192,7 +194,7 @@ function testCommercialTextMarkup() {
   const jobMoneyEnd = preview.indexOf("  function formatJobPerformanceMoney", jobMoneyStart);
   const normaliseTextStart = commercial.indexOf("  function normaliseText");
   const normaliseTextEnd = commercial.indexOf("  function escapeAttr", normaliseTextStart);
-  assert([readerStart, readerEnd, nameStart, nameEnd, moneyStart, moneyEnd, integerStart, integerEnd, revenueStart, revenueEnd, rspTotalStart, rspTotalEnd, lineTypesStart, lineTypesEnd, firstDefinedStart, firstDefinedEnd, nodeSourcesStart, nodeSourcesEnd, titleStart, titleEnd, partialSaveStart, partialSaveEnd, lineIdStart, lineIdEnd, inventoryIdStart, inventoryIdEnd, jobLineTypeStart, jobLineTypeEnd, jobTotalsStart, jobTotalsEnd, jobMoneyStart, jobMoneyEnd, normaliseTextStart, normaliseTextEnd].every(index => index >= 0), "commercial test helpers should be discoverable");
+  assert([readerStart, readerEnd, nameStart, nameEnd, moneyStart, moneyEnd, integerStart, integerEnd, revenueStart, revenueEnd, markupStart, markupEnd, rspTotalStart, rspTotalEnd, lineTypesStart, lineTypesEnd, firstDefinedStart, firstDefinedEnd, nodeSourcesStart, nodeSourcesEnd, titleStart, titleEnd, partialSaveStart, partialSaveEnd, lineIdStart, lineIdEnd, inventoryIdStart, inventoryIdEnd, jobLineTypeStart, jobLineTypeEnd, jobTotalsStart, jobTotalsEnd, jobMoneyStart, jobMoneyEnd, normaliseTextStart, normaliseTextEnd].every(index => index >= 0), "commercial test helpers should be discoverable");
 
   const context = vm.createContext({
     result: null,
@@ -216,6 +218,7 @@ function testCommercialTextMarkup() {
       commercial.slice(moneyStart, moneyEnd) +
       commercial.slice(integerStart, integerEnd) +
       commercial.slice(revenueStart, revenueEnd) +
+      commercial.slice(markupStart, markupEnd) +
       commercial.slice(firstDefinedStart, firstDefinedEnd) +
       commercial.slice(nodeSourcesStart, nodeSourcesEnd) +
       commercial.slice(rspTotalStart, rspTotalEnd) +
@@ -246,12 +249,16 @@ function testCommercialTextMarkup() {
         'ascii: normaliseIntegerInput("-100"),' +
         'unicode: normaliseIntegerInput("−100"),' +
         'revenue: calculateRevenue(84, "-100"),' +
+        'reconciledMarkup: calculateRevenuePreservingMarkup("250.00", "500.00"),' +
+        'zeroCosMarkup: calculateRevenuePreservingMarkup("0.00", "500.00"),' +
         'rspLineTotal: calculateRspLineTotal("100.00", 2),' +
         'selectionKey: getRspSelectionKey({ id: "temporary-node", data: { ID: 42 } }),' +
         'retainedMissing: retainMissingRspSelection("line:missing"),' +
         'stillSelected: !!state.rspSelected["line:missing"],' +
         'hireTitle: looksLikeItemEditorTitle("Edit Hire Item"),' +
         'salesTitle: looksLikeItemEditorTitle("Edit - Sales Item"),' +
+        'customTitle: looksLikeItemEditorTitle("Edit Custom Item"),' +
+        'labourTitle: looksLikeItemEditorTitle("Edit Labour"),' +
         'genericTitle: looksLikeItemEditorTitle("Edit Item"),' +
         'jobTitle: looksLikeItemEditorTitle("Edit Job")' +
         ',partialPayload: buildLineCommercialSavePayload({ id: "b42", data: { ID: 999, JOB_ID: 77, QTY: 9, TOTAL: 250 } }, { customFields: { Revenue: "400", Markup: "60" } })' +
@@ -273,12 +280,16 @@ function testCommercialTextMarkup() {
   assert.strictEqual(context.result.ascii, "-100", "text markup should preserve an ASCII negative value");
   assert.strictEqual(context.result.unicode, "-100", "text markup should normalise a Unicode minus value");
   assert.strictEqual(context.result.revenue, 0, "-100 markup should calculate zero revenue");
+  assert.strictEqual(context.result.reconciledMarkup, "100", "a native CoS change must retain Revenue and recalculate whole-number Markup");
+  assert.strictEqual(context.result.zeroCosMarkup, "", "a zero-CoS Revenue line should retain Revenue with Markup not applicable");
   assert.strictEqual(context.result.rspLineTotal, 200, "two units at £100 RSP should display and total as a £200 line");
   assert.strictEqual(context.result.selectionKey, "line:42", "RSP selection should use the stable supplying-line ID instead of a transient node ID");
   assert.strictEqual(context.result.retainedMissing, true, "a row missing during redraw should enter the retention window");
   assert.strictEqual(context.result.stillSelected, true, "the first missing-row refresh must not erase an RSP selection");
   assert.strictEqual(context.result.hireTitle, true, "the native hire-item title should be detected");
   assert.strictEqual(context.result.salesTitle, true, "punctuated sales-item titles should be detected");
+  assert.strictEqual(context.result.customTitle, true, "custom-item titles should be detected for post-save reconciliation");
+  assert.strictEqual(context.result.labourTitle, true, "labour titles should be detected for post-save reconciliation");
   assert.strictEqual(context.result.genericTitle, true, "a reused generic Edit Item title should be detected");
   assert.strictEqual(context.result.jobTitle, false, "non-item editors should not match the commercial popup title detector");
   assert.deepStrictEqual(Object.keys(context.result.partialPayload).sort(), ["custom_fields", "id", "job", "kind"], "standalone commercial saves should contain only routing identity and custom fields");
@@ -464,9 +475,20 @@ function testSourceGuards() {
   assert(commercial.includes("refreshAfterAt: Date.now() + CFG.inventoryCacheTtlMs"), "successful inventory defaults should eventually refresh in a long-lived page");
   const commercialBoot = commercial.slice(commercial.indexOf("  function boot"), commercial.indexOf("  function bindEvents"));
   assert(commercialBoot.includes("installLineCommercialEditorCapture"), "the line-level Revenue icon should own commercial editing");
+  assert(commercialBoot.includes("installNativeCommercialReconciliation"), "successful native item saves should reconcile Markup against the updated CoS");
   assert(!commercialBoot.includes("installDialogObserver"), "commercial editing must not depend on observing HireHop's native item popup");
-  assert(!commercialBoot.includes("installNativeSaveCapture"), "commercial editing must not depend on HireHop's native Save button");
+  assert(!commercialBoot.includes("installNativeSaveCapture"), "the retired native-popup field injection must remain disabled");
   assert(!commercialBoot.includes("installAjaxSaveBridge"), "commercial editing must use its own partial custom-field save");
+  assert(commercial.includes("function calculateRevenuePreservingMarkup"), "native CoS reconciliation should have an explicit Revenue-preserving calculation");
+  assert(commercial.includes("wiseCommercialReconcile: true"), "the follow-up Markup write should be tagged so it cannot be mistaken for another native save");
+  assert(commercial.includes("settings.wiseCommercialStandalone || settings.wiseCommercialReconcile"), "commercial-only saves must not recursively trigger native reconciliation");
+  const nativeReconcile = commercial.slice(
+    commercial.indexOf("  function persistRevenuePreservingMarkup"),
+    commercial.indexOf("  function notifyNativeCommercialReconciliationFailure")
+  );
+  assert(nativeReconcile.includes("setCustomField(customFields, CFG.revenueField, pending.revenue)"), "native reconciliation must retain the line's existing Revenue");
+  assert(nativeReconcile.includes("setCustomField(customFields, CFG.markupField, markup)"), "native reconciliation must persist the Markup calculated from the new CoS");
+  assert(!/\b(?:qty|unit_price|price|memo|parent)\s*:/.test(nativeReconcile), "post-native-save reconciliation must not resubmit unrelated native item fields");
   assert(commercial.includes("function removeLegacyProposalEditColumns"), "the retired Proposal edit column should be removed");
   assert(commercial.includes("function renderProposalEditButtons"), "supported commercial Revenue cells should receive compact edit controls");
   assert(commercial.includes("wise-revenue-edit-host"), "the edit control should share the projected Revenue value host");

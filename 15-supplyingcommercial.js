@@ -8,6 +8,7 @@
  * - Uses HireHop's native line Total as CoS, then shows Markup and Revenue.
  * - Calculates either Revenue from Markup or whole-number Markup from Revenue.
  * - Supports every real supplying item line; headings/subtotals remain excluded.
+ * - After native item saves, preserves Revenue and recalculates Markup from CoS.
  * - Uses master Revenue/Markup defaults whenever a line has an inventory/list ID.
  * - Shows inventory-master RSP per component and totals checked component rows.
  * - Keeps legacy Unit Price/Discount/Flag/Total values intact in HireHop.
@@ -22,7 +23,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-28.2",
+    version: "2026-07-28.3",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     editorDialogId: "wise-proposal-commercial-dialog",
@@ -49,7 +50,8 @@
     rspSelectionRetentionMs: 15 * 1000,
     recoveryIntervalMs: 1200,
     recoveryChecks: 18,
-    pendingSaveLifetimeMs: 10000
+    pendingSaveLifetimeMs: 10000,
+    nativeReconcileRetryMs: [0, 100, 250, 500, 900, 1500]
   };
 
   var USER_DEPOT_KEYS = [
@@ -76,6 +78,8 @@
     cosWatchTimer: null,
     cosWatchDialog: null,
     pendingSave: null,
+    nativeReconcile: null,
+    nativeReconcileToken: 0,
     activeDialog: null,
     activeItemKey: "",
     lastSelectedNodeId: "",
@@ -99,6 +103,7 @@
   function boot() {
     installStyles();
     installLineCommercialEditorCapture();
+    installNativeCommercialReconciliation();
     bindEvents();
     scheduleRefresh(0);
 
@@ -1442,6 +1447,7 @@
     if ($dialog.attr("data-wise-commercial-saving") === "1") return;
     var values = readLineCommercialEditorValues($dialog, node);
     if (!values) return;
+    cancelNativeCommercialReconciliation();
     var lineId = getSupplyingLineDataId(node);
     var lineKind = getSupplyingLineKind(node);
     var jobId = getSupplyingJobId(node);
@@ -1465,6 +1471,7 @@
       url: CFG.itemsSaveEndpoint,
       type: "POST",
       dataType: "text",
+      wiseCommercialStandalone: true,
       data: buildLineCommercialSavePayload(node, values)
     }).done(function (responseText) {
       var error = readLineCommercialSaveError(responseText);
@@ -1801,8 +1808,8 @@
 
   function looksLikeItemEditorTitle(text) {
     text = normaliseText(text);
-    return /\b(?:edit|new)\b[\s\S]{0,80}\bitem\b/.test(text) &&
-      (/\b(?:hire|sale|sales|service|stock|supplying)\b/.test(text) || /^edit\s+item\b/.test(text));
+    return /\b(?:edit|new)\b[\s\S]{0,80}\b(?:item|labou?r|crew)\b/.test(text) &&
+      (/\b(?:hire|sale|sales|service|stock|supplying|custom|labou?r|crew|consumable)\b/.test(text) || /^edit\s+item\b/.test(text));
   }
 
   function findDialogAncestor($start) {
@@ -2193,6 +2200,14 @@
     return Math.round(((Number(revenue) / Number(cos)) - 1) * 100);
   }
 
+  function calculateRevenuePreservingMarkup(cos, revenue) {
+    var normalisedCos = normaliseMoneyInput(cos);
+    var normalisedRevenue = normaliseMoneyInput(revenue);
+    if (normalisedCos == null || normalisedCos === "" || normalisedRevenue == null || normalisedRevenue === "") return null;
+    var markup = calculateMarkup(normalisedCos, normalisedRevenue);
+    return markup == null ? "" : String(markup);
+  }
+
   function setCalculationStatus($panel, message, isError) {
     var $status = $panel.find("[data-wise-commercial-calculation]");
     if ($status.text() !== message) $status.text(message);
@@ -2241,7 +2256,235 @@
     return best ? $(best) : $();
   }
 
-  /* ------------------------------ Save bridge --------------------------- */
+  /* -------------------- Native-save commercial reconcile ---------------- */
+
+  function installNativeCommercialReconciliation() {
+    document.addEventListener("pointerdown", function (event) {
+      if (!isProposalCreationDepot()) return;
+      rememberSupplyingNodeFromTarget(event.target);
+    }, true);
+
+    document.addEventListener("click", function (event) {
+      if (!isProposalCreationDepot()) return;
+      var target = closestActionElement(event.target);
+      if (!target) return;
+      var $dialog = $(target).closest(".ui-dialog,[role='dialog']");
+      if (!isNativeItemDialogForReconciliation($dialog)) return;
+      var action = normaliseText(buttonText(target));
+      if (action === "cancel" || action === "close") {
+        cancelNativeCommercialReconciliation();
+        return;
+      }
+      if (action === "save") prepareNativeCommercialReconciliation($dialog);
+    }, true);
+
+    document.addEventListener("submit", function (event) {
+      if (!isProposalCreationDepot()) return;
+      var $dialog = $(event.target).closest(".ui-dialog,[role='dialog']");
+      if (isNativeItemDialogForReconciliation($dialog)) prepareNativeCommercialReconciliation($dialog);
+    }, true);
+
+    $(document)
+      .on("ajaxSend.wiseSupplyingCommercialNativeReconcile", function (event, xhr, settings) {
+        var pending = state.nativeReconcile;
+        if (!pending || nativeReconciliationExpired(pending) || !isItemsSaveUrl(settings && settings.url)) return;
+        if (settings && (settings.wiseCommercialStandalone || settings.wiseCommercialReconcile)) return;
+        if (pending.dataId && !requestMatchesItem(settings && settings.data, pending.dataId)) return;
+        pending.requestAttached = true;
+        pending.xhr = xhr;
+      })
+      .on("ajaxSuccess.wiseSupplyingCommercialNativeReconcile", function (event, xhr, settings) {
+        var pending = state.nativeReconcile;
+        if (!nativeReconciliationMatchesRequest(pending, xhr, settings)) return;
+        state.nativeReconcile = null;
+        if (ajaxResponseHasError(xhr)) {
+          scheduleRefresh(CFG.refreshDelayMs);
+          return;
+        }
+        queueNativeCommercialReconciliation(pending, 0);
+      })
+      .on("ajaxError.wiseSupplyingCommercialNativeReconcile", function (event, xhr, settings) {
+        var pending = state.nativeReconcile;
+        if (!nativeReconciliationMatchesRequest(pending, xhr, settings)) return;
+        state.nativeReconcile = null;
+        scheduleRefresh(CFG.refreshDelayMs);
+      });
+  }
+
+  function isNativeItemDialogForReconciliation($dialog) {
+    if (!$dialog || !$dialog.length) return false;
+    if ($dialog.is("#" + CFG.editorDialogId) || $dialog.find("#" + CFG.editorDialogId).length) return false;
+    return looksLikeItemDialogShell($dialog);
+  }
+
+  function prepareNativeCommercialReconciliation($dialog) {
+    var token = ++state.nativeReconcileToken;
+    state.nativeReconcile = null;
+    var node = resolveDialogNode($dialog);
+    if (!node || !isSupplyingItemLine(node)) return;
+
+    var commercial = readCommercialFields(node);
+    var revenue = normaliseMoneyInput(commercial.revenue);
+    if (revenue == null || revenue === "") return;
+
+    var dataId = getSupplyingLineDataId(node);
+    var kind = getSupplyingLineKind(node);
+    var jobId = getSupplyingJobId(node);
+    if (!dataId || !kind || !jobId) return;
+
+    state.nativeReconcile = {
+      token: token,
+      nodeId: String(node.id || ""),
+      dataId: dataId,
+      kind: kind,
+      jobId: jobId,
+      revenue: revenue,
+      previousCos: normaliseMoneyInput(readLineCos($(), node)),
+      dialogCos: normaliseMoneyInput(readLineCos($dialog, null)),
+      requestAttached: false,
+      preparedAt: Date.now()
+    };
+    var prepared = state.nativeReconcile;
+    setTimeout(function () {
+      if (state.nativeReconcile === prepared && nativeReconciliationExpired(prepared)) state.nativeReconcile = null;
+    }, CFG.pendingSaveLifetimeMs + 50);
+  }
+
+  function cancelNativeCommercialReconciliation() {
+    state.nativeReconcileToken += 1;
+    state.nativeReconcile = null;
+  }
+
+  function nativeReconciliationExpired(pending) {
+    return !pending || !pending.preparedAt || (Date.now() - pending.preparedAt) > CFG.pendingSaveLifetimeMs;
+  }
+
+  function nativeReconciliationMatchesRequest(pending, xhr, settings) {
+    if (!pending || !pending.requestAttached || pending.xhr !== xhr) return false;
+    if (!isItemsSaveUrl(settings && settings.url)) return false;
+    return !pending.dataId || requestMatchesItem(settings && settings.data, pending.dataId);
+  }
+
+  function queueNativeCommercialReconciliation(pending, attempt) {
+    if (!pending || pending.token !== state.nativeReconcileToken) return;
+    var delays = CFG.nativeReconcileRetryMs;
+    var delay = delays[Math.min(attempt, delays.length - 1)] || 0;
+    setTimeout(function () {
+      reconcileCommercialAfterNativeSave(pending, attempt);
+    }, delay);
+  }
+
+  function reconcileCommercialAfterNativeSave(pending, attempt) {
+    if (!pending || pending.token !== state.nativeReconcileToken) return;
+    var node = findNativeReconciliationNode(pending);
+    var renderedCos = node ? normaliseMoneyInput(readLineCos($(), node)) : null;
+    var finalAttempt = attempt >= CFG.nativeReconcileRetryMs.length - 1;
+    var cosReady = renderedCos != null && renderedCos !== "" && (
+      sameMoneyValue(renderedCos, pending.dialogCos) ||
+      !sameMoneyValue(renderedCos, pending.previousCos) ||
+      finalAttempt
+    );
+
+    if (!node || !cosReady) {
+      if (!finalAttempt) {
+        queueNativeCommercialReconciliation(pending, attempt + 1);
+        return;
+      }
+      notifyNativeCommercialReconciliationFailure("HireHop saved the item, but the updated CoS could not be read. Refresh the list, then edit the line Revenue once to recalculate Markup.");
+      return;
+    }
+
+    var newCos = renderedCos;
+    if (finalAttempt && pending.dialogCos != null && pending.dialogCos !== "" &&
+        sameMoneyValue(renderedCos, pending.previousCos) && !sameMoneyValue(pending.dialogCos, pending.previousCos)) {
+      newCos = pending.dialogCos;
+    }
+    persistRevenuePreservingMarkup(pending, node, newCos);
+  }
+
+  function findNativeReconciliationNode(pending) {
+    var tree = getTree();
+    if (!tree) return null;
+    var node = null;
+    if (pending.nodeId) {
+      try { node = tree.get_node(pending.nodeId); } catch (err) {}
+    }
+    if (!node && pending.dataId) node = findNodeByDataId(tree, pending.dataId);
+    return node && isSupplyingItemLine(node) ? node : null;
+  }
+
+  function sameMoneyValue(left, right) {
+    var a = normaliseMoneyInput(left);
+    var b = normaliseMoneyInput(right);
+    if (a == null || a === "" || b == null || b === "") return false;
+    return Math.abs(Number(a) - Number(b)) < 0.005;
+  }
+
+  function persistRevenuePreservingMarkup(pending, node, cos) {
+    if (!pending || pending.token !== state.nativeReconcileToken) return;
+    var markup = calculateRevenuePreservingMarkup(cos, pending.revenue);
+    if (markup == null) {
+      notifyNativeCommercialReconciliationFailure("HireHop saved the item, but Markup could not be recalculated from its updated CoS.");
+      return;
+    }
+
+    var currentMarkup = normaliseIntegerInput(readCommercialFields(node).markup);
+    if (currentMarkup === markup) {
+      scheduleRefresh(0);
+      $(document).trigger("wise:supplying-commercial-line-saved", [pending.nodeId, {
+        revenue: pending.revenue,
+        markup: markup,
+        source: "native-item-save"
+      }]);
+      return;
+    }
+
+    var customFields = collectNodeCustomFields(node);
+    setCustomField(customFields, CFG.revenueField, pending.revenue);
+    setCustomField(customFields, CFG.markupField, markup);
+    $.ajax({
+      url: CFG.itemsSaveEndpoint,
+      type: "POST",
+      dataType: "text",
+      wiseCommercialReconcile: true,
+      data: {
+        id: pending.dataId,
+        job: pending.jobId,
+        kind: pending.kind,
+        custom_fields: customFields
+      }
+    }).done(function (responseText) {
+      if (pending.token !== state.nativeReconcileToken) return;
+      var error = readLineCommercialSaveError(responseText);
+      if (error) {
+        notifyNativeCommercialReconciliationFailure("HireHop saved the item, but its proposal Markup could not be updated. " + error);
+        return;
+      }
+      applyPendingSaveToTree({
+        nodeId: pending.nodeId,
+        dataId: pending.dataId,
+        revenue: pending.revenue,
+        markup: markup
+      });
+      scheduleRefresh(0);
+      setTimeout(function () { scheduleRefresh(0); }, 500);
+      $(document).trigger("wise:supplying-commercial-line-saved", [pending.nodeId, {
+        revenue: pending.revenue,
+        markup: markup,
+        source: "native-item-save"
+      }]);
+    }).fail(function () {
+      if (pending.token !== state.nativeReconcileToken) return;
+      notifyNativeCommercialReconciliationFailure("HireHop saved the item, but its proposal Markup could not be updated. Refresh the list and try again.");
+    });
+  }
+
+  function notifyNativeCommercialReconciliationFailure(message) {
+    if (window.console && typeof window.console.warn === "function") window.console.warn("[Wise commercial]", message);
+    if (window.alert) window.alert(message);
+  }
+
+  /* ------------------------ Retired native save bridge ----------------- */
 
   function installNativeSaveCapture() {
     document.addEventListener("pointerdown", function (event) {
@@ -3189,6 +3432,7 @@
       try { tree.redraw(true); } catch (err) {}
     }
     state.pendingSave = null;
+    cancelNativeCommercialReconciliation();
     $(document.body).removeClass("wise-supplying-commercial-active");
     state.activeDialog = null;
     state.projectedRows = 0;
