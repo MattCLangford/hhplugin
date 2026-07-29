@@ -376,6 +376,17 @@ function testExternalModBridge() {
     const window = {
       document,
       URL,
+      user: {},
+      doc_type: 1,
+      hh_api_version: 1.31,
+      jQuery() {
+        return {
+          length: 0,
+          each() { return this; },
+          remove() { return this; },
+          siblings() { return { length: 0 }; }
+        };
+      },
       WiseProposalSectionBuilderHireHop: {
         depot: {
           isProposalCreation() { return isProposalCreation !== false; }
@@ -392,7 +403,9 @@ function testExternalModBridge() {
       RegExp,
       isFinite,
       setTimeout() { return 1; },
-      clearTimeout() {}
+      clearTimeout() {},
+      setInterval() { return 1; },
+      clearInterval() {}
     });
     vm.runInContext(source.replace(/url:\s*"[^"\r\n]*"/, `url: ${JSON.stringify(url)}`), context);
     return { window, appended };
@@ -414,6 +427,12 @@ function testExternalModBridge() {
   assert.strictEqual(safe.appended.length, 1, "a valid HTTPS mod URL should inject exactly one script");
   assert.strictEqual(safe.appended[0].referrerPolicy, "no-referrer", "the external request should not disclose its HireHop page URL");
   safe.appended[0].onload();
+  safe.window.HHTools.register({
+    id: "stage-designer",
+    label: "Stage Designer",
+    onClick() {}
+  });
+  assert.strictEqual(safe.window.WiseHireHopExternalMod.menuStatus, "waiting-for-frame", "HireHop API 1.31 should pass the local menu adapter's runtime check");
   safe.window.WiseHireHopExternalMod.retry();
   assert.strictEqual(safe.appended.length, 1, "a loaded external mod should not be injected twice");
 }
@@ -477,7 +496,10 @@ function testSourceGuards() {
   assert(externalMod.includes("parsed.username || parsed.password"), "the external mod bridge should reject URL-embedded credentials");
   assert(externalMod.includes("shared.depot.isProposalCreation()"), "the external mod URL should only load in Proposal Creation");
   assert(externalMod.includes("script.integrity = integrity"), "the external mod bridge should support optional Subresource Integrity");
-  assert(externalMod.includes("state.status === \"loading\" || state.status === \"loaded\""), "the external mod bridge should prevent duplicate script loads");
+  assert(externalMod.includes('state.status === "loading"') && externalMod.includes('state.status === "loaded"'), "the external mod bridge should prevent duplicate script loads");
+  assert(externalMod.includes("apiVersion >= 1 && apiVersion < 2"), "the external mod menu adapter should accept HireHop API 1.31 as a 1.x release");
+  assert(externalMod.includes("function removeToolMenus"), "the external mod menu should be removable outside Proposal Creation");
+  assert(externalMod.includes("stage-designer-v0.26.1/tools/stage-designer.js"), "the bridge should load the pinned tool directly instead of the incompatible upstream loader");
 
   const shared = fs.readFileSync(path.join(root, "5-hirehop.js"), "utf8");
   assert(shared.includes('allowedIds: ["14"]'), "Proposal Creation depot ID should be an explicit stable gate");
