@@ -7,7 +7,7 @@
   var CONFIG = {
     // Load the pinned tool directly. The upstream loader currently rejects
     // HireHop API 1.31 because it compares the numeric value with 1.3.
-    url: "https://cdn.jsdelivr.net/gh/AdamYesEvents/HH-YES-Plugins@stage-designer-v0.26.1/tools/stage-designer.js",
+    url: "https://cdn.jsdelivr.net/gh/AdamYesEvents/HH-YES-Plugins@v0.1.56/loader-stage-designer.js",
 
     // Optional: paste a SHA-256/384/512 Subresource Integrity value supplied
     // by the mod owner. Leave blank if the owner does not provide one.
