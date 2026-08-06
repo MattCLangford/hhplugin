@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-07-29.1",
+  "version": "2026-08-06.1",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "5.7",
+      "cacheVersion": "5.8",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -21,7 +21,7 @@
     {
       "file": "5-hirehop.js",
       "status": "lazy-shared-module",
-      "cacheVersion": "1.2",
+      "cacheVersion": "1.3",
       "role": "Shared selectors, multi-source Proposal Creation depot matching, docked-preview-safe toolbar discovery and a priority request queue providing concurrency control, deduplication, caching, hidden-page pausing, rate-limit cooldown and diagnostics.",
       "recommendedLoadOrder": 1
     },
@@ -64,8 +64,8 @@
     {
       "file": "7-captrack.js",
       "status": "lazy-home-page",
-      "cacheVersion": "3.1",
-      "role": "Full-page Wise capacity timeline, with a home-page entry button visible across all depots, using project-level custom fields, date-range filtering, Wise status controls, and sanitized absence overlay support.",
+      "cacheVersion": "3.2",
+      "role": "Full-page Wise capacity timeline, with a home-page entry button visible across all depots, using project-level custom fields, combined or separate Technical and Production grouping, editable DaysPrior/DaysPost allocation buffers, date-range filtering, Wise status controls, and sanitized absence overlay support.",
       "recommendedLoadOrder": 7
     },
     {

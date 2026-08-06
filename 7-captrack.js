@@ -11,7 +11,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-07-21.2",
+    version: "2026-08-06.1",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -54,12 +54,16 @@
     fetchMaxPages: 20,
     searchDebounceMs: 180,
     searchEndpointFallback: "/php_functions/search_list.php",
+    projectSaveEndpointFallback: "/php_functions/project_save.php",
+    defaultDaysPrior: 3,
+    defaultDaysPost: 2,
+    maxBufferDays: 3650,
     absenceFeed: {
       enabled: true,
       cacheTtlMs: 15 * 60 * 1000,
       requestTimeoutMs: 15000,
       localStorageKey: "wise-capacity-tracker-absence-feed-url",
-      personGroupModes: ["project", "designer", "technical", "production"]
+      personGroupModes: ["project", "designer", "technical_production", "technical", "production"]
     },
     debugUseMock: false,
     targetDepotIds: [],
@@ -86,6 +90,8 @@
       designer: "_Designer",
       tpm: "_TPM",
       production: "_Production",
+      daysPrior: ["_DaysPrior", "DaysPrior"],
+      daysPost: ["_DaysPost", "DaysPost"],
       revenue: ["_Revenue", "_revenue"],
       tier: ["_Tier", "_tier"]
     }
@@ -94,6 +100,7 @@
   var GROUP_MODES = {
     project: { field: "pm", source: "roles", label: "Project team", headerLabel: "Project team", unassigned: "Unassigned Project", emptyFilterLabel: "Unassigned only" },
     designer: { field: "designer", source: "roles", label: "Designer", headerLabel: "Designer", unassigned: "Unassigned Designer", emptyFilterLabel: "Unassigned only" },
+    technical_production: { fields: ["tpm", "production"], source: "roles", label: "Technical & Production", headerLabel: "Technical & Production", unassigned: "Unassigned Technical & Production", emptyFilterLabel: "Unassigned in both" },
     technical: { field: "tpm", source: "roles", label: "Technical", headerLabel: "Technical", unassigned: "Unassigned Technical", emptyFilterLabel: "Unassigned only" },
     production: { field: "production", source: "roles", label: "Production", headerLabel: "Production", unassigned: "Unassigned Production", emptyFilterLabel: "Unassigned only" },
     tier: { field: "tier", source: "project", label: "Tier", headerLabel: "Tier", unassigned: "No tier", emptyFilterLabel: "Missing tier only", normalise: getTierGroupLabel },
@@ -154,6 +161,7 @@
   var entryPointTimer = null;
   var stylesInjected = false;
   var draggedRowKey = "";
+  var allocationDrag = null;
 
   window.WiseCapacityTracker = {
     version: CFG.version,
@@ -180,7 +188,9 @@
       groupProjects: groupProjects,
       parseIcsEvents: parseIcsEvents,
       parseAbsenceJsonEvents: parseAbsenceJsonEvents,
-      normalisePersonName: normalisePersonName
+      normalisePersonName: normalisePersonName,
+      parseBufferDays: parseBufferDays,
+      buildProjectBufferSavePayload: buildProjectBufferSavePayload
     }
   };
 
@@ -626,6 +636,7 @@
   }
 
   function closeTracker() {
+    if (allocationDrag) cancelAllocationBufferDrag();
     hidePopover();
     $("#" + CFG.overlayId).removeClass("is-visible").hide();
     $("body").removeClass("wise-capacity-tracker-open");
@@ -1592,6 +1603,8 @@
     var venue = asText(getCustomField(raw, CFG.customFieldKeys.venue));
     var tier = asText(getCustomField(raw, CFG.customFieldKeys.tier));
     var projectName = asText(getCustomField(raw, CFG.customFieldKeys.projectName));
+    var daysPrior = parseBufferDays(getCustomField(raw, CFG.customFieldKeys.daysPrior), CFG.defaultDaysPrior);
+    var daysPost = parseBufferDays(getCustomField(raw, CFG.customFieldKeys.daysPost), CFG.defaultDaysPost);
 
     var project = {
       uid: "wct-project-" + (firstValue(raw, ["NUMBER", "PROJECT_ID", "ID", "id", "project_id"]) || index || Math.random()).toString().replace(/[^a-z0-9_-]+/gi, "-"),
@@ -1617,6 +1630,9 @@
       created: created,
       start: start,
       end: end,
+      daysPrior: daysPrior,
+      daysPost: daysPost,
+      bufferSaving: false,
       revenue: asText(getCustomField(raw, CFG.customFieldKeys.revenue)),
       tier: tier,
       roles: {
@@ -1629,6 +1645,14 @@
 
     project.searchText = buildProjectSearchText(project);
     return project;
+  }
+
+  function parseBufferDays(value, fallback) {
+    var text = customFieldToText(value);
+    var number = Number(text);
+    if (text === "" || !isFinite(number)) number = Number(fallback);
+    if (!isFinite(number)) number = 0;
+    return clamp(Math.round(number), 0, CFG.maxBufferDays);
   }
 
   function getCustomField(raw, key) {
@@ -1979,18 +2003,22 @@
 
     for (var i = 0; i < projects.length; i++) {
       var project = projects[i];
-      var value = getProjectGroupValue(project, mode);
-      var label = value || mode.unassigned;
-      var key = normaliseGroupKey(label);
-      if (!groups[key]) {
-        groups[key] = {
-          key: key,
-          label: label,
-          unassigned: !value,
-          projects: []
-        };
+      var values = getProjectGroupValues(project, mode);
+      if (!values.length) values = [""];
+      for (var v = 0; v < values.length; v++) {
+        var value = values[v];
+        var label = value || mode.unassigned;
+        var key = normaliseGroupKey(label);
+        if (!groups[key]) {
+          groups[key] = {
+            key: key,
+            label: label,
+            unassigned: !value,
+            projects: []
+          };
+        }
+        groups[key].projects.push(project);
       }
-      groups[key].projects.push(project);
     }
 
     var orderedGroups = Object.keys(groups).map(function (key) {
@@ -2039,6 +2067,25 @@
 
     if (typeof mode.normalise === "function") value = mode.normalise(value);
     return cleanRoleValue(value);
+  }
+
+  function getProjectGroupValues(project, mode) {
+    if (!project || !mode) return [];
+    if (!mode.fields || !mode.fields.length) {
+      var single = getProjectGroupValue(project, mode);
+      return single ? [single] : [];
+    }
+
+    var values = [];
+    var keys = {};
+    for (var i = 0; i < mode.fields.length; i++) {
+      var value = cleanRoleValue(project.roles ? project.roles[mode.fields[i]] : "");
+      var key = normaliseGroupKey(value);
+      if (!value || keys[key]) continue;
+      keys[key] = true;
+      values.push(value);
+    }
+    return values;
   }
 
   function compareGroupRows(a, b, groupMode) {
@@ -2261,8 +2308,8 @@
 
     for (var i = 0; i < projects.length; i++) {
       var project = projects[i];
-      var startDate = getProjectStart(project);
-      var endDate = getProjectEnd(project) || startDate;
+      var startDate = isAllocationBufferMode() ? getProjectBufferStart(project) : getProjectStart(project);
+      var endDate = isAllocationBufferMode() ? getProjectBufferEnd(project) : (getProjectEnd(project) || startDate);
       var start = startDate ? startDate.getTime() : 0;
       var end = endDate ? Math.max(endDate.getTime(), start) : start;
       var lane = 0;
@@ -2274,6 +2321,20 @@
 
     group.lanes = lanes;
     group.laneCount = Math.max(1, laneEnds.length);
+  }
+
+  function isAllocationBufferMode() {
+    return state.groupMode === "technical_production" || state.groupMode === "technical" || state.groupMode === "production";
+  }
+
+  function getProjectBufferStart(project) {
+    var start = getProjectStart(project);
+    return start ? addDays(start, -parseBufferDays(project.daysPrior, CFG.defaultDaysPrior)) : null;
+  }
+
+  function getProjectBufferEnd(project) {
+    var end = getProjectEnd(project) || getProjectStart(project);
+    return end ? addDays(end, parseBufferDays(project.daysPost, CFG.defaultDaysPost)) : null;
   }
 
   function buildCapacityModel(projects, timeline) {
@@ -2514,6 +2575,10 @@
       if (rowModel.type !== "group") continue;
       for (var p = 0; p < rowModel.projects.length; p++) {
         var project = rowModel.projects[p];
+        if (isAllocationBufferMode()) {
+          html.push(renderProjectBuffer(rowModel, project, rowModel.lanes[project.uid] || 0, timeline, "prior"));
+          html.push(renderProjectBuffer(rowModel, project, rowModel.lanes[project.uid] || 0, timeline, "post"));
+        }
         html.push(renderProjectBar(rowModel, project, rowModel.lanes[project.uid] || 0, timeline));
       }
     }
@@ -2597,6 +2662,52 @@
         '<span>' + escapeHtml(getCardLabel(project)) + '</span>' +
       '</button>'
     );
+  }
+
+  function renderProjectBuffer(row, project, lane, timeline, side) {
+    var geometry = getProjectBufferGeometry(project, side, timeline);
+    if (!geometry) return "";
+
+    var days = side === "prior" ? project.daysPrior : project.daysPost;
+    var top = row.top + CFG.lanePadding + (lane * (CFG.barHeight + CFG.laneGap));
+    var fieldLabel = side === "prior" ? "DaysPrior" : "DaysPost";
+    var edgeLabel = side === "prior" ? "Drag to change days before" : "Drag to change days after";
+    var hiddenHandle = geometry.edgeVisible ? "" : " style=\"display:none;\"";
+
+    return (
+      '<div class="wct-project-buffer is-' + side + (project.bufferSaving ? " is-saving" : "") + '" data-project-uid="' + escapeAttr(project.uid) + '" data-buffer-side="' + side + '" ' +
+        'style="left:' + geometry.left + 'px;top:' + top + 'px;width:' + geometry.width + 'px;height:' + CFG.barHeight + 'px;" ' +
+        'title="' + escapeAttr(fieldLabel + ": " + days + " day" + (days === 1 ? "" : "s")) + '">' +
+        '<span class="wct-buffer-days" aria-hidden="true">' + escapeHtml(String(days)) + '</span>' +
+        '<button type="button" class="wct-buffer-handle is-' + side + '" data-project-uid="' + escapeAttr(project.uid) + '" data-buffer-side="' + side + '" ' +
+          'aria-label="' + escapeAttr(edgeLabel + " for " + getProjectLabel(project) + ". Current value " + days + " days.") + '" title="' + escapeAttr(edgeLabel) + '"' + hiddenHandle + '></button>' +
+      '</div>'
+    );
+  }
+
+  function getProjectBufferGeometry(project, side, timeline) {
+    var start = getProjectStart(project);
+    var end = getProjectEnd(project) || start;
+    if (!project || !start || !end || !timeline) return null;
+
+    var timelineStart = timeline.start;
+    var timelineEnd = getTimelineClipEnd(timeline);
+    var actualOuter = side === "prior" ? getProjectBufferStart(project) : getProjectBufferEnd(project);
+    var actualInner = side === "prior" ? start : end;
+    var visibleStart = side === "prior" ? actualOuter : actualInner;
+    var visibleEnd = side === "prior" ? actualInner : actualOuter;
+    if (visibleStart.getTime() < timelineStart.getTime()) visibleStart = timelineStart;
+    if (visibleEnd.getTime() > timelineEnd.getTime()) visibleEnd = timelineEnd;
+    if (visibleEnd.getTime() < visibleStart.getTime()) visibleEnd = visibleStart;
+
+    var totalWidth = timeline.days * timeline.pixelsPerDay;
+    var left = clamp(getTimelineX(timeline, visibleStart), 0, totalWidth);
+    var right = clamp(getTimelineX(timeline, visibleEnd), 0, totalWidth);
+    return {
+      left: left,
+      width: Math.max(0, right - left),
+      edgeVisible: actualOuter.getTime() >= timelineStart.getTime() && actualOuter.getTime() <= timelineEnd.getTime()
+    };
   }
 
   function getProjectBarColors(project) {
@@ -2987,6 +3098,8 @@
         detailItem("Onsite start", formatDateTime(project.onsiteStart)),
         detailItem("Onsite end", formatDateTime(project.onsiteEnd)),
         detailItem("Kit end", formatDateTime(project.kitEnd)),
+        detailItem("Days prior", String(project.daysPrior)),
+        detailItem("Days post", String(project.daysPost)),
       '</div>',
       '<div class="wct-role-strip">',
         roleChip("Project", project.roles.pm),
@@ -3059,6 +3172,7 @@
             controlSelect("wise-capacity-tracker-group", "Group by", [
               ["project", "Project team"],
               ["designer", "Designer"],
+              ["technical_production", "Technical & Production"],
               ["technical", "Technical"],
               ["production", "Production"],
               ["tier", "Tier"],
@@ -3209,6 +3323,7 @@
       });
 
     $("#" + CFG.modalId)
+      .on("pointerdown.wiseCapacityTracker", ".wct-buffer-handle", beginAllocationBufferDrag)
       .on("click.wiseCapacityTracker", ".wct-project-bar", function (event) {
         event.preventDefault();
         var project = state.projectMap[$(this).attr("data-project-uid")];
@@ -3224,10 +3339,166 @@
         hidePopover();
       });
 
-    $(document).on("keydown.wiseCapacityTracker", function (event) {
-      if (!$("#" + CFG.overlayId).is(":visible")) return;
-      if (event.key === "Escape") closeTracker();
+    $(document)
+      .on("pointermove.wiseCapacityTracker", continueAllocationBufferDrag)
+      .on("pointerup.wiseCapacityTracker", finishAllocationBufferDrag)
+      .on("pointercancel.wiseCapacityTracker", cancelAllocationBufferDrag)
+      .on("keydown.wiseCapacityTracker", function (event) {
+        if (!$("#" + CFG.overlayId).is(":visible")) return;
+        if (event.key !== "Escape") return;
+        if (allocationDrag) cancelAllocationBufferDrag(event);
+        else closeTracker();
+      });
+  }
+
+  function beginAllocationBufferDrag(event) {
+    var $handle = $(event.currentTarget);
+    var project = state.projectMap[$handle.attr("data-project-uid")];
+    var side = $handle.attr("data-buffer-side");
+    var original = event.originalEvent || event;
+    if (!project || project.bufferSaving || (side !== "prior" && side !== "post")) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    hidePopover();
+    allocationDrag = {
+      project: project,
+      side: side,
+      pointerId: original.pointerId,
+      startX: Number(original.clientX) || 0,
+      startValue: side === "prior" ? project.daysPrior : project.daysPost,
+      currentValue: side === "prior" ? project.daysPrior : project.daysPost
+    };
+    $handle.addClass("is-dragging");
+    $("#" + CFG.modalId).addClass("is-buffer-dragging");
+    if (event.currentTarget.setPointerCapture && original.pointerId != null) {
+      try { event.currentTarget.setPointerCapture(original.pointerId); } catch (e) {}
+    }
+  }
+
+  function continueAllocationBufferDrag(event) {
+    if (!allocationDrag || !state.timeline) return;
+    var original = event.originalEvent || event;
+    if (allocationDrag.pointerId != null && original.pointerId != null && original.pointerId !== allocationDrag.pointerId) return;
+    event.preventDefault();
+
+    var deltaDays = Math.round(((Number(original.clientX) || 0) - allocationDrag.startX) / state.timeline.pixelsPerDay);
+    var nextValue = allocationDrag.side === "prior"
+      ? allocationDrag.startValue - deltaDays
+      : allocationDrag.startValue + deltaDays;
+    nextValue = parseBufferDays(nextValue, allocationDrag.startValue);
+    if (nextValue === allocationDrag.currentValue) return;
+
+    allocationDrag.currentValue = nextValue;
+    setProjectBufferDays(allocationDrag.project, allocationDrag.side, nextValue);
+    updateProjectBufferElement(allocationDrag.project, allocationDrag.side);
+  }
+
+  function finishAllocationBufferDrag(event) {
+    if (!allocationDrag) return;
+    var original = event.originalEvent || event;
+    if (allocationDrag.pointerId != null && original.pointerId != null && original.pointerId !== allocationDrag.pointerId) return;
+
+    var drag = allocationDrag;
+    clearAllocationDragUi();
+    if (drag.currentValue === drag.startValue) return;
+
+    drag.project.bufferSaving = true;
+    render();
+    saveProjectBufferDays(drag.project, drag.side, drag.currentValue).then(function () {
+      drag.project.bufferSaving = false;
+      render();
+    }, function (error) {
+      drag.project.bufferSaving = false;
+      setProjectBufferDays(drag.project, drag.side, drag.startValue);
+      render();
+      setStatus("The allocation buffer could not be saved. " + (error && error.message ? error.message : "Please try again."), "error");
+      logWarn("Failed to save project allocation buffer", error);
     });
+  }
+
+  function cancelAllocationBufferDrag(event) {
+    if (!allocationDrag) return;
+    if (event && event.preventDefault) event.preventDefault();
+    var drag = allocationDrag;
+    setProjectBufferDays(drag.project, drag.side, drag.startValue);
+    clearAllocationDragUi();
+    render();
+  }
+
+  function clearAllocationDragUi() {
+    allocationDrag = null;
+    $("#" + CFG.modalId).removeClass("is-buffer-dragging");
+    $("#" + CFG.timelineBodyId + " .wct-buffer-handle").removeClass("is-dragging");
+  }
+
+  function setProjectBufferDays(project, side, value) {
+    if (!project) return;
+    if (side === "prior") project.daysPrior = parseBufferDays(value, CFG.defaultDaysPrior);
+    else project.daysPost = parseBufferDays(value, CFG.defaultDaysPost);
+  }
+
+  function updateProjectBufferElement(project, side) {
+    if (!project || !state.timeline) return;
+    var geometry = getProjectBufferGeometry(project, side, state.timeline);
+    if (!geometry) return;
+    var days = side === "prior" ? project.daysPrior : project.daysPost;
+    var fieldLabel = side === "prior" ? "DaysPrior" : "DaysPost";
+    var edgeLabel = side === "prior" ? "Drag to change days before" : "Drag to change days after";
+    var $buffer = $("#" + CFG.timelineBodyId + ' .wct-project-buffer[data-project-uid="' + project.uid + '"][data-buffer-side="' + side + '"]');
+    $buffer.css({ left: geometry.left + "px", width: geometry.width + "px" })
+      .attr("title", fieldLabel + ": " + days + " day" + (days === 1 ? "" : "s"));
+    $buffer.find(".wct-buffer-days").text(String(days));
+    $buffer.find(".wct-buffer-handle")
+      .toggle(geometry.edgeVisible || !!(allocationDrag && allocationDrag.project === project && allocationDrag.side === side))
+      .attr("aria-label", edgeLabel + " for " + getProjectLabel(project) + ". Current value " + days + " days.");
+  }
+
+  function saveProjectBufferDays(project, side, value) {
+    if (!project || !project.id) return Promise.reject(new Error("This project has no HireHop Project ID."));
+    if (typeof window.fetch !== "function") return Promise.reject(new Error("The browser fetch API is unavailable."));
+
+    var endpoint = getHireHopEndpoint("projectSave", CFG.projectSaveEndpointFallback);
+    var payload = buildProjectBufferSavePayload(project, side, value);
+    return window.fetch(endpoint, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        Accept: "application/json, text/javascript, */*; q=0.01",
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        "X-Requested-With": "XMLHttpRequest"
+      },
+      body: $.param(payload)
+    }).then(function (response) {
+      return response.text().then(function (text) {
+        if (!response.ok) throw new Error("HireHop returned HTTP " + response.status + ".");
+        var saveError = readProjectBufferSaveError(text);
+        if (saveError) throw new Error(saveError);
+        return true;
+      });
+    });
+  }
+
+  function buildProjectBufferSavePayload(project, side, value) {
+    var fields = {};
+    fields[side === "prior" ? "DaysPrior" : "DaysPost"] = parseBufferDays(value, side === "prior" ? CFG.defaultDaysPrior : CFG.defaultDaysPost);
+    return {
+      project: project && project.id ? project.id : "",
+      custom_fields: fields
+    };
+  }
+
+  function readProjectBufferSaveError(responseText) {
+    var text = asText(responseText);
+    if (!text) return "";
+    var json = tryParseJson(text);
+    var error = json && typeof json === "object" ? (json.error != null ? json.error : json.ERROR) : "";
+    if (error != null && error !== "" && error !== false && Number(error) !== 0) {
+      return String(error) === "327" ? "HireHop is temporarily rate limiting saves. Wait a minute and try again." : asText(error);
+    }
+    if (json && typeof json === "object" && json.success === false) return asText(json.message) || "HireHop rejected the update.";
+    if (text === "327") return "HireHop is temporarily rate limiting saves. Wait a minute and try again.";
+    return "";
   }
 
   function updateControlsFromState() {
@@ -3315,6 +3586,12 @@
       ".wct-day-gridline{position:absolute;top:0;border-left:1px solid #edf1f5;z-index:1;pointer-events:none;}.wct-day-gridline.is-weekend{background:rgba(238,243,248,.55);}.wct-day-gridline.is-load-low{background:rgba(34,197,94,.045);}.wct-day-gridline.is-load-medium{background:rgba(245,158,11,.07);}.wct-day-gridline.is-load-high{background:rgba(239,68,68,.085);}.wct-day-gridline.is-today{box-shadow:inset 2px 0 0 rgba(217,45,32,.36);}" +
       ".wct-absence-band{position:absolute;z-index:2;background:repeating-linear-gradient(135deg,rgba(71,85,105,.18) 0,rgba(71,85,105,.18) 8px,rgba(71,85,105,.10) 8px,rgba(71,85,105,.10) 16px);border-left:1px solid rgba(71,85,105,.26);border-right:1px solid rgba(71,85,105,.20);pointer-events:auto;}" +
       ".wct-today-line{position:absolute;top:0;width:0;border-left:2px solid #d92d20;z-index:5;pointer-events:none;}.wct-today-line span{position:absolute;top:4px;left:5px;background:#d92d20;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700;}" +
+      ".wct-project-buffer{position:absolute;z-index:3;background:repeating-linear-gradient(135deg,rgba(71,85,105,.34) 0,rgba(71,85,105,.34) 6px,rgba(100,116,139,.24) 6px,rgba(100,116,139,.24) 12px);border-top:1px solid rgba(51,65,85,.42);border-bottom:1px solid rgba(51,65,85,.42);pointer-events:none;overflow:visible;}" +
+      ".wct-project-buffer.is-prior{border-left:1px solid rgba(51,65,85,.5);border-radius:5px 0 0 5px;}.wct-project-buffer.is-post{border-right:1px solid rgba(51,65,85,.5);border-radius:0 5px 5px 0;}" +
+      ".wct-buffer-days{display:block;overflow:hidden;text-align:center;color:#334155;font-size:10px;font-weight:700;line-height:22px;text-shadow:0 1px rgba(255,255,255,.75);white-space:nowrap;}" +
+      ".wct-buffer-handle{position:absolute;top:-3px;z-index:7;width:9px;height:28px;margin:0;padding:0;border:1px solid #475569;border-radius:3px;background:#e2e8f0;box-shadow:0 1px 3px rgba(15,23,42,.24);cursor:ew-resize;pointer-events:auto;touch-action:none;}" +
+      ".wct-buffer-handle.is-prior{left:-5px;}.wct-buffer-handle.is-post{right:-5px;}.wct-buffer-handle:hover,.wct-buffer-handle:focus{background:#cbd5e1;border-color:#1e3a5f;outline:2px solid rgba(37,99,235,.24);}.wct-buffer-handle.is-dragging{background:#94a3b8;border-color:#1e293b;}" +
+      ".wct-project-buffer.is-saving{opacity:.58;}.wct-project-buffer.is-saving .wct-buffer-handle{cursor:progress;}.wct-modal.is-buffer-dragging,.wct-modal.is-buffer-dragging *{user-select:none;}" +
       ".wct-project-bar{position:absolute;z-index:4;border:1px solid rgba(15,23,42,.22);border-radius:5px;box-shadow:0 1px 2px rgba(15,23,42,.14);padding:0 7px;text-align:left;cursor:pointer;overflow:hidden;}" +
       ".wct-project-bar span{position:relative;z-index:2;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;line-height:22px;}" +
       ".wct-project-bar:hover{filter:brightness(1.03);box-shadow:0 2px 7px rgba(15,23,42,.22);}" +
@@ -3514,7 +3791,7 @@
   }
 
   function isProjectUnassignedForCurrentMode(project) {
-    return !getProjectGroupValue(project, getGroupMode(state.groupMode));
+    return getProjectGroupValues(project, getGroupMode(state.groupMode)).length === 0;
   }
 
   function isProjectStatusVisible(project) {
@@ -3926,6 +4203,8 @@
       CFG.customFieldKeys.designer,
       CFG.customFieldKeys.tpm,
       CFG.customFieldKeys.production,
+      CFG.customFieldKeys.daysPrior,
+      CFG.customFieldKeys.daysPost,
       CFG.customFieldKeys.revenue,
       CFG.customFieldKeys.tier
     ]));

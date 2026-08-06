@@ -621,6 +621,23 @@ function testSourceGuards() {
   const checklist = fs.readFileSync(path.join(root, "9-jobchecklist.js"), "utf8");
   assert(checklist.includes("checklistEnabled: false"), "the prototype Checklist tab should remain disabled");
 
+  const captrack = fs.readFileSync(path.join(root, "7-captrack.js"), "utf8");
+  assert(captrack.includes('daysPrior: ["_DaysPrior", "DaysPrior"]'), "Capacity Tracker should request the project DaysPrior custom field");
+  assert(captrack.includes('daysPost: ["_DaysPost", "DaysPost"]'), "Capacity Tracker should request the project DaysPost custom field");
+  assert(captrack.includes('["technical_production", "Technical & Production"]'), "Capacity Tracker should offer a combined Technical & Production grouping");
+  assert(captrack.includes("function getProjectGroupValues"), "combined manager grouping should support one project on both manager rows");
+  assert(captrack.includes("function renderProjectBuffer"), "manager rows should render pre/post allocation buffers");
+  assert(captrack.includes('on("pointerdown.wiseCapacityTracker", ".wct-buffer-handle"'), "allocation buffer edges should be draggable");
+  assert(captrack.includes('getHireHopEndpoint("projectSave", CFG.projectSaveEndpointFallback)'), "allocation changes should use the shared HireHop project-save endpoint");
+  const bufferPayload = captrack.slice(
+    captrack.indexOf("  function buildProjectBufferSavePayload"),
+    captrack.indexOf("  function readProjectBufferSaveError")
+  );
+  assert(bufferPayload.includes('"DaysPrior" : "DaysPost"'), "buffer saves should target DaysPrior or DaysPost");
+  assert(!/\b(?:start|end|name|client|venue|status)\s*:/.test(bufferPayload), "buffer saves must not resubmit unrelated project fields");
+
+  assert(shared.includes('projectSave: "/php_functions/project_save.php"'), "the shared HireHop contract should expose project partial saves");
+
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
   for (const entry of manifest.lazyScripts) {
     const escaped = entry.file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
