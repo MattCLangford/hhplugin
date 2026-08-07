@@ -58,6 +58,7 @@
       @page { size: 318mm 178.9mm; margin: 0; }
       html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       .measure-host{ display:none !important; }
+      #hirehop-v4-config-warning{ display:none !important; }
     }
 
     /* ============================================================
@@ -604,6 +605,21 @@
       font-weight: 700 !important;
       border-top: 0 !important;
     }
+    .item_grid .subheading-text{
+      font-weight: 700 !important;
+    }
+    .item_grid .subheading-blurb,
+    .layout-proposed-timings-columns .timing-day-blurb{
+      margin-top: 1.2mm;
+      color: rgba(13,18,38,0.72);
+      font-weight: 400 !important;
+      font-size: var(--body-size);
+      line-height: 1.25;
+      white-space: pre-wrap;
+    }
+    .layout-proposed-timings-columns .timing-day-blurb.is-empty{
+      display: none;
+    }
     .item_grid tbody tr.optional-price-row .col-price{
       font-style: italic;
     }
@@ -1026,30 +1042,30 @@
     }
     .layout-exp .exp-blurb.is-empty{ display:none; }
     .layout-exp.layout-experts .exp-chevron{ display:none !important; }
+    .layout-exp.layout-experts .exp-image{
+      top: 12.5%;
+      bottom: 12.5%;
+      width: 37.5%;
+      background: var(--paper-white) !important;
+    }
+    .layout-exp.layout-experts.img-right .exp-image{
+      right: 6.25%;
+      left: auto;
+    }
+    .layout-exp.layout-experts.img-left .exp-image{
+      left: 6.25%;
+      right: auto;
+    }
     .layout-exp.layout-experts .exp-image img{
-      object-fit: contain;
+      object-fit: cover;
       background: var(--paper-white);
-      transform: scale(0.8);
-      transform-origin: center;
+      transform: none;
     }
     .layout-exp.layout-experts .exp-title{ color: var(--nightfall) !important; }
     .layout-exp .exp-reminder{
       display: none;
     }
-    .layout-exp.layout-experts .exp-main{
-      width: 100%;
-      margin-left: 0;
-      text-align: left;
-    }
-    .layout-exp.layout-experts.img-right .exp-main{
-      padding-left: calc(2 * var(--logo-x));
-      padding-right: 180mm;
-    }
-    .layout-exp.layout-experts.img-left .exp-main{
-      padding-left: 180mm;
-      padding-right: calc(2 * var(--logo-x));
-      text-align: left;
-    }
+    .layout-exp.layout-experts .exp-main{ text-align: left; }
     .layout-exp.layout-experts .exp-reminder{
       display: block;
       font-family: var(--font-heading) !important;
@@ -1410,6 +1426,54 @@
     }
     .layout-venuehero .img_logo{
       filter: drop-shadow(0 2px 10px rgba(0,0,0,0.35));
+    }
+    .layout-venuehero .venue-chevron{
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      width: 69.3mm;
+      height: auto;
+      max-width: none;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    /* ============================================================
+       PROPOSED TIMINGS: IMAGE SPLIT
+       ============================================================ */
+    .layout-proposed-timings-image .proposed-timings-image-title{
+      position: absolute;
+      right: var(--split-edge-pad);
+      bottom: calc(var(--footer-lift) + 14mm);
+      z-index: 3;
+      width: calc(50% - (2 * var(--split-edge-pad)));
+      max-width: calc(50% - (2 * var(--split-edge-pad)));
+      margin: 0;
+      font-family: var(--font-heading) !important;
+      font-weight: 400 !important;
+      font-size: 27.5pt;
+      line-height: 1.0;
+      color: rgba(var(--paper-white-rgb),0.94) !important;
+      text-align: right;
+    }
+    .layout-proposed-timings-image.img-left .proposed-timings-image-title{
+      right: auto;
+      left: var(--split-edge-pad);
+      text-align: left;
+    }
+    .layout-proposed-timings-image .proposed-timings-table-heading{
+      margin: 2mm 0 2mm var(--split-edge-pad);
+      width: calc(50% - (var(--split-inner-pad) + var(--split-edge-pad) + 10mm));
+      max-width: calc(50% - (var(--split-inner-pad) + var(--split-edge-pad) + 10mm));
+      font-family: var(--font-heading) !important;
+      font-weight: 400 !important;
+      font-size: 16pt;
+      line-height: 1.05;
+      color: var(--heritage) !important;
+      letter-spacing: 0.03em;
+    }
+    .layout-proposed-timings-image.img-left .proposed-timings-table-heading{
+      margin-left: calc(50% + var(--split-inner-pad) + 10mm);
     }
 
     /* ============================================================
@@ -1817,6 +1881,7 @@
     assets: Object.freeze({
       expOverlayLeftUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQDHy_X8dr81SIeGG0NAVqhaAd5_A_wSPodxL4CQbjYSHxM",
       expOverlayRightUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQA2VdnZp9bVTqV3FarEEW__AXeiGB--kNc-KfFQWUS_zoo",
+      venueChevronUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQA2VdnZp9bVTqV3FarEEW__AXeiGB--kNc-KfFQWUS_zoo",
       logoLightUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQCCJmVqOV60Q7G-z78uHM_gASWUQXTiKHR_GOI1yWZoV-o",
       logoDarkUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg",
       heroLogoUrl: "https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQDDcE3TTtX6S4p58a35qb5UAWO5pN8Fn_zBQf9Pov1j-Ek"
@@ -1824,7 +1889,7 @@
     selectors: Object.freeze({
       fields: Object.freeze({
         jobNumber: ["[name='project:_Job_Number']"],
-        client: ["[name='job:name']"],
+        client: ["[name='project:_Client']"],
         clientName: ["[name='job:name']"],
         clientPhone: ["[name='job:telephone']"],
         clientEmail: ["[name='job:email']"],
@@ -1869,19 +1934,84 @@
         ],
         additional: ["[name='items:additional']", "[name='additional']"],
         technical: ["[name='items:technical']", "[name='technical']"],
-        meta: [
-          "[name='items:meta']",
-          "[name='items:metadata']",
-          "[name='items:page_meta']",
-          "[name='meta']",
-          "[name='metadata']",
-          "[name='page_meta']"
+        reminder: ["[data-qtc-field='Reminder']"],
+        imageUrl: ["[data-qtc-field='ImageURL']"],
+        pageHeading: ["[data-qtc-field='PageHeading']"],
+        blurb: ["[data-qtc-field='Blurb']"],
+        createPage: ["[data-qtc-field='CreatePage']"],
+        pageTemplate: ["[data-qtc-field='PageTemplate']"],
+        pageVariant: ["[data-qtc-field='PageVariant']"],
+        grouping: ["[data-qtc-field='Grouping']"],
+        include: ["[data-qtc-field='Include']"],
+        includeInProjectTotal: ["[data-qtc-field='Additional']"],
+        cost: ["[name='items:price']", "[name='price']"],
+        revenue: [
+          "[name='items:_Revenue']",
+          "[name='_Revenue']",
+          "[name='items:_revenue']",
+          "[name='_revenue']"
         ],
-        imageUrl: ["[name='items:image_url']", "[name='image_url']"],
-        price: ["[name='items:price']", "[name='price']"],
         qty: ["[name='items:qty']", "[name='qty']"],
         flag: ["[name='items:flag']", "[name='flag']"],
         flagged: ["[name='items:flagged']", "[name='flagged']"]
+      })
+    }),
+    headingFields: Object.freeze({
+      templates: Object.freeze({
+        "1": Object.freeze({ label: "Hero", layoutId: "hero", renderType: "Section" }),
+        "2": Object.freeze({ label: "Cover", layoutId: "section-cover", renderType: "Section" }),
+        "3": Object.freeze({ label: "Costing", layoutId: "dept-table", renderType: "Dept" }),
+        "4": Object.freeze({ label: "Full Page Visual", layoutId: "fpvisual", renderType: "Dept" }),
+        "5": Object.freeze({ label: "3/4 Page Visual", layoutId: "visual", renderType: "Dept" }),
+        "6": Object.freeze({ label: "Proposal Summary", layoutId: "summary", renderType: "Dept" }),
+        "7": Object.freeze({ label: "Labour", layoutId: "dept-table", renderType: "Dept", pageKind: "labour" }),
+        "8": Object.freeze({ label: "General Requirements", layoutId: "dept-table", renderType: "Dept", pageKind: "general-requirements" }),
+        "9": Object.freeze({ label: "Venue Hero", layoutId: "venue-hero", renderType: "Dept" }),
+        "10": Object.freeze({ label: "Experience & Expertise", layoutId: "exp", renderType: "Dept" }),
+        // The supplied label "Out Experts" conflicts with value 15 (Our Experts).
+        // V3's matching missing page is Our Proposal, so value 11 routes there.
+        "11": Object.freeze({ label: "Our Proposal", layoutId: "section-cover", renderType: "Section" }),
+        "12": Object.freeze({ label: "Proven Process", layoutId: "section-cover", renderType: "Section" }),
+        "13": Object.freeze({ label: "Dedicated Project Manager", layoutId: "pm", renderType: "Dept" }),
+        "14": Object.freeze({ label: "Your Specialist Team", layoutId: "team", renderType: "Dept" }),
+        "15": Object.freeze({ label: "Our Experts", layoutId: "experts", renderType: "Dept" }),
+        "17": Object.freeze({ label: "Proposed Timings", layoutId: "proposed-timings", renderType: "Dept", pageKind: "proposed-timings" }),
+        "18": Object.freeze({ label: "Critical Path", layoutId: "critical-path", renderType: "Dept" }),
+        "19": Object.freeze({ label: "About Us", layoutId: "about-us", renderType: "Dept" }),
+        "20": Object.freeze({ label: "Sustainability", layoutId: "sustainability", renderType: "Dept" }),
+        "21": Object.freeze({ label: "Thank You", layoutId: "thankyou", renderType: "Dept" })
+      }),
+      variants: Object.freeze({
+        "1": Object.freeze({ label: "Auto" }),
+        "2": Object.freeze({ label: "Image Left", deptLayout: "image", splitSide: "left" }),
+        "3": Object.freeze({ label: "Image Right", deptLayout: "image", splitSide: "right" }),
+        "4": Object.freeze({ label: "No Image", deptLayout: "no-image" }),
+        "5": Object.freeze({ label: "1 Column", deptLayout: "columns", columnCount: 1 }),
+        "6": Object.freeze({ label: "2 Columns", deptLayout: "columns", columnCount: 2 }),
+        "7": Object.freeze({ label: "3 Columns", deptLayout: "columns", columnCount: 3 }),
+        "8": Object.freeze({ label: "Alternative", layoutVariant: "alt" })
+      }),
+      supportedVariants: Object.freeze({
+        "1": Object.freeze(["1"]),
+        "2": Object.freeze(["1"]),
+        "3": Object.freeze(["1", "2", "3", "4"]),
+        "4": Object.freeze(["1"]),
+        "5": Object.freeze(["1"]),
+        "6": Object.freeze(["1", "2", "3", "4"]),
+        "7": Object.freeze(["1", "2", "3", "4", "5", "6", "7"]),
+        "8": Object.freeze(["1", "2", "3", "4"]),
+        "9": Object.freeze(["1"]),
+        "10": Object.freeze(["1", "2", "3"]),
+        "11": Object.freeze(["1"]),
+        "12": Object.freeze(["1"]),
+        "13": Object.freeze(["1"]),
+        "14": Object.freeze(["1"]),
+        "15": Object.freeze(["1", "2", "3"]),
+        "17": Object.freeze(["1", "2", "3", "4", "5", "6", "7"]),
+        "18": Object.freeze(["1"]),
+        "19": Object.freeze(["1"]),
+        "20": Object.freeze(["1"]),
+        "21": Object.freeze(["1", "8"])
       })
     }),
     mappings: Object.freeze({
@@ -1919,11 +2049,6 @@
       auditWorkflowOnBuild: false
     }),
     meta: Object.freeze({
-      start: "[WisePageMeta]",
-      end: "[/WisePageMeta]",
-      genericEditor: "genericPage",
-      eventOverviewEditor: "eventOverview",
-      labourDayEditor: "genericLabourDay",
       eventOverviewRootTemplateKey: "section_event_overview",
       eventOverviewDeptTemplateKey: "dept_proposed_timings"
     }),
@@ -1946,8 +2071,39 @@
 
   const DEPT_PAGE = CONFIG.mappings.deptPage;
   const SECTION_PAGE = CONFIG.mappings.sectionPage;
+  const CONFIGURATION_WARNINGS = [];
 
-  /* IMPROVED: Added error handling wrapper */
+  function reportConfigurationError(error){
+    window.HireHopV4LastError = error;
+    const panel = document.createElement("section");
+    panel.id = "hirehop-v4-config-error";
+    panel.setAttribute("role", "alert");
+    panel.style.cssText = "margin:16px;padding:16px;border:3px solid #a40000;background:#fff2f2;color:#680000;font:16px/1.4 Arial,sans-serif;white-space:pre-wrap";
+    panel.textContent = `Proposal configuration error\n\n${error?.message || error}`;
+    document.body.prepend(panel);
+  }
+
+  function recordConfigurationWarning(message){
+    const text = String(message || "").trim();
+    if (!text || CONFIGURATION_WARNINGS.includes(text)) return;
+    CONFIGURATION_WARNINGS.push(text);
+    console.warn("[proposal-configuration]", text);
+  }
+
+  function reportConfigurationWarnings(){
+    window.HireHopV4LastWarnings = CONFIGURATION_WARNINGS.slice();
+    const existing = document.getElementById("hirehop-v4-config-warning");
+    if (existing) existing.remove();
+    if (!CONFIGURATION_WARNINGS.length) return;
+
+    const panel = document.createElement("section");
+    panel.id = "hirehop-v4-config-warning";
+    panel.setAttribute("role", "status");
+    panel.style.cssText = "margin:16px;padding:14px;border:2px solid #9a6700;background:#fff8db;color:#5f4500;font:14px/1.4 Arial,sans-serif;white-space:pre-wrap";
+    panel.textContent = `Proposal configuration warning\n\n${CONFIGURATION_WARNINGS.map(message => `• ${message}`).join("\n")}`;
+    document.body.prepend(panel);
+  }
+
   window.addEventListener('load', function(){
     try {
       const pickFieldText = (selectors) => txtAnyMeaningful(document, selectors);
@@ -1979,8 +2135,10 @@
       ];
       document.title = fileNameParts.join(" - ");
       buildDocument();
+      reportConfigurationWarnings();
     } catch (error) {
       console.error('Failed to initialize document:', error);
+      reportConfigurationError(error);
     }
   });
 
@@ -2194,8 +2352,7 @@
     return m ? m[1].toLowerCase() : "";
   }
   function stripSideSuffix(title){
-    const stripped = String(title || "").replace(/\s*(?:-|\u2013|\u2014)\s*(left|right|alt|none|dept|section)\s*$/i, "").trim();
-    return stripped;
+    return String(title || "").trim();
   }
   function toTitleCase(str){
     return String(str || "").toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
@@ -2205,14 +2362,12 @@
     return lower.replace(/[a-z]/i, ch => ch.toUpperCase());
   }
   function formatReminderHeading(str){
-    return toSentenceCase(
-      String(str || "")
-        .replace(/<br\s*\/?>/gi, " ")
-        .replace(/<[^>]*>/g, " ")
-        .replace(/&nbsp;/gi, " ")
-        .replace(/\s+/g, " ")
-        .trim()
-    );
+    return String(str || "")
+      .replace(/<br\s*\/?>/gi, " ")
+      .replace(/<[^>]*>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
   }
   function formatPageHeading(str){
     return String(str || "").trim().toUpperCase();
@@ -2438,15 +2593,7 @@
   }
 
   function getNodeSystemMeta(node){
-    const direct = node?.systemMeta && typeof node.systemMeta === "object" ? node.systemMeta : null;
-    const fields = node?.fields && typeof node.fields === "object" ? node.fields : {};
-    return mergeStoredPageMeta(
-      direct,
-      fields.meta,
-      fields.metadata,
-      node?.technical,
-      node?.additional
-    ) || {};
+    return node?.systemMeta && typeof node.systemMeta === "object" ? node.systemMeta : {};
   }
 
   function getMetaLayoutId(meta){
@@ -2454,6 +2601,7 @@
       "hero",
       "section-cover",
       "dept-table",
+      "proposed-timings",
       "dept-stack",
       "labour-days",
       "pm",
@@ -2543,70 +2691,76 @@
   function isLabourDepartmentNode(node){
     const meta = getNodeSystemMeta(node);
     const kind = toToken(metaString(meta, ["pageKind", "page_kind", "contentKind", "content_kind", "kind", "templateKey", "template_key"]));
-    if (kind === "labour" || kind === "labor" || kind === "labour-page" || kind === "labor-page") return true;
+    return kind === "labour" || kind === "labor" || kind === "labour-page" || kind === "labor-page";
+  }
 
-    const title = normalizeHeadingMatchText(stripSideSuffix(String(node?.title || "")));
-    return /^labou?r\b/.test(title);
+  function isProposedTimingsNode(node){
+    const meta = getNodeSystemMeta(node);
+    const kind = toToken(metaString(meta, ["pageKind", "page_kind", "contentKind", "content_kind", "kind", "templateKey", "template_key"]));
+    return kind === "proposed-timings" || kind === "proposed-timing" || getMetaLayoutId(meta) === "proposed-timings";
   }
 
   function getDeptHeadingImageUrl(deptNode){
     const mode = getRequestedDeptLayoutMode(deptNode);
     if (mode === "columns" || mode === "no-image") return "";
 
-    const metaUrl = getMetaImageUrl(getNodeSystemMeta(deptNode));
-    return metaUrl || normaliseImageUrl(deptNode?.technical, "");
+    return getMetaImageUrl(getNodeSystemMeta(deptNode));
   }
 
   function getNodeImageUrl(node, fallback){
-    return getMetaImageUrl(getNodeSystemMeta(node)) || normaliseImageUrl(node?.technical, fallback || "");
+    return getMetaImageUrl(getNodeSystemMeta(node));
   }
 
   function getMetaSplitSide(meta){
     const direct = toToken(metaString(meta, [
       "splitSide",
       "split_side",
-      "split-side",
-      "imageSide",
-      "image_side",
-      "image-side",
-      "side"
+      "split-side"
     ]));
     if (direct === "left" || direct === "right") return direct;
-
-    const suffix = toToken(metaString(meta, ["titleSuffix", "title_suffix"]));
-    if (suffix === "left" || suffix === "right") return suffix;
     return "";
   }
 
   function getNodeSplitSide(node){
     if (!node || typeof node !== "object") return "";
-    return getMetaSplitSide(getNodeSystemMeta(node)) ||
-      parseSideSuffix(node?.rawTitle) ||
-      parseSideSuffix(node?.title);
+    return getMetaSplitSide(getNodeSystemMeta(node));
   }
 
   function getSplitSideHint(value){
-    return value && typeof value === "object" ? getNodeSplitSide(value) : parseSideSuffix(value);
+    return value && typeof value === "object" ? getNodeSplitSide(value) : "";
   }
 
   function getMetaSummaryMode(meta){
-    const direct = toToken(metaString(meta, [
-      "summaryMode",
-      "summary_mode",
-      "summary-mode",
-      "projectSummaryMode",
-      "project_summary_mode",
-      "project-summary-mode"
-    ]));
-    const suffix = toToken(metaString(meta, ["titleSuffix", "title_suffix"]));
-    const token = direct || suffix;
-    if (token === "none" || token === "dept" || token === "section") return token;
+    const token = toToken(metaString(meta, ["projectTotalGrouping"]));
     if (token === "department") return "dept";
-    return "";
+    if (token === "area") return "section";
+    return "none";
   }
 
   function getNodeSummaryMode(node){
-    return getMetaSummaryMode(getNodeSystemMeta(node)) || extractSummaryMode(node?.rawTitle || node?.title || "");
+    return getMetaSummaryMode(getNodeSystemMeta(node));
+  }
+
+  function getNodeReminderHeading(node){
+    return String(getNodeSystemMeta(node)?.reminderHeading || "").trim();
+  }
+
+  function getNodeBlurb(node){
+    return String(getNodeSystemMeta(node)?.blurb || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n");
+  }
+
+  function setReminderHeading(el, node){
+    if (!el) return;
+    const reminder = formatReminderHeading(getNodeReminderHeading(node));
+    el.textContent = reminder;
+    el.style.display = reminder ? "" : "none";
+  }
+
+  function getRequestedColumnCount(node){
+    const raw = Number(getNodeSystemMeta(node)?.columnCount || 0);
+    return Number.isInteger(raw) && raw >= 1 && raw <= 3 ? raw : 3;
   }
 
   function cleanLeadingVirtualMarker(s){
@@ -2957,8 +3111,8 @@
     applyInitialMode(fallbackMode);
   }
 
-  function parsePriceToNumber(priceStr){
-    const s = String(priceStr || "").trim();
+  function parseMoneyToNumber(moneyText){
+    const s = String(moneyText || "").trim();
     if (!s) return null;
     const cleaned = s.replace(/[^\d.,-]/g, "");
     if (!cleaned) return null;
@@ -3014,9 +3168,15 @@
     return m ? m[0].trim() : "";
   }
   function formatMoneyLike(sum, sample){
-    const cur = extractCurrencyPrefix(sample);
+    const cur = extractCurrencyPrefix(sample) || "£";
     const num = sum.toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    return cur ? `${cur}${num}` : num;
+    return `${cur}${num}`;
+  }
+  function getLineCostText(row){
+    return String(row?.cost ?? "").trim();
+  }
+  function getLineRevenueText(row){
+    return String(row?.revenue ?? "").trim();
   }
 
   const FLAG_PROFILE = {
@@ -3085,9 +3245,9 @@
 
       if (row.hiddenByName) visible[i] = false;
 
-      const thisRowCostNum = (row.type === "item") ? parsePriceToNumber(row.price || "") : null;
+      const thisRowRevenueNum = (row.type === "item") ? parseMoneyToNumber(getLineRevenueText(row)) : null;
       const triggersHideChildPrices =
-        (!prof.rootVisible) && prof.rootCost && (thisRowCostNum != null) && (thisRowCostNum > 0);
+        (!prof.rootVisible) && prof.rootCost && (thisRowRevenueNum != null) && (thisRowRevenueNum > 0);
 
       hidePriceDueToAncestor[i] = hideAllowedHere;
 
@@ -3104,7 +3264,7 @@
     return { visible, costed, effectiveFlag, hidePriceDueToAncestor, optionalScope };
   }
 
-  function computeGroupCostTotals(rows, rowState){
+  function computeGroupRevenueTotals(rows, rowState){
     const r = rows || [];
     const state = rowState || computeRowState(r);
 
@@ -3128,20 +3288,21 @@
         finaliseTop();
       }
 
-      const costNum = (state.costed[i] && row.type === "item") ? parsePriceToNumber(row.price || "") : null;
-      const hasNum = (costNum != null);
+      const revenueText = getLineRevenueText(row);
+      const revenueNum = (state.costed[i] && row.type === "item") ? parseMoneyToNumber(revenueText) : null;
+      const hasNum = (revenueNum != null);
 
       if (hasNum){
         for (const g of stack){
-          g.sum += costNum;
-          if (!g.sample) g.sample = (row.price || "");
+          g.sum += revenueNum;
+          if (!g.sample) g.sample = revenueText;
         }
       }
 
       const g = { index: i, level: lvl, sum: 0, sample: "" };
       if (hasNum){
-        g.sum += costNum;
-        g.sample = (row.price || "");
+        g.sum += revenueNum;
+        g.sample = revenueText;
       }
       stack.push(g);
     }
@@ -3150,7 +3311,7 @@
     return { groupTotal, groupSample };
   }
 
-  function hasHiddenCostBearingItems(rows, rowState){
+  function hasHiddenRevenueBearingItems(rows, rowState){
     const r = rows || [];
     const state = rowState || computeRowState(r);
 
@@ -3159,36 +3320,40 @@
       if (!row || row.type !== "item") continue;
       if (state.visible[i]) continue;
       if (!state.costed[i]) continue;
+      // Include In Proposal=No on a plain grouping heading is a presentation
+      // choice: its descendants remain financial contributors. Their hidden
+      // revenue must not suppress prices on the separate client-facing rows.
+      if (row.hiddenByHeadingScope) continue;
 
-      const n = parsePriceToNumber(row.price || "");
+      const n = parseMoneyToNumber(getLineRevenueText(row));
       if (n != null && n > 0) return true;
     }
 
     return false;
   }
 
-  function computeDisplayPriceText(rows, rowState, groupTotals){
+  function computeDisplayRevenueText(rows, rowState, groupTotals){
     const r = rows || [];
     const state = rowState || computeRowState(r);
-    const gt = groupTotals || computeGroupCostTotals(r, state);
+    const gt = groupTotals || computeGroupRevenueTotals(r, state);
 
-    const displayPrice = new Array(r.length).fill("");
+    const displayRevenue = new Array(r.length).fill("");
 
-    // If hidden rows still carry cost, only show the final subtotal to avoid
+    // If hidden rows still carry revenue, only show the final subtotal to avoid
     // exposing partial line pricing that cannot reconcile to the total.
-    if (hasHiddenCostBearingItems(r, state)){
-      return displayPrice;
+    if (hasHiddenRevenueBearingItems(r, state)){
+      return displayRevenue;
     }
 
     for (let i=0;i<r.length;i++){
       const row = r[i];
       if (!isFlagScopeRow(row)) continue;
-      if (!state.visible[i]) { displayPrice[i] = ""; continue; }
+      if (!state.visible[i]) { displayRevenue[i] = ""; continue; }
 
-      const raw = String(row.price || "").trim();
-      const n = parsePriceToNumber(raw);
+      const raw = getLineRevenueText(row);
+      const n = parseMoneyToNumber(raw);
 
-      if (state.hidePriceDueToAncestor[i]) { displayPrice[i] = ""; continue; }
+      if (state.hidePriceDueToAncestor[i]) { displayRevenue[i] = ""; continue; }
 
       const prof = getFlagProfile(state.effectiveFlag[i] ?? 0);
 
@@ -3201,21 +3366,21 @@
       if (isGroupSubtotalCase){
         const sum = gt.groupTotal[i];
         const sample = gt.groupSample[i] || raw;
-        displayPrice[i] = (sum != null && sum > 0) ? formatMoneyLike(sum, sample) : "";
+        displayRevenue[i] = (sum != null && sum > 0) ? formatMoneyLike(sum, sample) : "";
         continue;
       }
 
-      if (row.type === "subheading"){ displayPrice[i] = ""; continue; }
-      if (!raw || n == null || n === 0){ displayPrice[i] = ""; continue; }
-      displayPrice[i] = raw;
+      if (row.type === "subheading"){ displayRevenue[i] = ""; continue; }
+      if (!raw || n == null || n === 0){ displayRevenue[i] = ""; continue; }
+      displayRevenue[i] = formatMoneyLike(n, raw);
     }
 
-    return displayPrice;
+    return displayRevenue;
   }
-  function computeOptionalPriceText(rows, rowState){
+  function computeOptionalRevenueText(rows, rowState){
     const r = rows || [];
     const state = rowState || computeRowState(r);
-    const optionalPrice = new Array(r.length).fill("");
+    const optionalRevenue = new Array(r.length).fill("");
 
     for (let i = 0; i < r.length; i++){
       const row = r[i];
@@ -3223,13 +3388,13 @@
       if (!state.visible[i] || !state.optionalScope[i]) continue;
       if (state.hidePriceDueToAncestor[i]) continue;
 
-      const raw = String(row.price || "").trim();
-      const n = parsePriceToNumber(raw);
+      const raw = getLineRevenueText(row);
+      const n = parseMoneyToNumber(raw);
       if (!raw || n == null || n === 0) continue;
-      optionalPrice[i] = raw;
+      optionalRevenue[i] = formatMoneyLike(n, raw);
     }
 
-    return optionalPrice;
+    return optionalRevenue;
   }
 
   function computeDeptSubtotalInfo(rows, rowState){
@@ -3252,8 +3417,8 @@
 
       if (state.costed[i]){
         costedCount++;
-        const p = r[i].price || "";
-        const n = parsePriceToNumber(p);
+        const p = getLineRevenueText(r[i]);
+        const n = parseMoneyToNumber(p);
         if (n != null){
           total += n;
           hasNumeric = true;
@@ -3263,6 +3428,25 @@
     }
 
     return { visibleCount, hiddenCount, costedCount, total, hasNumeric, sample };
+  }
+  function computeDeptCostSubtotalInfo(rows, rowState){
+    const r = rows || [];
+    const state = rowState || computeRowState(r);
+    let total = 0;
+    let hasNumeric = false;
+    let sample = "";
+
+    for (let i = 0; i < r.length; i++){
+      if (r[i]?.type !== "item" || !state.costed[i]) continue;
+      const p = getLineCostText(r[i]);
+      const n = parseMoneyToNumber(p);
+      if (n == null) continue;
+      total += n;
+      hasNumeric = true;
+      if (!sample) sample = p;
+    }
+
+    return { total, hasNumeric, sample };
   }
   function computeOptionalSubtotalInfo(rows, rowState){
     const r = rows || [];
@@ -3279,8 +3463,8 @@
       if (!state.visible[i] || !state.optionalScope[i]) continue;
 
       visibleCount++;
-      const p = row.price || "";
-      const n = parsePriceToNumber(p);
+      const p = getLineRevenueText(row);
+      const n = parseMoneyToNumber(p);
       if (n != null){
         total += n;
         hasNumeric = true;
@@ -3293,16 +3477,16 @@
   function prepareCostingRows(rows){
     const sourceRows = cloneDocumentRows(rows || []);
     const rowState = computeRowState(sourceRows);
-    const groupTotals = computeGroupCostTotals(sourceRows, rowState);
-    const displayPrice = computeDisplayPriceText(sourceRows, rowState, groupTotals);
-    const optionalPrice = computeOptionalPriceText(sourceRows, rowState);
+    const groupRevenueTotals = computeGroupRevenueTotals(sourceRows, rowState);
+    const displayRevenue = computeDisplayRevenueText(sourceRows, rowState, groupRevenueTotals);
+    const optionalRevenue = computeOptionalRevenueText(sourceRows, rowState);
 
     const preparedRows = sourceRows.map((row, index) => {
       if (!row) return row;
       return {
         ...row,
-        _displayPrice: displayPrice[index] || "",
-        _optionalDisplayPrice: optionalPrice[index] || "",
+        _displayRevenue: displayRevenue[index] || "",
+        _optionalDisplayRevenue: optionalRevenue[index] || "",
         _visible: !!rowState.visible[index],
         _costed: !!rowState.costed[index],
         _optionalScope: !!rowState.optionalScope[index],
@@ -3314,10 +3498,11 @@
     return {
       rows: preparedRows,
       rowState,
-      groupTotals,
-      displayPrice,
-      optionalPrice,
+      groupRevenueTotals,
+      displayRevenue,
+      optionalRevenue,
       subtotalInfo: computeDeptSubtotalInfo(preparedRows, rowState),
+      costSubtotalInfo: computeDeptCostSubtotalInfo(preparedRows, rowState),
       optionalSubtotalInfo: computeOptionalSubtotalInfo(preparedRows, rowState)
     };
   }
@@ -3376,8 +3561,8 @@
       groups: buildLabourDayGroups(
         prepared.rows,
         prepared.rowState,
-        prepared.displayPrice,
-        prepared.optionalPrice
+        prepared.displayRevenue,
+        prepared.optionalRevenue
       ).map(group => clonePlainValue(group))
     };
   }
@@ -3430,10 +3615,187 @@
   }
 
 
+  function isUnresolvedMergeField(value){
+    return /^\s*\{\{[^{}]+\}\}\s*$/.test(String(value || ""));
+  }
+
+  function cleanHeadingFieldValue(value){
+    const text = String(value == null ? "" : value).trim();
+    return isUnresolvedMergeField(text) ? "" : text;
+  }
+
+  function readHeadingMergeValue(root, selectors, multiline){
+    for (const selector of (selectors || [])){
+      const value = multiline ? txtMultiline(root, selector) : txt(root, selector);
+      const cleaned = cleanHeadingFieldValue(value);
+      if (cleaned) return cleaned;
+    }
+    return "";
+  }
+
+  function parseRequiredYesNo(value, fieldName, headingName){
+    const text = cleanHeadingFieldValue(value).toLowerCase();
+    if (["yes", "true", "1", "y"].includes(text)) return true;
+    if (["no", "false", "0", "n"].includes(text)) return false;
+    throw new Error(`${headingName}: ${fieldName} must be Yes or No.`);
+  }
+
+  function parseCreatePage(value, headingName){
+    const text = cleanHeadingFieldValue(value);
+    if (!text) return false;
+    return parseRequiredYesNo(text, "Create As Page", headingName);
+  }
+  function parseIncludeInProposal(value, headingName){
+    const text = cleanHeadingFieldValue(value);
+    if (!text) return true;
+    return parseRequiredYesNo(text, "Include In Proposal", headingName);
+  }
+  function parseIncludeInProjectTotal(value, headingName){
+    const text = cleanHeadingFieldValue(value);
+    if (!text) return true;
+    return parseRequiredYesNo(text, "Include In Project Total", headingName);
+  }
+
+  function parseMultiSelectValues(value){
+    const text = cleanHeadingFieldValue(value);
+    if (!text) return [];
+
+    try {
+      const parsed = JSON.parse(text);
+      if (Array.isArray(parsed)) return parsed.map(item => String(item).trim()).filter(Boolean);
+      if (parsed && typeof parsed === "object"){
+        return Object.keys(parsed).filter(key => {
+          const value = parsed[key];
+          if (value === true || value === 1) return true;
+          const token = String(value == null ? "" : value).trim().toLowerCase();
+          return !!token && !["0", "false", "no", "n", "off"].includes(token);
+        });
+      }
+      if (parsed != null && typeof parsed !== "object") return [String(parsed).trim()].filter(Boolean);
+    } catch (_) {
+      // HireHop may render a multi-select as plain comma-separated text.
+    }
+
+    return text
+      .replace(/^\s*\[/, "")
+      .replace(/\]\s*$/, "")
+      .split(/[,;|\r\n]+/)
+      .map(item => item.replace(/^\s*["']|["']\s*$/g, "").trim())
+      .filter(Boolean);
+  }
+
+  function parseSingleHeadingChoice(value, fieldName, definitions, headingName){
+    const selected = Array.from(new Set(parseMultiSelectValues(value)));
+    if (selected.length !== 1){
+      throw new Error(`${headingName}: ${fieldName} must contain exactly one value; received ${selected.length}.`);
+    }
+    const selectedValue = selected[0];
+    const definition = definitions[selectedValue];
+    if (!definition){
+      throw new Error(`${headingName}: ${fieldName} value "${selectedValue}" is not recognised.`);
+    }
+    return { value: selectedValue, definition };
+  }
+
+  function resolveSupportedPageVariant(template, requestedVariant, headingName){
+    const allowed = CONFIG.headingFields.supportedVariants[template.value] || ["1"];
+    if (allowed.includes(requestedVariant.value)){
+      return {
+        requested: requestedVariant,
+        resolved: requestedVariant,
+        usedFallback: false
+      };
+    }
+
+    const autoVariant = {
+      value: "1",
+      definition: CONFIG.headingFields.variants["1"]
+    };
+    recordConfigurationWarning(
+      `${headingName}: Page Variant "${requestedVariant.definition.label}" is not supported by Page Template "${template.definition.label}". Auto was used.`
+    );
+    return {
+      requested: requestedVariant,
+      resolved: autoVariant,
+      usedFallback: true
+    };
+  }
+
+  function parseProjectTotalGrouping(value, headingName){
+    const selected = Array.from(new Set(parseMultiSelectValues(value)));
+    if (!selected.length) return "none";
+    if (selected.length !== 1){
+      throw new Error(`${headingName}: Project Total Grouping must contain exactly one value; received ${selected.length}.`);
+    }
+
+    const token = toToken(selected[0]);
+    const modes = {
+      "1": "none",
+      "none": "none",
+      "2": "department",
+      "department": "department",
+      "dept": "department",
+      "3": "area",
+      "area": "area"
+    };
+    const mode = modes[token];
+    if (!mode){
+      throw new Error(`${headingName}: Project Total Grouping value "${selected[0]}" is not recognised.`);
+    }
+    return mode;
+  }
+
+  function buildHeadingFieldMeta(fields, headingName){
+    const template = parseSingleHeadingChoice(
+      fields.pageTemplate,
+      "Page Template",
+      CONFIG.headingFields.templates,
+      headingName
+    );
+    const requestedVariant = parseSingleHeadingChoice(
+      fields.pageVariant,
+      "Page Variant",
+      CONFIG.headingFields.variants,
+      headingName
+    );
+    const variantSelection = resolveSupportedPageVariant(template, requestedVariant, headingName);
+    const variant = variantSelection.resolved;
+    const include = parseRequiredYesNo(fields.include, "Include In Proposal", headingName);
+    const includeInProjectTotal = parseRequiredYesNo(
+      fields.includeInProjectTotal,
+      "Include In Project Total",
+      headingName
+    );
+    const imageUrl = normaliseImageUrl(cleanHeadingFieldValue(fields.imageUrl), "");
+
+    return {
+      layoutId: template.definition.layoutId,
+      renderType: template.definition.renderType,
+      pageKind: template.definition.pageKind || "",
+      pageTemplate: template.value,
+      pageTemplateLabel: template.definition.label,
+      requestedPageVariant: variantSelection.requested.value,
+      requestedPageVariantLabel: variantSelection.requested.definition.label,
+      pageVariantFallback: variantSelection.usedFallback,
+      pageVariant: variant.value,
+      pageVariantLabel: variant.definition.label,
+      layoutVariant: variant.definition.layoutVariant || "",
+      deptLayout: variant.definition.deptLayout || "",
+      columnCount: variant.definition.columnCount || 0,
+      splitSide: variant.definition.splitSide || "",
+      imageUrl,
+      reminderHeading: cleanHeadingFieldValue(fields.reminder),
+      blurb: cleanHeadingFieldValue(fields.blurb),
+      projectTotalGrouping: parseProjectTotalGrouping(fields.grouping, headingName),
+      include,
+      includeInProjectTotal
+    };
+  }
+
   function readSourceRows(){
     const sourceSelectors = CONFIG.selectors.sourceRows;
     const trs = $all(document, sourceSelectors.root);
-    return trs.map(tr => {
+    const rows = trs.map(tr => {
       const type      = txtAny(tr, sourceSelectors.type);
       if (isInlineCommentType(type)) return null;
       const level     = txtAny(tr, sourceSelectors.level);
@@ -3444,50 +3806,71 @@
       const warehouseNotes = txtAnyMultiline(tr, sourceSelectors.warehouseNotes);
       const additional= txtAnyMultiline(tr, sourceSelectors.additional);
       const technical = txtAny(tr, sourceSelectors.technical);
-      const metaText  = txtAnyMultiline(tr, sourceSelectors.meta || []);
-      const systemMeta = mergeStoredPageMeta(additional, technical, metaText);
+      const headingFields = {
+        reminder: readHeadingMergeValue(tr, sourceSelectors.reminder, false),
+        imageUrl: readHeadingMergeValue(tr, sourceSelectors.imageUrl, true),
+        pageHeading: readHeadingMergeValue(tr, sourceSelectors.pageHeading, true),
+        blurb: readHeadingMergeValue(tr, sourceSelectors.blurb, true),
+        createPage: readHeadingMergeValue(tr, sourceSelectors.createPage, false),
+        pageTemplate: readHeadingMergeValue(tr, sourceSelectors.pageTemplate, true),
+        pageVariant: readHeadingMergeValue(tr, sourceSelectors.pageVariant, true),
+        grouping: readHeadingMergeValue(tr, sourceSelectors.grouping, false),
+        include: readHeadingMergeValue(tr, sourceSelectors.include, false),
+        includeInProjectTotal: readHeadingMergeValue(tr, sourceSelectors.includeInProjectTotal, false)
+      };
 
-      const imageUrl  = txtAny(tr, sourceSelectors.imageUrl);
-
-      const price     = txtAny(tr, sourceSelectors.price);
+      const cost      = txtAny(tr, sourceSelectors.cost);
+      const revenue   = txtAnyMeaningful(tr, sourceSelectors.revenue);
       const qty       = txtAny(tr, sourceSelectors.qty);
 
       const flag      = txtAny(tr, sourceSelectors.flag);
       const flagged   = txtAny(tr, sourceSelectors.flagged);
 
       const levelNum = flagToInt(level);
-      const nameInfo = stripLeadingSlashes(name);
-      const pref = parseHeadingPrefix(nameInfo.name);
-      const metaPrefix = getMetaRenderPrefix(systemMeta);
-
       const isHeading = looksLikeHeadingType(type);
-      const isPageHeading = isHeading && (pref.prefix === "Section" || pref.prefix === "Dept" || metaPrefix === "Section" || metaPrefix === "Dept");
-      const pagePrefix = pref.prefix || metaPrefix;
-      const pageTitle = pref.prefix
-        ? pref.title
-        : (isPageHeading ? extractTitleDirectives(nameInfo.name).title : pref.title);
+      const isPageHeading = isHeading && parseCreatePage(headingFields.createPage, name || "Unnamed heading");
+      const systemMeta = isPageHeading ? buildHeadingFieldMeta(headingFields, name || "Unnamed heading") : {};
+      const includeInProposal = !isHeading || parseIncludeInProposal(headingFields.include, name || "Unnamed heading");
+      const includeInProjectTotal = !isHeading
+        ? true
+        : (isPageHeading
+            ? !!systemMeta.includeInProjectTotal
+            : parseIncludeInProjectTotal(headingFields.includeInProjectTotal, name || "Unnamed heading"));
+      const pagePrefix = isPageHeading ? systemMeta.renderType : "";
+      const configuredPageHeading = cleanHeadingFieldValue(headingFields.pageHeading);
+      const pageTitle = configuredPageHeading || String(name || "").trim();
+      const headingBlurb = cleanHeadingFieldValue(headingFields.blurb);
 
       return {
         isHeading,
         isPageHeading,
+        headingFieldContractObserved: isHeading && !!cleanHeadingFieldValue(headingFields.createPage),
         pagePrefix,
         pageTitle,
-        pageRawTitle: pref.prefix ? pref.rawTitle : nameInfo.name,
-        pageDirectives: pref.directives || {},
-        pageExcludeFromProjectTotal: isPageHeading ? (!!pref.excludeFromProjectTotal || !!nameInfo.optional || !!pref.optional || isMetaExcludedFromProjectTotal(systemMeta)) : false,
-        hiddenHeading: isPageHeading ? (!!nameInfo.hidden || isMetaHidden(systemMeta)) : false,
-        optionalHeading: isPageHeading ? (!!nameInfo.optional || !!pref.optional || isMetaExcludedFromProjectTotal(systemMeta)) : false,
+        pageRawTitle: String(name || "").trim(),
+        pageDirectives: {},
+        pageExcludeFromProjectTotal: isPageHeading ? !systemMeta.includeInProjectTotal : false,
+        hiddenHeading: isPageHeading ? !systemMeta.include : !includeInProposal,
+        optionalHeading: isPageHeading ? !systemMeta.includeInProjectTotal : false,
 
         type, level, levelNum: Number.isFinite(levelNum) ? levelNum : 0,
-        name, nameStripped: nameInfo.name,
-        hiddenByName: (!isPageHeading && (!!nameInfo.hidden || isMetaHidden(systemMeta))),
-        optionalByName: (!isPageHeading && (!!nameInfo.optional || isMetaExcludedFromProjectTotal(systemMeta))),
+        name, nameStripped: String(name || "").trim(),
+        hiddenByName: false,
+        optionalByName: !isPageHeading && !includeInProjectTotal,
 
-        altName, warehouseNotes, additional, technical, metaText, systemMeta,
-        image_url: imageUrl,
-        price, qty, flag, flagged, listId
+        altName, warehouseNotes, additional, technical, blurb: headingBlurb, systemMeta,
+        image_url: cleanHeadingFieldValue(headingFields.imageUrl),
+        cost, revenue, qty, flag, flagged, listId
       };
     }).filter(Boolean);
+
+    const headingRows = rows.filter(row => row.isHeading);
+    if (headingRows.length && !headingRows.some(row => row.headingFieldContractObserved)){
+      throw new Error(
+        "No CreatePage values reached QTC V4. HireHop returned blank values for the confirmed Heading custom field _CreatePage."
+      );
+    }
+    return rows;
   }
 
   function buildHeadingTree(rows){
@@ -3499,11 +3882,22 @@
 
     for (const r of rows){
       const lvl = Number.isFinite(r.levelNum) ? r.levelNum : 0;
-      while (hiddenHeadingStack.length && lvl <= hiddenHeadingStack[hiddenHeadingStack.length - 1]){
+      while (hiddenHeadingStack.length && lvl <= hiddenHeadingStack[hiddenHeadingStack.length - 1].level){
         hiddenHeadingStack.pop();
       }
+      const hiddenByHeadingScope = hiddenHeadingStack.length > 0;
+      const excludedByHeadingScope = hiddenHeadingStack.some(scope => scope.excludeFromProjectTotal);
 
       if (r.isPageHeading){
+        // A configured page nested beneath a presentation-hidden grouping
+        // remains excluded; only ordinary financial lines are retained.
+        if (hiddenByHeadingScope){
+          hiddenHeadingStack.push({
+            level: lvl,
+            excludeFromProjectTotal: !!r.pageExcludeFromProjectTotal
+          });
+          continue;
+        }
         while (stack.length > 1 && lvl <= stack[stack.length - 1].level){
           stack.pop();
         }
@@ -3532,45 +3926,37 @@
         continue;
       }
 
+      if (r.isHeading){
+        while (stack.length > 1 && lvl <= stack[stack.length - 1].level){
+          stack.pop();
+        }
+      }
+
       const parent = currentContainer();
       if (parent.nodeType !== "page"){
-        const implicit = {
-          nodeType: "page",
-          level: 0,
-          prefix: "Dept",
-          title: "Items",
-          hidden: false,
-          technical: "",
-          additional: "",
-          systemMeta: null,
-          rows: [],
-          children: [],
-          parent: root
-        };
-        root.children.push(implicit);
-        stack.push(implicit);
+        // A native heading with CreatePage=No is a navigation/grouping row only.
+        // Rows outside a configured page do not create an implicit document page.
+        continue;
       }
 
       const target = currentContainer();
-      const hiddenByHeadingScope = hiddenHeadingStack.length > 0;
-
       if (r.isHeading && !r.isPageHeading){
-        // Hidden metadata, or a legacy "//" marker, hides this plain heading subtree
-        // from render while item costs still contribute to subtotal/total calculations.
-        if (r.hiddenByName){
-          hiddenHeadingStack.push(lvl);
+        if (r.hiddenHeading || r.hiddenByName){
+          hiddenHeadingStack.push({
+            level: lvl,
+            excludeFromProjectTotal: !!r.optionalByName || excludedByHeadingScope
+          });
           continue;
         }
-        if (hiddenByHeadingScope){
-          continue;
-        }
+        if (hiddenByHeadingScope) continue;
         target.rows.push({
           type: "subheading",
           levelNum: r.levelNum,
           hiddenByName: !!r.hiddenByName || hiddenByHeadingScope,
           excludeFromProjectTotal: !!r.optionalByName,
           systemMeta: r.systemMeta || null,
-          text: r.nameStripped.replace(/^\/\//, "").replace(/^\$\s*/, "").trim() || "Section",
+          text: r.nameStripped.trim() || "Section",
+          blurb: r.blurb,
           flag: r.flag,
           flagged: r.flagged
         });
@@ -3579,17 +3965,19 @@
           type: "item",
           levelNum: r.levelNum,
           hiddenByName: !!r.hiddenByName || hiddenByHeadingScope,
-          excludeFromProjectTotal: !!r.optionalByName,
+          hiddenByHeadingScope,
+          excludeFromProjectTotal: !!r.optionalByName || excludedByHeadingScope,
           systemMeta: r.systemMeta || null,
 
-          name: String(r.nameStripped || "").replace(/^\$\s*/, "").trim(),
+          name: String(r.nameStripped || "").trim(),
           warehouseNotes: r.warehouseNotes,
           altName: r.altName,
           additional: r.additional,
           technical: r.technical,
 
           image_url: r.image_url,
-          price: r.price,
+          cost: r.cost,
+          revenue: r.revenue,
           qty: r.qty,
           flag: r.flag,
           flagged: r.flagged,
@@ -3675,11 +4063,22 @@
 
     const tdDesc = document.createElement("td");
     tdDesc.className = "col-desc";
-    tdDesc.textContent = String(row.text || "").trim();
+    const headingText = document.createElement("div");
+    headingText.className = "subheading-text";
+    headingText.textContent = String(row.text || "").trim();
+    tdDesc.appendChild(headingText);
+
+    const blurbText = String(row.blurb || "").trim();
+    if (blurbText){
+      const blurb = document.createElement("div");
+      blurb.className = "subheading-blurb";
+      blurb.textContent = blurbText;
+      tdDesc.appendChild(blurb);
+    }
 
     const tdPrice = document.createElement("td");
     tdPrice.className = "col-price";
-    tdPrice.textContent = row._displayPrice || "";
+    tdPrice.textContent = row._displayRevenue || "";
 
     tr.appendChild(tdDesc);
     tr.appendChild(tdPrice);
@@ -3701,7 +4100,7 @@
   function buildItemRow(row){
     const tr = document.createElement("tr");
     tr.className = "item_row";
-    if (row._optionalDisplayPrice) tr.classList.add("optional-price-row");
+    if (row._optionalDisplayRevenue) tr.classList.add("optional-price-row");
 
     const tdDesc = document.createElement("td");
     tdDesc.className = "col-desc";
@@ -3723,7 +4122,7 @@
 
     const tdPrice = document.createElement("td");
     tdPrice.className = "col-price";
-    tdPrice.textContent = row._optionalDisplayPrice || row._displayPrice || "";
+    tdPrice.textContent = row._optionalDisplayRevenue || row._displayRevenue || "";
 
     tr.appendChild(tdDesc);
     tr.appendChild(tdPrice);
@@ -3743,11 +4142,11 @@
     const tdPrice = document.createElement("td");
     tdPrice.className = "col-price";
     // Only show a subtotal when there is a numeric total greater than zero
-    const priceText = (subInfo && subInfo.hasNumeric && Number(subInfo.total) > 0) ? formatMoneyLike(subInfo.total, subInfo.sample || "") : "";
-    tdPrice.textContent = priceText;
+    const revenueText = (subInfo && subInfo.hasNumeric && Number(subInfo.total) > 0) ? formatMoneyLike(subInfo.total, subInfo.sample || "") : "";
+    tdPrice.textContent = revenueText;
 
-    // If there's no price to show, hide the whole row (prevents the "Subtotal" label appearing)
-    if (!priceText){
+    // If there's no revenue to show, hide the whole row (prevents the "Subtotal" label appearing)
+    if (!revenueText){
       tdDesc.textContent = "";
       tr.style.display = "none";
     }
@@ -3779,13 +4178,13 @@
     const stripped = s.replace(/^day\s*(?:[:\-]\s*|\s+)/i, "").trim();
     return stripped || s;
   }
-  function buildLabourDayGroups(rows, rowState, displayPrice, optionalDisplayPrice){
+  function buildLabourDayGroups(rows, rowState, displayRevenue, optionalDisplayRevenue){
     const groups = [];
     let current = null;
     const src = rows || [];
     const state = rowState || computeRowState(src);
-    const priceText = displayPrice || computeDisplayPriceText(src, state, computeGroupCostTotals(src, state));
-    const optionalPriceText = optionalDisplayPrice || computeOptionalPriceText(src, state);
+    const revenueText = displayRevenue || computeDisplayRevenueText(src, state, computeGroupRevenueTotals(src, state));
+    const optionalRevenueText = optionalDisplayRevenue || computeOptionalRevenueText(src, state);
 
     for (let i = 0; i < src.length; i++){
       const row = src[i];
@@ -3795,6 +4194,7 @@
         if (!state.visible[i]) continue;
         current = {
           title: String(row.text || "").trim(),
+          blurb: String(row.blurb || "").trim(),
           items: [],
           visibleCount: 0,
           hiddenCount: 0,
@@ -3814,6 +4214,7 @@
       if (!current){
         current = {
           title: "",
+          blurb: "",
           items: [],
           visibleCount: 0,
           hiddenCount: 0,
@@ -3834,8 +4235,8 @@
 
       if (isVisible){
         current.visibleCount++;
-        row._displayPrice = priceText[i] || "";
-        row._optionalDisplayPrice = optionalPriceText[i] || "";
+        row._displayRevenue = revenueText[i] || "";
+        row._optionalDisplayRevenue = optionalRevenueText[i] || "";
         current.items.push(row);
       } else {
         current.hiddenCount++;
@@ -3843,21 +4244,23 @@
 
       if (state.optionalScope[i]){
         current.optionalVisibleCount += isVisible ? 1 : 0;
-        const optNum = parsePriceToNumber(row.price || "");
+        const optionalRevenue = getLineRevenueText(row);
+        const optNum = parseMoneyToNumber(optionalRevenue);
         if (optNum != null){
           current.optionalTotal += optNum;
           current.optionalHasNumeric = true;
-          if (!current.optionalSample) current.optionalSample = row.price || "";
+          if (!current.optionalSample) current.optionalSample = optionalRevenue;
         }
       }
 
       if (isCosted){
         current.costedCount++;
-        const n = parsePriceToNumber(row.price || "");
+        const lineRevenue = getLineRevenueText(row);
+        const n = parseMoneyToNumber(lineRevenue);
         if (n != null){
           current.total += n;
           current.hasNumeric = true;
-          if (!current.sample) current.sample = row.price || "";
+          if (!current.sample) current.sample = lineRevenue;
         }
       }
     }
@@ -3870,11 +4273,11 @@
     if (requestedMode === "image" || requestedMode === "no-image") return false;
 
     if (!isLabourDepartmentNode(deptNode)) return false;
-    if (!isLabourSectionTitle(sectionTitle)) return false;
+    if (getDeptHeadingImageUrl(deptNode)) return false;
 
     const r = rows || [];
     const rowState = computeRowState(r);
-    const groups = buildLabourDayGroups(r, rowState, computeDisplayPriceText(r, rowState, computeGroupCostTotals(r, rowState)), computeOptionalPriceText(r, rowState));
+    const groups = buildLabourDayGroups(r, rowState, computeDisplayRevenueText(r, rowState, computeGroupRevenueTotals(r, rowState)), computeOptionalRevenueText(r, rowState));
     if (groups.length < 2) return false;
 
     const dayNamedGroups = groups.filter(g => /^day/i.test(String(g.title || "").trim()));
@@ -3890,7 +4293,7 @@
     setPageHeadingHtml(title, stripSideSuffix(String(deptNode?.title || "").trim()));
     block.appendChild(title);
 
-    const blurbText = String(deptNode?.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const blurbText = getNodeBlurb(deptNode);
     const blurb = document.createElement("div");
     blurb.className = "dept-blurb";
     if (!blurbText.trim()){
@@ -4082,8 +4485,22 @@
       String(runtime?.venue || "").trim() || String(deptNode.title || "").trim()
     );
 
-    const b = String(deptNode.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    setReminderHeading(page.querySelector(".venue-kicker"), deptNode);
+    const b = getNodeBlurb(deptNode);
     page.querySelector("[data-venue-blurb]").textContent = b;
+
+    const chevron = page.querySelector("[data-venue-chevron]");
+    if (chevron){
+      const chevronUrl = String(CONFIG.assets.venueChevronUrl || "").trim();
+      if (chevronUrl){
+        chevron.removeAttribute("name");
+        chevron.setAttribute("src", chevronUrl);
+        chevron.style.display = "";
+      } else {
+        chevron.removeAttribute("src");
+        chevron.style.display = "none";
+      }
+    }
 
     page.classList.add("bg-dark");
     attachBgAutoContrast(page, img);
@@ -4233,7 +4650,7 @@
 
     setPageHeadingHtml(page.querySelector("[data-visual-title]"), deptNode.title);
 
-    const b = String(deptNode.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    const b = getNodeBlurb(deptNode).trim();
     const bEl = page.querySelector("[data-visual-blurb]");
     if (!b){
       bEl.classList.add("is-empty");
@@ -4307,16 +4724,16 @@
     page.classList.add("layout-exp");
 
     const isExperts = !!opts.isExperts;
-    const sectionRaw = String(deptNode?.business?.sectionRawTitle || findNearestSectionRawTitle(deptNode) || "").trim();
-    const side = getNodeSplitSide(deptNode) || getNodeSplitSide(findNearestSectionNode(deptNode)) || parseSideSuffix(sectionRaw) || "right";
+    const side = getNodeSplitSide(deptNode) || getNodeSplitSide(findNearestSectionNode(deptNode)) || "right";
     page.classList.add(side === "left" ? "img-left" : "img-right");
 
     if (isExperts) page.classList.add("layout-experts");
 
     setExpImage(page, getNodeImageUrl(deptNode, firstItemImageUrl(deptNode.rows || [])), "");
     setPageHeadingHtml(page.querySelector("[data-exp-title]"), stripSideSuffix(String(deptNode.title || "").trim()));
+    setReminderHeading(page.querySelector(".exp-reminder"), deptNode);
 
-    const b = String(deptNode.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const b = getNodeBlurb(deptNode);
     const bEl = page.querySelector("[data-exp-blurb]");
     if (!b.trim()){
       bEl.classList.add("is-empty");
@@ -4350,20 +4767,6 @@
     return page;
   }
 
-  function extractSummaryMode(title){
-    const s = String(title || "").trim();
-    const match = s.match(/\s*(?:-|\u2013|\u2014)\s*(none|dept|section)\s*$/i);
-    if (match){
-      const mode = match[1].toLowerCase();
-      if (["none", "dept", "section"].includes(mode)){
-        return mode;
-      }
-    }
-    // No suffix now means "project total only".
-    // Keep "-none" as a backwards-compatible alias.
-    return "none";
-  }
-
   function buildProjectSummaryRows(root, mode = "none"){
     const normalizedMode = (String(mode || "").toLowerCase().trim() || "none");
     
@@ -4391,8 +4794,8 @@
         for (let i = 0; i < rows.length; i++){
           if (rows[i]?.type !== "item") continue;
           if (!state.costed[i]) continue;
-          const p = rows[i].price || "";
-          const n = parsePriceToNumber(p);
+          const p = getLineRevenueText(rows[i]);
+          const n = parseMoneyToNumber(p);
           if (n != null){
             grandTotal += n;
             if (!grandSample) grandSample = p;
@@ -4409,7 +4812,7 @@
       label: "Project Total",
       total: grandTotal,
       sample: grandSample,
-      price: (grandTotal > 0) ? formatMoneyLike(grandTotal, grandSample) : ""
+      revenueText: (grandTotal > 0) ? formatMoneyLike(grandTotal, grandSample) : ""
     }];
   }
 
@@ -4447,8 +4850,8 @@
         for (let i = 0; i < rows.length; i++){
           if (rows[i]?.type !== "item") continue;
           if (!state.costed[i]) continue;
-          const p = rows[i].price || "";
-          const n = parsePriceToNumber(p);
+          const p = getLineRevenueText(rows[i]);
+          const n = parseMoneyToNumber(p);
           if (n != null){
             entry.total += n;
             entry.hasNumeric = true;
@@ -4472,7 +4875,7 @@
       rowsOut.push({
         type: "item",
         name: entry.name,
-        price: formatMoneyLike(entry.total, entry.sample || grandSample)
+        revenueText: formatMoneyLike(entry.total, entry.sample || grandSample)
       });
 
       grandTotal += entry.total;
@@ -4485,7 +4888,7 @@
       label: "Project Total",
       total: grandTotal,
       sample: grandSample,
-      price: (grandHas && grandTotal > 0) ? formatMoneyLike(grandTotal, grandSample) : ""
+      revenueText: (grandHas && grandTotal > 0) ? formatMoneyLike(grandTotal, grandSample) : ""
     });
 
     return rowsOut;
@@ -4525,8 +4928,8 @@
         for (let i = 0; i < rows.length; i++){
           if (rows[i]?.type !== "item") continue;
           if (!state.costed[i]) continue;
-          const p = rows[i].price || "";
-          const n = parsePriceToNumber(p);
+          const p = getLineRevenueText(rows[i]);
+          const n = parseMoneyToNumber(p);
           if (n != null){
             entry.total += n;
             entry.hasNumeric = true;
@@ -4551,7 +4954,7 @@
       rowsOut.push({
         type: "item",
         name: entry.name,
-        price: formatMoneyLike(entry.total, entry.sample || grandSample)
+        revenueText: formatMoneyLike(entry.total, entry.sample || grandSample)
       });
 
       grandTotal += entry.total;
@@ -4564,7 +4967,7 @@
       label: "Project Total",
       total: grandTotal,
       sample: grandSample,
-      price: (grandHas && grandTotal > 0) ? formatMoneyLike(grandTotal, grandSample) : ""
+      revenueText: (grandHas && grandTotal > 0) ? formatMoneyLike(grandTotal, grandSample) : ""
     });
 
     return rowsOut;
@@ -4592,17 +4995,8 @@
     const page = cloneTemplate("deptSplitTemplate");
     page.classList.add("layout-dept-split", "layout-summary");
 
-    const reminder = String(sectionTitle || findNearestSectionTitle(deptNode) || "").trim();
     const reminderEl = page.querySelector("[data-room-reminder]");
-    if (reminderEl){
-      if (reminder){
-        reminderEl.style.display = "";
-        reminderEl.textContent = formatReminderHeading(reminder);
-      } else {
-        reminderEl.textContent = "";
-        reminderEl.style.display = "none";
-      }
-    }
+    setReminderHeading(reminderEl, deptNode);
 
     setPageHeadingHtml(page.querySelector("[data-dept-title]"), stripSideSuffix(String(deptNode.title || "Project Total").trim()));
 
@@ -4611,7 +5005,7 @@
     const contentEl = page.querySelector(".content");
     if (headerBlurbEl){
       headerBlurbEl.className = "summary-blurb";
-      const blurbText = String(deptNode.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const blurbText = getNodeBlurb(deptNode);
       if (!blurbText.trim()){
         headerBlurbEl.classList.add("is-empty");
         headerBlurbEl.textContent = "";
@@ -4638,8 +5032,8 @@
 
     for (const r of rows){
       if (r.type === "project_total"){
-        // Only append project total row when there is a price to show
-        if (r.price){
+        // Only append project total row when there is revenue to show
+        if (r.revenueText){
           const tr = document.createElement("tr");
           tr.className = "subtotal-row project-total-row";
 
@@ -4649,14 +5043,14 @@
 
           const td2 = document.createElement("td");
           td2.className = "col-price";
-          td2.textContent = r.price || "";
+          td2.textContent = r.revenueText || "";
 
           tr.appendChild(td1);
           tr.appendChild(td2);
           tbody.appendChild(tr);
 
           if (discountPercent > 0){
-            const baseTotal = Number.isFinite(r.total) ? r.total : parsePriceToNumber(r.price || "");
+            const baseTotal = Number.isFinite(r.total) ? r.total : parseMoneyToNumber(r.revenueText || "");
             if (Number.isFinite(baseTotal) && baseTotal > 0){
               const discountedTotal = baseTotal * (1 - (discountPercent / 100));
               const trDiscount = document.createElement("tr");
@@ -4668,7 +5062,7 @@
 
               const tdDiscountValue = document.createElement("td");
               tdDiscountValue.className = "col-price";
-              tdDiscountValue.textContent = formatMoneyLike(discountedTotal, r.sample || r.price || "");
+              tdDiscountValue.textContent = formatMoneyLike(discountedTotal, r.sample || r.revenueText || "");
 
               trDiscount.appendChild(tdDiscountLabel);
               trDiscount.appendChild(tdDiscountValue);
@@ -4686,7 +5080,7 @@
 
         const td2 = document.createElement("td");
         td2.className = "col-price";
-        td2.textContent = r.price || "";
+        td2.textContent = r.revenueText || "";
 
         tr.appendChild(td1);
         tr.appendChild(td2);
@@ -4714,7 +5108,7 @@
     const titleText = String(deptNode?.meta?.title || deptNode.title || "").trim();
     setPageHeadingHtml(page.querySelector("[data-ty-title]"), titleText || opts.titleHtml || "Thank you");
 
-    const b = String(deptNode.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    const b = getNodeBlurb(deptNode).trim();
     const bEl = page.querySelector("[data-ty-blurb]");
     if (!b){
       bEl.classList.add("is-empty");
@@ -4756,7 +5150,6 @@
   function renderCriticalPath(input, maybeSectionTitle){
     const payload = (input && input.node) ? input : { node: input, sectionTitle: maybeSectionTitle };
     const deptNode = payload?.node || {};
-    const sectionTitle = payload?.sectionTitle || "";
     const rows = deptNode?.rows || [];
     const state = computeRowState(rows);
 
@@ -4776,17 +5169,8 @@
     const page = cloneTemplate("criticalPathTemplate");
     page.classList.add("layout-critical-path");
 
-    const reminder = String(sectionTitle || findNearestSectionTitle(deptNode) || "").trim();
     const remEl = page.querySelector("[data-cp-reminder]");
-    if (remEl){
-      if (reminder){
-        remEl.style.display = "";
-        remEl.textContent = formatReminderHeading(reminder);
-      } else {
-        remEl.textContent = "";
-        remEl.style.display = "none";
-      }
-    }
+    setReminderHeading(remEl, deptNode);
 
     setPageHeadingHtml(
       page.querySelector("[data-cp-title]"),
@@ -4840,14 +5224,9 @@
       }
     }
 
-    page.querySelector("[data-sus-reminder]").textContent = formatReminderHeading("A sustainable approach to events");
+    setReminderHeading(page.querySelector("[data-sus-reminder]"), deptNode);
     setPageHeadingHtml(page.querySelector("[data-sus-title]"), "TREATING THE PLANET WISELY");
-    page.querySelector("[data-sus-blurb]").textContent =
-`At the core of our ethos is an unwavering dedication to sustainability. We integrate environmental considerations into every aspect of our operations, from concept creation through to construction, delivery, and post-event disposal.
-
-We are proud to be a carbon neutral company, dedicated to becoming Net Zero by 2030.
-
-Continuously redefining our environmental benchmarks, we hold ourselves accountable for our actions. Each and every member of the Wise team is dedicated to delivering lasting experiences, that do not have a lasting impact on our planet.`;
+    page.querySelector("[data-sus-blurb]").textContent = getNodeBlurb(deptNode);
 
     return page;
   }
@@ -4872,10 +5251,7 @@ Continuously redefining our environmental benchmarks, we hold ourselves accounta
       }
     }
 
-    page.querySelector("[data-about-blurb]").textContent =
-`Wise has been crafting exceptional bespoke events in unique spaces for over three decades. As an employee-owned company, our people are at the heart of everything we do, cultivating a culture driven by passion and an unwavering commitment to excellence.
-
-Our specialist team of wedding experts are dedicated to delivering your vision with the perfect balance of listening ears, professional guidance, boundless creativity, and flawless execution. Renowned for our proactive approach and personable service, we take pride in transforming the seemingly impossible into an extraordinary reality.`;
+    page.querySelector("[data-about-blurb]").textContent = getNodeBlurb(deptNode);
 
     return page;
   }
@@ -4940,7 +5316,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     }
   }
 
-  function buildEventOverviewNoImgBatchPage(dayBatch, pageIndex, overviewBlurb){
+  function buildEventOverviewNoImgBatchPage(dayBatch, pageIndex, overviewBlurb, overviewNode){
     const page = cloneTemplate("eventOverviewTemplate");
     page.classList.add("layout-overview", "overview-noimg", "overview-multi");
     setHalfImage(page, "", "");
@@ -4979,7 +5355,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
         const kicker = document.createElement("div");
         kicker.className = "overview-batch-kicker";
-        kicker.textContent = formatReminderHeading("The Brief");
+        setReminderHeading(kicker, overviewNode);
         col.appendChild(kicker);
 
         const overviewBlurb = document.createElement("div");
@@ -5000,7 +5376,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
       const dayBlurb = document.createElement("div");
       dayBlurb.className = "overview-day-blurb";
-      const dayBlurbText = String(dayNode?.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+      const dayBlurbText = getNodeBlurb(dayNode).trim();
       if (!dayBlurbText){
         dayBlurb.classList.add("is-empty");
         dayBlurb.textContent = "";
@@ -5049,10 +5425,10 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
   });
 
   /* ============================================================
-     V2 WORKFLOW KERNEL
+     V4 WORKFLOW KERNEL
      Registry-driven boundaries for stages, rules, layouts, and post-render steps.
      Add, replace, or remove behaviour by registering entries below or through
-     window.HireHopV2 after load.
+     window.HireHopV4 after load.
      ============================================================ */
 
   const SECTION_KIND_TO_LAYOUT = Object.freeze({
@@ -5201,8 +5577,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
   function resolveSectionLayoutId(node){
     const nodeMeta = node?.meta || {};
     if (nodeMeta.layout) return nodeMeta.layout;
-    const def = SECTION_PAGE[node?.title] || SECTION_PAGE.__default__;
-    return SECTION_KIND_TO_LAYOUT[def.kind] || "section-cover";
+    throw new Error(`${node?.title || "Unnamed section"}: Page Template did not resolve to a section layout.`);
   }
 
   function resolveDepartmentLayoutId(node, sectionTitle){
@@ -5211,37 +5586,30 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     const requestedMode = getRequestedDeptLayoutMode(node);
     const explicitLayout = String(nodeMeta.layout || "").trim();
     if (explicitLayout === "dept-table"){
-      if (isLabourDepartmentNode(node) && requestedMode === "columns") return "labour-days";
+      if (isLabourDepartmentNode(node) && (requestedMode === "columns" || (!requestedMode && business.isLabourLayout))) return "labour-days";
       if (requestedMode === "no-image") return "dept-stack";
       return "dept-table";
     }
     if (explicitLayout) return explicitLayout;
-    if (business.isLabourLayout) return "labour-days";
-    const layoutKind = business.layoutKind || resolveDeptKind(node, sectionTitle);
-    if (isFPVisualDeptTitle(node?.title || "")) return "fpvisual";
-    return DEPT_KIND_TO_LAYOUT[layoutKind] || "dept-table";
+    throw new Error(`${node?.title || "Unnamed page"}: Page Template did not resolve to a department layout.`);
   }
   function buildNodeMeta(node){
-    const directives = (node && typeof node.directives === "object") ? node.directives : {};
     const storageMeta = getNodeSystemMeta(node);
     const metaLayout = getMetaLayoutId(storageMeta);
-    const titleVariant = extractInlineLayoutVariant(node);
-    const displayTitle = String(titleVariant.title || node?.title || "").trim();
-    const resolvedLayout = String(metaLayout || directives.layout || directives["layout-id"] || "").trim();
+    const displayTitle = String(node?.title || "").trim();
+    const resolvedLayout = String(metaLayout || "").trim();
     const storedVariant = toToken(metaString(storageMeta, ["layoutVariant", "layout_variant", "layout-variant", "variant", "style"]));
-    const resolvedVariant = resolvedLayout === "thankyou" && storedVariant === "alt"
-      ? "alt"
-      : String(directives.variant || directives.style || directives["layout-variant"] || titleVariant.variant || "").trim();
+    const resolvedVariant = storedVariant === "alt" ? "alt" : "";
     return {
-      directives,
+      directives: {},
       storage: clonePlainValue(storageMeta || {}),
       rawTitle: String(node?.rawTitle || node?.title || "").trim(),
       title: displayTitle,
       slug: toToken(String(displayTitle || "").replace(/<[^>]*>/g, " ")),
       layout: resolvedLayout,
       variant: resolvedVariant,
-      theme: String(directives.theme || directives["layout-theme"] || "").trim(),
-      pageClass: String(directives.pageclass || directives["page-class"] || directives.class || "").trim()
+      theme: "",
+      pageClass: ""
     };
   }
   function clonePlainValue(value){
@@ -5645,6 +6013,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
         altName: String(row.altName || "").trim(),
         warehouseNotes: this.normaliseMultiline(row.warehouseNotes),
         additional: this.normaliseMultiline(additionalInfo.baseText),
+        blurb: this.normaliseMultiline(row.blurb),
         technical: String(technicalInfo.baseText || "").trim(),
         metaText: String(metaInfo.baseText || "").trim(),
         systemMeta,
@@ -5958,6 +6327,18 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
       labourGroups: labour.groups
     };
   }
+  function buildProposedTimingsLayoutData(source){
+    const node = buildPreparedDeptNode(source.node);
+    const timings = prepareLabourDayGroups(node.rows || []);
+    node.prepared = timings.prepared;
+
+    return {
+      runtime: buildRuntimeSnapshot(source.root),
+      sectionTitle: String(source.sectionTitle || "").trim(),
+      node,
+      timingGroups: timings.groups
+    };
+  }
   function buildEventOverviewLayoutData(source){
     const sectionNode = cloneDocumentNode(source.node);
     const overviewDays = (source.overviewDays || []).map(node => {
@@ -5970,7 +6351,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
       runtime: buildRuntimeSnapshot(source.root),
       sectionTitle: String(source.sectionTitle || "").trim(),
       node: sectionNode,
-      overviewBlurb: String(sectionNode?.additional || "").trim(),
+      overviewBlurb: getNodeBlurb(sectionNode).trim(),
       overviewDays
     };
   }
@@ -6104,6 +6485,24 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
       ...(overrides || {})
     };
   }
+  function decorateProposedTimingsImagePage(page){
+    if (!page || page.classList.contains("layout-proposed-timings-image")) return;
+    page.classList.add("layout-proposed-timings-image");
+
+    const imageTitle = page.querySelector("[data-dept-title]");
+    if (imageTitle){
+      imageTitle.classList.add("proposed-timings-image-title");
+      page.appendChild(imageTitle);
+    }
+
+    const tableWrap = page.querySelector(".content > .table-wrap");
+    if (tableWrap){
+      const tableHeading = document.createElement("div");
+      tableHeading.className = "proposed-timings-table-heading";
+      tableHeading.textContent = "Proposed Timings";
+      tableWrap.parentNode.insertBefore(tableHeading, tableWrap);
+    }
+  }
   function createDeptTableShell(data){
     const deptNode = data?.node || {};
     const page = cloneTemplate("deptSplitTemplate");
@@ -6118,16 +6517,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     }
 
     const reminderEl = page.querySelector("[data-room-reminder]");
-    if (reminderEl){
-      const st = String(data?.sectionTitle || "").trim();
-      if (st){
-        reminderEl.style.display = "";
-        reminderEl.textContent = formatReminderHeading(st);
-      } else {
-        reminderEl.textContent = "";
-        reminderEl.style.display = "none";
-      }
-    }
+    setReminderHeading(reminderEl, deptNode);
 
     setPageHeadingHtml(
       page.querySelector("[data-dept-title]"),
@@ -6136,7 +6526,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
     const blurbText = data?.showBlurb === false
       ? ""
-      : String(deptNode.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      : getNodeBlurb(deptNode);
     const blurbEl = page.querySelector("[data-dept-blurb]");
     if (blurbEl){
       if (!blurbText.trim()){
@@ -6146,6 +6536,10 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
         blurbEl.classList.remove("is-empty");
         blurbEl.textContent = blurbText;
       }
+    }
+
+    if (halfUrl && isProposedTimingsNode(deptNode)){
+      decorateProposedTimingsImagePage(page);
     }
 
     return page;
@@ -6177,6 +6571,25 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     const optionalSubtotalInfo = prepared.optionalSubtotalInfo;
     const halfUrl = String(prepared.headingImageUrl || getDeptHeadingImageUrl(deptNode) || "").trim();
     const models = [];
+
+    // CreatePage=Yes is authoritative. A configured table page must still
+    // render when the heading does not yet contain any child line items.
+    if (!preparedRows.length){
+      const sectionRawTitle = String(prepared.sectionRawTitle || deptNode?.business?.sectionRawTitle || findNearestSectionRawTitle(deptNode) || "").trim();
+      const splitSide = halfUrl ? pickSplitSide(deptNode, findNearestSectionNode(deptNode), sectionRawTitle, data?.sectionTitle) : "";
+      const model = createLayoutModelData(data, {
+        node: cloneDocumentNode(deptNode),
+        rows: [],
+        subtotalRows: [],
+        halfUrl,
+        splitSide,
+        pageTitle: stripSideSuffix(String(deptNode.title || "").trim()),
+        showBlurb: true,
+        pageIndex: 1
+      });
+      model.node.rows = [];
+      return [model];
+    }
 
     let cursor = 0;
     let pageIndex = 0;
@@ -6270,16 +6683,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
     setHalfImage(page, "", "");
     const reminderEl = page.querySelector("[data-room-reminder]");
-    if (reminderEl){
-      const st = String(data?.sectionTitle || "").trim();
-      if (st){
-        reminderEl.style.display = "";
-        reminderEl.textContent = formatReminderHeading(st);
-      } else {
-        reminderEl.textContent = "";
-        reminderEl.style.display = "none";
-      }
-    }
+    setReminderHeading(reminderEl, safeNodes[0]);
 
     const content = page.querySelector(".content");
     content.innerHTML = "";
@@ -6294,9 +6698,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
       const reminder = document.createElement("div");
       reminder.className = "room-reminder";
-      const st = String(data?.sectionTitle || "").trim();
-      if (st) reminder.textContent = formatReminderHeading(st);
-      else reminder.style.display = "none";
+      setReminderHeading(reminder, node);
       left.appendChild(reminder);
 
       const title = document.createElement("div");
@@ -6304,7 +6706,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
       setPageHeadingHtml(title, stripSideSuffix(String(node?.title || "").trim()));
       left.appendChild(title);
 
-      const blurbText = String(node?.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      const blurbText = getNodeBlurb(node);
       const blurb = document.createElement("div");
       blurb.className = "dept-blurb";
       if (!blurbText.trim()){
@@ -6367,15 +6769,18 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
     const grid = document.createElement("div");
     grid.className = "labour-days-grid";
+    const columnCount = getRequestedColumnCount(data?.node);
+    const gridColumnCount = columnCount === 2 ? 3 : columnCount;
+    grid.classList.add(`columns-${columnCount}`);
+    if (columnCount === 2) grid.classList.add("meta-plus-two-tables");
+    grid.style.gridTemplateColumns = `repeat(${gridColumnCount}, minmax(0, 1fr))`;
 
     const meta = document.createElement("div");
     meta.className = "labour-meta";
 
     const reminder = document.createElement("div");
     reminder.className = "room-reminder";
-    const st = String(data?.sectionTitle || "").trim();
-    if (st) reminder.textContent = formatReminderHeading(st);
-    else reminder.style.display = "none";
+    setReminderHeading(reminder, data?.node);
     meta.appendChild(reminder);
 
     const title = document.createElement("div");
@@ -6383,7 +6788,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     setPageHeadingHtml(title, data?.pageTitle || stripSideSuffix(String(data?.node?.title || "").trim()));
     meta.appendChild(title);
 
-    const blurbText = String(data?.node?.additional || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    const blurbText = getNodeBlurb(data?.node);
     const blurb = document.createElement("div");
     blurb.className = "dept-blurb";
     if (!blurbText.trim()){
@@ -6418,9 +6823,11 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
         tbody.appendChild(buildItemRow(itemRow));
       }
 
-      const wantSubtotal = group.costedCount > 0 && (group.visibleCount > 1 || group.hiddenCount > 0);
+      const wantSubtotal = group.showSubtotal !== false &&
+        group.costedCount > 0 &&
+        (group.visibleCount > 1 || group.hiddenCount > 0);
       if (wantSubtotal) tbody.appendChild(buildDeptSubtotalRow(group));
-      if (group.optionalHasNumeric && group.optionalTotal > 0){
+      if (group.showSubtotal !== false && group.optionalHasNumeric && group.optionalTotal > 0){
         tbody.appendChild(buildDeptSubtotalRow(
           { total: group.optionalTotal, hasNumeric: group.optionalHasNumeric, sample: group.optionalSample },
           { label: "Optional subtotal", optional: true }
@@ -6431,11 +6838,11 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
       tableWrap.appendChild(table);
       col.appendChild(tableWrap);
 
-      if (index === 0) meta.appendChild(col);
+      if (columnCount !== 2 && index === 0) meta.appendChild(col);
       else grid.appendChild(col);
     });
 
-    while (grid.children.length < 3){
+    while (grid.children.length < gridColumnCount){
       const filler = document.createElement("div");
       filler.className = "labour-day-col";
       grid.appendChild(filler);
@@ -6454,25 +6861,271 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
         .map(model => createLayoutModelData(model, { mode: "dept-table-fallback" }));
     }
 
+    const columnCount = getRequestedColumnCount(node);
     const models = [];
-    for (let index = 0; index < groups.length; index += 3){
-      const pageIndex = models.length;
-      const model = createLayoutModelData(data, {
-        node: cloneDocumentNode(node),
-        labourGroups: groups.slice(index, index + 3),
-        pageTitle: titleWithContinuedSuffix(stripSideSuffix(String(node.title || "").trim()), pageIndex),
-        pageIndex: pageIndex + 1
-      });
+    let groupIndex = 0;
+    let itemIndex = 0;
 
-      if (measurePageOverflow(renderLabourDayPageModel(model), ".content")){
+    while (groupIndex < groups.length){
+      const pageGroups = [];
+      let stopPage = false;
+
+      while (!stopPage && pageGroups.length < columnCount && groupIndex < groups.length){
+        const sourceGroup = groups[groupIndex];
+        const sourceItems = sourceGroup.items || [];
+        const isContinuation = itemIndex > 0;
+        const chunk = {
+          ...clonePlainValue(sourceGroup),
+          title: titleWithContinuedSuffix(String(sourceGroup.title || "").trim(), isContinuation ? 1 : 0),
+          blurb: isContinuation ? "" : String(sourceGroup.blurb || "").trim(),
+          items: [],
+          showSubtotal: false
+        };
+        pageGroups.push(chunk);
+
+        while (itemIndex < sourceItems.length){
+          chunk.items.push(clonePlainValue(sourceItems[itemIndex]));
+          chunk.showSubtotal = itemIndex + 1 >= sourceItems.length;
+          const candidate = createLayoutModelData(data, {
+            node: cloneDocumentNode(node),
+            labourGroups: pageGroups,
+            pageTitle: titleWithContinuedSuffix(stripSideSuffix(String(node.title || "").trim()), models.length),
+            pageIndex: models.length + 1
+          });
+
+          if (measurePageOverflow(renderLabourDayPageModel(candidate), ".content")){
+            chunk.items.pop();
+            chunk.showSubtotal = false;
+            if (!chunk.items.length){
+              if (pageGroups.length > 1){
+                pageGroups.pop();
+              } else {
+                chunk.items.push(clonePlainValue(sourceItems[itemIndex]));
+                itemIndex++;
+                chunk.showSubtotal = itemIndex >= sourceItems.length;
+              }
+            }
+            stopPage = true;
+            break;
+          }
+          itemIndex++;
+        }
+
+        if (!chunk.items.length) break;
+        if (itemIndex >= sourceItems.length){
+          chunk.showSubtotal = true;
+          groupIndex++;
+          itemIndex = 0;
+        }
+      }
+
+      if (!pageGroups.length){
         return createDeptTablePageModels(data)
           .map(model => createLayoutModelData(model, { mode: "dept-table-fallback" }));
       }
 
-      models.push(model);
+      models.push(createLayoutModelData(data, {
+        node: cloneDocumentNode(node),
+        labourGroups: pageGroups,
+        pageTitle: titleWithContinuedSuffix(stripSideSuffix(String(node.title || "").trim()), models.length),
+        pageIndex: models.length + 1
+      }));
     }
 
     return models;
+  }
+  function renderProposedTimingsColumnsPageModel(data){
+    const page = cloneTemplate("deptSplitTemplate");
+    page.classList.add("layout-dept-split", "layout-labour-days", "layout-proposed-timings-columns");
+    setHalfImage(page, "", "");
+
+    const content = page.querySelector(".content");
+    content.innerHTML = "";
+
+    const columnCount = Math.max(1, Math.min(3, Number(data?.columnCount || getRequestedColumnCount(data?.node))));
+    const grid = document.createElement("div");
+    grid.className = `labour-days-grid columns-${columnCount}`;
+    grid.style.gridTemplateColumns = `repeat(${columnCount}, minmax(0, 1fr))`;
+
+    const meta = document.createElement("div");
+    meta.className = "labour-meta";
+
+    const reminder = document.createElement("div");
+    reminder.className = "room-reminder";
+    setReminderHeading(reminder, data?.node);
+    meta.appendChild(reminder);
+
+    const title = document.createElement("div");
+    title.className = "dept-title";
+    setPageHeadingHtml(title, data?.pageTitle || stripSideSuffix(String(data?.node?.title || "").trim()));
+    meta.appendChild(title);
+
+    const pageBlurbText = data?.showBlurb === false ? "" : getNodeBlurb(data?.node);
+    const pageBlurb = document.createElement("div");
+    pageBlurb.className = "dept-blurb";
+    if (!pageBlurbText.trim()){
+      pageBlurb.classList.add("is-empty");
+      pageBlurb.textContent = "";
+    } else {
+      pageBlurb.textContent = pageBlurbText;
+    }
+    meta.appendChild(pageBlurb);
+
+    const logo = page.querySelector(".logo-slot");
+    if (logo) meta.insertBefore(logo, reminder);
+    grid.appendChild(meta);
+
+    (data?.timingGroups || []).forEach((group, index) => {
+      const col = document.createElement("div");
+      col.className = "labour-day-col timing-day-col";
+
+      const dayTitle = document.createElement("div");
+      dayTitle.className = "labour-day-title timing-day-title";
+      setPageHeadingHtml(dayTitle, String(group?.title || "").trim());
+      col.appendChild(dayTitle);
+
+      const dayBlurbText = String(group?.blurb || "").trim();
+      const dayBlurb = document.createElement("div");
+      dayBlurb.className = "timing-day-blurb";
+      if (!dayBlurbText){
+        dayBlurb.classList.add("is-empty");
+        dayBlurb.textContent = "";
+      } else {
+        dayBlurb.textContent = dayBlurbText;
+      }
+      col.appendChild(dayBlurb);
+
+      const tableWrap = document.createElement("div");
+      tableWrap.className = "table-wrap";
+      const table = document.createElement("table");
+      table.className = "item_grid";
+      const tbody = document.createElement("tbody");
+      for (const itemRow of (group?.items || [])){
+        tbody.appendChild(buildItemRow(itemRow));
+      }
+      table.appendChild(tbody);
+      tableWrap.appendChild(table);
+      col.appendChild(tableWrap);
+
+      if (index === 0) meta.appendChild(col);
+      else grid.appendChild(col);
+    });
+
+    while (grid.children.length < columnCount){
+      const filler = document.createElement("div");
+      filler.className = "labour-day-col timing-day-col is-empty";
+      grid.appendChild(filler);
+    }
+
+    content.appendChild(grid);
+    return page;
+  }
+  function createProposedTimingsColumnModel(data, timingGroups, pageIndex, columnCount){
+    return createLayoutModelData(data, {
+      node: cloneDocumentNode(data?.node),
+      timingLayout: "columns",
+      timingGroups: timingGroups.map(group => clonePlainValue(group)),
+      columnCount,
+      pageTitle: titleWithContinuedSuffix(stripSideSuffix(String(data?.node?.title || "").trim()), pageIndex),
+      showBlurb: pageIndex === 0,
+      pageIndex: pageIndex + 1
+    });
+  }
+  function createProposedTimingsColumnPageModels(data){
+    const sourceGroups = Array.isArray(data?.timingGroups) && data.timingGroups.length
+      ? data.timingGroups.map(group => clonePlainValue(group))
+      : prepareLabourDayGroups(data?.node?.rows || []).groups;
+    if (!sourceGroups.length){
+      return createDeptTablePageModels(data).map(model => createLayoutModelData(model, { timingLayout: "table" }));
+    }
+
+    const requestedMode = getRequestedDeptLayoutMode(data?.node);
+    const columnCount = requestedMode === "no-image" ? 1 : getRequestedColumnCount(data?.node);
+    const models = [];
+    let groupIndex = 0;
+    let itemIndex = 0;
+
+    while (groupIndex < sourceGroups.length){
+      const pageGroups = [];
+      let stopPage = false;
+
+      while (!stopPage && pageGroups.length < columnCount && groupIndex < sourceGroups.length){
+        const sourceGroup = sourceGroups[groupIndex];
+        const isContinuation = itemIndex > 0;
+        const chunk = {
+          ...clonePlainValue(sourceGroup),
+          title: titleWithContinuedSuffix(String(sourceGroup?.title || "").trim(), isContinuation ? 1 : 0),
+          blurb: isContinuation ? "" : String(sourceGroup?.blurb || "").trim(),
+          items: []
+        };
+
+        while (itemIndex < (sourceGroup.items || []).length){
+          chunk.items.push(clonePlainValue(sourceGroup.items[itemIndex]));
+          const candidate = createProposedTimingsColumnModel(
+            data,
+            [...pageGroups, chunk],
+            models.length,
+            columnCount
+          );
+
+          if (measurePageOverflow(renderProposedTimingsColumnsPageModel(candidate), ".content")){
+            chunk.items.pop();
+            if (!chunk.items.length){
+              if (pageGroups.length){
+                stopPage = true;
+                break;
+              }
+              chunk.items.push(clonePlainValue(sourceGroup.items[itemIndex]));
+              itemIndex++;
+            }
+            stopPage = true;
+            break;
+          }
+          itemIndex++;
+        }
+
+        if (chunk.items.length){
+          pageGroups.push(chunk);
+        }
+        if (stopPage) break;
+
+        if (itemIndex >= (sourceGroup.items || []).length){
+          groupIndex++;
+          itemIndex = 0;
+        }
+      }
+
+      if (!pageGroups.length){
+        return createDeptTablePageModels(data).map(model => createLayoutModelData(model, { timingLayout: "table" }));
+      }
+
+      models.push(createProposedTimingsColumnModel(data, pageGroups, models.length, columnCount));
+
+      const activeGroup = sourceGroups[groupIndex];
+      if (activeGroup && itemIndex >= (activeGroup.items || []).length){
+        groupIndex++;
+        itemIndex = 0;
+      }
+    }
+
+    return models;
+  }
+  function createProposedTimingsPageModels(data){
+    const requestedMode = getRequestedDeptLayoutMode(data?.node);
+    if (requestedMode === "columns" || requestedMode === "no-image"){
+      return createProposedTimingsColumnPageModels(data);
+    }
+    return createDeptTablePageModels(data).map(model => createLayoutModelData(model, { timingLayout: "table" }));
+  }
+  function renderProposedTimingsPageModel(data){
+    if (data?.timingLayout === "columns"){
+      return renderProposedTimingsColumnsPageModel(data);
+    }
+    const page = renderDeptTablePageModel(data);
+    if (String(data?.halfUrl || "").trim()){
+      decorateProposedTimingsImagePage(page);
+    }
+    return page;
   }
   function createEventOverviewDayShell(data){
     const page = cloneTemplate("eventOverviewTemplate");
@@ -6487,6 +7140,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     }
 
     setPageHeadingHtml(page.querySelector("[data-overview-title]"), "Event Overview & Schedule");
+    setReminderHeading(page.querySelector(".overview-kicker"), data?.node);
 
     const bEl = page.querySelector("[data-overview-blurb]");
     const overviewBlurb = String(data?.overviewBlurb || "").trim();
@@ -6579,13 +7233,14 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     return buildEventOverviewNoImgBatchPage(
       data?.overviewDays || [],
       Math.max(0, Number(data?.pageIndex || 1) - 1),
-      data?.overviewBlurb || ""
+      data?.overviewBlurb || "",
+      data?.node
     );
   }
   function createEventOverviewPageModels(data){
     const sectionNode = data?.node || {};
     const days = Array.isArray(data?.overviewDays) ? data.overviewDays : [];
-    const overviewBlurb = String(data?.overviewBlurb || sectionNode?.additional || "").trim();
+    const overviewBlurb = String(data?.overviewBlurb || getNodeBlurb(sectionNode)).trim();
     const models = [];
     let pendingNoImg = [];
 
@@ -6607,7 +7262,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
       const imgUrl = String(dayNode?.dayImageUrl || getMetaImageUrl(getNodeSystemMeta(dayNode)) || normaliseDeptHeadingImageUrl(dayNode?.technical) || "").trim();
       if (imgUrl){
         flushPending();
-        const dayOverviewBlurb = String(dayNode?.additional || "").trim();
+        const dayOverviewBlurb = getNodeBlurb(dayNode).trim();
         models.push(...createEventOverviewDayPageModels(data, dayNode, imgUrl, dayOverviewBlurb));
       } else {
         pendingNoImg.push(dayNode);
@@ -6650,6 +7305,14 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     buildData(context){ return buildDeptTableLayoutData(context.source); },
     createPageModels(data){ return createDeptTablePageModels(data); },
     renderPage(data){ return renderDeptTablePageModel(data); }
+  }));
+  LayoutRegistry.register(createSinglePageModelLayout({
+    id: "proposed-timings",
+    ownsMeasurement: true,
+    boundaryNotes: ["Image variants use measured table continuation; no-image and 1/2/3-column variants use measured day-group packing."],
+    buildData(context){ return buildProposedTimingsLayoutData(context.source); },
+    createPageModels(data){ return createProposedTimingsPageModels(data); },
+    renderPage(data){ return renderProposedTimingsPageModel(data); }
   }));
   LayoutRegistry.register(createSinglePageModelLayout({
     id: "labour-days",
@@ -7360,6 +8023,10 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     id: "reset-runtime",
     run(state){
       SPLIT_SIDE_COUNTER = 0;
+      CONFIGURATION_WARNINGS.length = 0;
+      window.HireHopV4LastWarnings = [];
+      const warningPanel = document.getElementById("hirehop-v4-config-warning");
+      if (warningPanel) warningPanel.remove();
       return state;
     }
   });
@@ -7582,6 +8249,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     recommendedConversionOrder: Object.freeze([
       "event-overview",
       "dept-table",
+      "proposed-timings",
       "dept-stack",
       "labour-days",
       "pm",
@@ -7615,6 +8283,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
         { id: "renderSectionCover", layouts: ["section-cover"], fn: renderSectionCover },
         { id: "renderVenueHero", layouts: ["venue-hero"], fn: renderVenueHero },
         { id: "renderDeptTablePageModel", layouts: ["dept-table"], fn: renderDeptTablePageModel },
+        { id: "renderProposedTimingsPageModel", layouts: ["proposed-timings"], fn: renderProposedTimingsPageModel },
         { id: "renderDeptStackPageModel", layouts: ["dept-stack"], fn: renderDeptStackPageModel },
         { id: "renderLabourDayPageModel", layouts: ["labour-days"], fn: renderLabourDayPageModel },
         { id: "renderProjectManagerPageModel", layouts: ["pm"], fn: renderProjectManagerPageModel },
@@ -7788,11 +8457,24 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
   });
 
   const StrictWorkflow = Object.freeze({
-    legacyDirectiveSyntax: [
-      "$dept[layout=thankyou,variant=minimal,theme=light]: Thank you",
-      "Dept: Thank you :: variant=minimal, theme=light",
-      "Dept: Thank you - Alt"
-    ],
+    financialFieldContract: Object.freeze({
+      costOfSales: "items:price is HireHop's native line Total and remains the CoS source",
+      revenue: "items:_Revenue is the sole line-revenue source; native Total is never a revenue fallback"
+    }),
+    headingFieldContract: Object.freeze({
+      createPage: "items:_CreatePage is the sole page/group switch",
+      template: "items:_PageTemplate must contain exactly one recognised numeric value",
+      variant: "items:_PageVariant must contain exactly one recognised numeric value; unsupported template/variant pairings fall back to Auto with a non-printing preview warning",
+      include: "items:_Include controls proposal rendering; CreatePage=No grouping descendants retain financials according to items:_Additional",
+      projectTotal: "items:_Additional controls financial inclusion for rendered pages and plain grouping scopes",
+      pageHeading: "items:_PageHeading overrides the client-facing title when populated",
+      reminderHeading: "items:_Reminder supplies the exact reminder or kicker text only where the selected layout already has that component",
+      blurb: "items:_Blurb is the sole page/table-heading blurb source; native items:additional remains item-level content",
+      imageUrl: "items:_ImageURL is the sole heading image source",
+      imageSide: "items:_ImageSide is deactivated and unused; items:_PageVariant selects image position",
+      projectTotalGrouping: "items:_Grouping selects Project Total grouping: 1=None, 2=Department, 3=Area",
+      noLegacyFallbacks: true
+    }),
     layoutContract: "active layout and variant definitions must run buildData(source) => createPageModels(data) => renderPage(model); paginate(data) is retained only as an extension escape hatch, not for first-party layouts",
     plannerContract: "planner rules emit source context only; emit() resolves the active layout/variant definition and converts it into DOM-free page specs",
     pageSpecContract: "page specs are pure data objects with layout/variant/theme/source metadata and must not contain DOM references or functions",
@@ -7827,7 +8509,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
     })
   });
 
-  window.HireHopV2 = {
+  window.HireHopV4 = {
     CONFIG,
     StageCatalog,
     StrictWorkflow,
@@ -7856,6 +8538,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 </script>
 </head>
 <body><!-- HireHop field bank -->
+<div style="display:none"><span name="project:_Client">{{project._Client}}</span></div>
 <div id="hh" style="display:block"><span id="number" name="project:_Job_Number">{{project._Job_Number}}</span> <span id="doc_type">Quote</span> <span name="job:_Job_Number">{{job._Job_Number}}</span> <span name="job:number">{{job.number}}</span> <span name="project:number">{{project.number}}</span> <span name="job:name">{{job.name}}</span> <span name="job:client">{{job.client}}</span> <span name="job:company">{{job.company}}</span> <span name="job:venue">{{job.venue}}</span> <span name="project:_Job_Number">{{project._Job_Number}}</span> <span name="project:client">{{project.client}}</span> <span name="project:name">{{project.name}}</span> <span name="project:company">{{project.company}}</span> <span name="project:venue">{{project.venue}}</span> <span name="job:contact">{{job.contact}}</span> <span name="job:contact_name">{{job.contact_name}}</span> <span name="job:client_name">{{job.client_name}}</span> <span name="job:contact_telephone">{{job.contact_telephone}}</span> <span name="job:contact_tel">{{job.contact_tel}}</span> <span name="job:contact_phone">{{job.contact_phone}}</span> <span name="job:contact_mobile">{{job.contact_mobile}}</span> <span name="job:client_telephone">{{job.client_telephone}}</span> <span name="job:client_tel">{{job.client_tel}}</span> <span name="job:client_phone">{{job.client_phone}}</span> <span name="job:client_mobile">{{job.client_mobile}}</span> <span name="job:telephone">{{job.telephone}}</span> <span name="job:tel">{{job.tel}}</span> <span name="job:phone">{{job.phone}}</span> <span name="job:mobile">{{job.mobile}}</span> <span name="job:contact_email">{{job.contact_email}}</span> <span name="job:client_email">{{job.client_email}}</span> <span name="job:email">{{job.email}}</span> <span name="project:contact">{{project.contact}}</span> <span name="project:contact_name">{{project.contact_name}}</span> <span name="project:client_name">{{project.client_name}}</span> <span name="project:contact_telephone">{{project.contact_telephone}}</span> <span name="project:contact_tel">{{project.contact_tel}}</span> <span name="project:contact_phone">{{project.contact_phone}}</span> <span name="project:contact_mobile">{{project.contact_mobile}}</span> <span name="project:client_telephone">{{project.client_telephone}}</span> <span name="project:client_tel">{{project.client_tel}}</span> <span name="project:client_phone">{{project.client_phone}}</span> <span name="project:client_mobile">{{project.client_mobile}}</span> <span name="project:telephone">{{project.telephone}}</span> <span name="project:tel">{{project.tel}}</span> <span name="project:phone">{{project.phone}}</span> <span name="project:mobile">{{project.mobile}}</span> <span name="project:contact_email">{{project.contact_email}}</span> <span name="project:client_email">{{project.client_email}}</span> <span name="project:email">{{project.email}}</span> <span name="project:_PM">{{project._PM}}</span> <span name="job:user2">{{job.user2}}</span> <span name="job:user2_telephone">{{job.user2_telephone}}</span> <span name="job:user2_tel">{{job.user2_tel}}</span> <span name="job:user2_phone">{{job.user2_phone}}</span> <span name="job:user2_mobile">{{job.user2_mobile}}</span> <span name="job:user2_email">{{job.user2_email}}</span> <span name="job:_Version">{{job._Version}}</span> <span name="job:_version">{{job._version}}</span> <span name="job:version">{{job.version}}</span> <span name="project:_version">{{project._version}}</span> <span name="project:version">{{project.version}}</span> <span name="general:date">{{general.date}}</span> <span name="job:date">{{job.date}}</span> <span name="project:date">{{project.date}}</span> <span name="job:proposal_date">{{job.proposal_date}}</span> <span name="project:proposal_date">{{project.proposal_date}}</span> <span name="job:quote_date">{{job.quote_date}}</span> <span name="project:quote_date">{{project.quote_date}}</span> <span name="job:job_start">{{job.job_start}}</span> <span name="job:event_start">{{job.event_start}}</span> <span name="project:event_start">{{project.event_start}}</span> <span name="job:_Discount">{{job._Discount}}</span> <span name="job:proposal_discount">{{job.proposal_discount}}</span> <span name="job:discount_percent">{{job.discount_percent}}</span> <span name="job:discount">{{job.discount}}</span> <span name="user:name">{{user.name}}</span> <span name="user:telephone">{{user.telephone}}</span> <span name="user:tel">{{user.tel}}</span> <span name="user:phone">{{user.phone}}</span> <span name="user:mobile">{{user.mobile}}</span> <span name="user:email">{{user.email}}</span></div>
 <!-- Templates -->
 
@@ -7868,7 +8551,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 <div class="hero-center"><img alt="Wise Productions" class="hero-logo" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQCPkGxljndoS70gzaL4YTmQAf7Rfl_V28sGYzgUEyvnBg4" /></div>
 
 <div class="hero-meta">
-<div class="hero-line"><span class="hero-label">CLIENT:</span> <span name="job:company">{{job.company}}</span></div>
+<div class="hero-line"><span class="hero-label">CLIENT:</span> <span name="project:_Client">{{project._Client}}</span></div>
 
 <div class="hero-line"><span class="hero-label">VENUE:</span> <span name="job:venue">{{job.venue}}</span></div>
 
@@ -8146,6 +8829,8 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 
 <div class="bg-overlay">&nbsp;</div>
 
+<img alt="" class="venue-chevron" data-venue-chevron="" />
+
 <div class="logo-slot"><img alt="Wise Productions" class="img_logo" name="user:logo_url" src="https://wiseprod.sharepoint.com/sites/TEST-EventFolders/_layouts/15/download.aspx?share=IQD78aC2atoRT4fZ0k7IdoU-AWJ-y0wPRh8TyCbZljID1Kg" /></div>
 
 <div class="venue-text">
@@ -8288,7 +8973,7 @@ Our specialist team of wedding experts are dedicated to delivering your vision w
 <table id="sourceItems" style="width:100%; border-collapse:collapse;">
 	<tbody>
 		<tr class="src-row" name="items:">
-			<td style="display:none"><span name="items:type">{{items.type}}</span> <span name="items:level">{{items.level}}</span> <span name="items:list_id">{{items.list_id}}</span> <span name="items:name">{{items.name}}</span> <span name="items:alt_name">{{items.alt_name}}</span> <span name="items:warehouse_notes">{{items.warehouse_notes}}</span> <span name="items:warehouse_notes_html">{{items.warehouse_notes_html}}</span> <span name="items:additional">{{items.additional}}</span> <span name="items:technical">{{items.technical}}</span> <span name="items:meta">{{items.meta}}</span> <span name="items:metadata">{{items.metadata}}</span> <span name="items:page_meta">{{items.page_meta}}</span> <span name="items:image_url">{{items.image_url}}</span> <span name="items:qty">{{items.qty}}</span> <span name="items:price">{{items.price}}</span> <span name="items:flagged">{{items.flagged}}</span> <span name="items:flag">{{items.flag}}</span></td>
+ 			<td style="display:none"><span name="items:type">{{items.type}}</span> <span name="items:level">{{items.level}}</span> <span name="items:list_id">{{items.list_id}}</span> <span name="items:name">{{items.name}}</span> <span name="items:alt_name">{{items.alt_name}}</span> <span name="items:warehouse_notes">{{items.warehouse_notes}}</span> <span name="items:warehouse_notes_html">{{items.warehouse_notes_html}}</span> <span name="items:additional">{{items.additional}}</span> <span name="items:technical">{{items.technical}}</span> <span name="items:_Reminder" data-qtc-field="Reminder">{{items._Reminder}}</span> <span name="items:_PageHeading" data-qtc-field="PageHeading">{{items._PageHeading}}</span> <span name="items:_Blurb" data-qtc-field="Blurb">{{items._Blurb}}</span> <span name="items:_ImageURL" data-qtc-field="ImageURL">{{items._ImageURL}}</span> <span name="items:_CreatePage" data-qtc-field="CreatePage">{{items._CreatePage}}</span> <span name="items:_Include" data-qtc-field="Include">{{items._Include}}</span> <span name="items:_Additional" data-qtc-field="Additional">{{items._Additional}}</span> <span name="items:_PageTemplate" data-qtc-field="PageTemplate">{{items._PageTemplate}}</span> <span name="items:_PageVariant" data-qtc-field="PageVariant">{{items._PageVariant}}</span> <span name="items:_Grouping" data-qtc-field="Grouping">{{items._Grouping}}</span> <span name="items:qty">{{items.qty}}</span> <span name="items:price">{{items.price}}</span> <span name="items:_Revenue">{{items._Revenue}}</span> <span name="items:_revenue">{{items._revenue}}</span> <span name="items:flagged">{{items.flagged}}</span> <span name="items:flag">{{items.flag}}</span></td>
 		</tr>
 	</tbody>
 </table>

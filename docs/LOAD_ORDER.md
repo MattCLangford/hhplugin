@@ -77,6 +77,6 @@ This is the older fallback snapshot. Keep it available, but do not load it at th
 
 ## Reference Only
 
-`QTC-V2.html`
+`QTC-V4.html`
 
 This local copy is for checking renderer behavior. The deployed renderer already lives in HireHop.

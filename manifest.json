@@ -134,9 +134,9 @@
   ],
   "referenceFiles": [
     {
-      "file": "QTC-V2.html",
+      "file": "QTC-V4.html",
       "status": "reference-only",
-      "role": "Copy of the renderer already deployed in HireHop; useful locally for alignment checks."
+      "role": "QTC V4 renderer source corresponding to HireHop document 169; useful locally for alignment checks."
     }
   ],
   "legacyFiles": [

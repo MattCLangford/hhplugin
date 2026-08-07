@@ -52,7 +52,7 @@ Revenue and Markup are stored in each supplying line's HireHop custom-field bag,
 
 ## Reference And Legacy Files
 
-`QTC-V2.html` is reference-only in this folder. The real renderer is already deployed in HireHop, but keeping a local copy is useful when checking that editor metadata and renderer expectations still match.
+`QTC-V4.html` contains the iterated QTC V4 renderer source. The live renderer remains deployed as HireHop document 169. V4 uses the strict native heading-field contract (`Reminder`, `PageHeading`, `Blurb`, `ImageURL`, `CreatePage`, `Include`, `Additional`, `PageTemplate`, `PageVariant`, and `Grouping`) with no legacy metadata fallbacks; line revenue comes only from `items:_Revenue`.
 
 `wise-headingedit-ui.js` is deprecated and should be switched off in HireHop. It was the V1 concept editor and is now superseded by `6-editor2.js`.
 
