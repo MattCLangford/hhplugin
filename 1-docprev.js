@@ -4,7 +4,7 @@
   if (window.__wiseDocPreviewLoaded) return;
   window.__wiseDocPreviewLoaded = true;
 
-  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-07-28.1"); } catch (e) {}
+  try { console.warn("[WiseHireHop:doc-preview] loaded - v2026-08-07.1"); } catch (e) {}
 
   var $ = window.jQuery;
   if (!$) return;
@@ -1433,6 +1433,8 @@
 
   function isJobPerformanceSupplyingItemLine(node) {
     if (!node || !node.id || /^(?:#|root)$/i.test(String(node.id))) return false;
+    var nativePrefix = String(node.id).match(/^([a-z])(?:_|-)?\d+/i);
+    if (nativePrefix) return nativePrefix[1].toLowerCase() !== "a";
     var data = node.data || {};
     var kind = data.kind;
     if (kind == null) kind = data.KIND;
@@ -1440,7 +1442,7 @@
       kind = Number(kind);
       if (isFinite(kind)) return kind !== 0;
     }
-    return !/^a(?:_|-)?\d+/i.test(String(node.id));
+    return true;
   }
 
   function getJobPerformanceNodeSources(node) {

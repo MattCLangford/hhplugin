@@ -23,7 +23,7 @@
   if (!$) return;
 
   var CFG = {
-    version: "2026-07-28.5",
+    version: "2026-08-07.1",
     styleId: "wise-supplying-commercial-styles",
     panelClass: "wise-line-commercial-editor",
     editorDialogId: "wise-proposal-commercial-dialog",
@@ -1407,6 +1407,8 @@
 
   function isSupplyingItemLine(node) {
     if (!node || !node.id || /^(?:#|root)$/i.test(String(node.id))) return false;
+    var nativePrefix = String(node.id).match(/^([a-z])(?:_|-)?\d+/i);
+    if (nativePrefix) return nativePrefix[1].toLowerCase() !== "a";
     var data = node.data || {};
     var kind = data.kind;
     if (kind == null) kind = data.KIND;
@@ -1414,7 +1416,7 @@
       kind = Number(kind);
       if (isFinite(kind)) return kind !== 0;
     }
-    return !/^a(?:_|-)?\d+/i.test(String(node.id));
+    return true;
   }
 
   function hasInventoryMasterLine(node) {

@@ -267,8 +267,10 @@ function testCommercialTextMarkup() {
         ',labourPayload: buildLineCommercialSavePayload({ id: "e-45", data: { JOB: 77 } }, { customFields: {} })' +
         ',otherPayload: buildLineCommercialSavePayload({ id: "f46", data: { JOB: 77 } }, { customFields: {} })' +
         ',commercialKinds: ["b1", "c2", "d3", "e4", "f5", "g6"].map(function (id) { return isSupplyingItemLine({ id: id }); })' +
+        ',zeroKindCommercialRows: ["b7", "c8", "d9"].map(function (id) { return isSupplyingItemLine({ id: id, data: { kind: 0 } }); })' +
         ',inventoryMasterKinds: [{ id: "b1", data: { LIST_ID: 10 } }, { id: "c2", data: { LIST_ID: 20 } }, { id: "e3", data: { LIST_ID: 30 } }, { id: "d4", data: {} }].map(function (node) { return hasInventoryMasterLine(node); })' +
         ',jobPerformanceKinds: ["b1", "c2", "d3", "e4", "f5", "g6"].map(function (id) { return isJobPerformanceSupplyingItemLine({ id: id }); })' +
+        ',zeroKindJobPerformanceRows: ["b7", "c8", "d9"].map(function (id) { return isJobPerformanceSupplyingItemLine({ id: id, data: { KIND: 0 } }); })' +
         ',blankKindFallback: [isSupplyingItemLine({ id: "b7", data: { kind: "" } }), isJobPerformanceSupplyingItemLine({ id: "b7", data: { kind: "" } })]' +
         ',unsupportedKinds: ["a1", "root"].map(function (id) { return isSupplyingItemLine({ id: id }); })' +
         ',jobPerformanceTotals: readSupplyingLineCommercialTotals()' +
@@ -302,8 +304,10 @@ function testCommercialTextMarkup() {
   assert.strictEqual(context.result.labourPayload.kind, "4", "labour rows should derive kind 4 from their native e-prefix");
   assert.strictEqual(context.result.otherPayload.kind, "5", "other native supplying items should derive their kind without a commercial allowlist");
   assert.deepStrictEqual(Array.from(context.result.commercialKinds), [true, true, true, true, true, true], "every non-heading native supplying item kind should expose commercial fields");
+  assert.deepStrictEqual(Array.from(context.result.zeroKindCommercialRows), [true, true, true], "native item identities must win when HireHop reports zero kind metadata for real picker-created rows");
   assert.deepStrictEqual(Array.from(context.result.inventoryMasterKinds), [true, true, true, false], "RSP/default behavior should depend on an actual inventory master rather than an item-type allowlist");
   assert.deepStrictEqual(Array.from(context.result.jobPerformanceKinds), [true, true, true, true, true, true], "Job Performance should include every non-heading supplying item kind");
+  assert.deepStrictEqual(Array.from(context.result.zeroKindJobPerformanceRows), [true, true, true], "Job Performance must retain zero-kind rows whose native identities mark them as real items");
   assert.deepStrictEqual(Array.from(context.result.blankKindFallback), [true, true], "blank kind metadata should fall back to the native item identity rather than filtering out a real line");
   assert.deepStrictEqual(Array.from(context.result.unsupportedKinds), [false, false], "structural heading/root rows should remain outside the commercial totals to prevent subtotal double-counting");
   assert.strictEqual(context.result.jobPerformanceTotals.revenue, 1560, "Job Performance should sum Revenue across every supplying item type");
