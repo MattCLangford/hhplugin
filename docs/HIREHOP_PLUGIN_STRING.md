@@ -28,7 +28,7 @@ These files are not included directly in the HireHop company config string. `0-l
 | 4 | `3-meta.js` | `0.2` | `lazy-supplying-list-module` | yes |
 | 5 | `4-layout.js` | `0.2` | `lazy-supplying-list-module` | yes |
 | 6 | `6-editor2.js` | `1.8` | `disabled-ready-to-enable` | no |
-| 7 | `7-captrack.js` | `3.4` | `lazy-home-page` | yes |
+| 7 | `7-captrack.js` | `3.5` | `lazy-home-page` | yes |
 | 8 | `8-stagedesigner.js` | `2.4` | `lazy-supplying-list-except-proposal-creation` | yes |
 | 9 | `9-jobchecklist.js` | `1.2` | `lazy-project-job-tabs` | yes |
 | 10 | `10-projectjobs-qol.js` | `1.0` | `lazy-project-details` | yes |

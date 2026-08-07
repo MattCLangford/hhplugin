@@ -653,6 +653,10 @@ function testSourceGuards() {
   assert(captrack.includes("wise-capacity-tracker-show-absences"), "absence visibility should have an independent display toggle");
   assert(captrack.includes("wise-capacity-tracker-conflicts-only"), "the dedicated conflict-only lens should be available");
   assert(captrack.includes("function getProgressiveDetailLevel"), "Capacity Tracker should progressively reveal detail for overview, team and individual views");
+  assert(!captrack.includes(".wct-day-gridline.is-load-low{background:"), "capacity heatmap colours should not fill the timeline body");
+  assert(captrack.includes(".wct-day-gridline.is-weekend{background:"), "timeline body weekends should retain their neutral shading");
+  assert(captrack.includes("is-envelope-labelled"), "individual cards should only hide their internal title when an allocation-envelope title is present");
+  assert(captrack.includes("justify-content:center"), "individual allocation-envelope titles should be centred");
   assert(captrack.includes('".wct-buffer-days{display:none;}"'), "subtle allocation buffers should not add a prominent day-count label");
 
   assert(shared.includes('projectSave: "/php_functions/project_save.php"'), "the shared HireHop contract should expose project partial saves");

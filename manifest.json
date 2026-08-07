@@ -64,7 +64,7 @@
     {
       "file": "7-captrack.js",
       "status": "lazy-home-page",
-      "cacheVersion": "3.4",
+      "cacheVersion": "3.5",
       "role": "Full-page Wise capacity timeline with progressive overview, team and individual detail, project-colour editable DaysPrior/DaysPost allocation envelopes, independent buffer and absence toggles, person-level conflict detection, and a conflict-only planning lens.",
       "recommendedLoadOrder": 7
     },
