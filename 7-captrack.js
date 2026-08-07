@@ -11,7 +11,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-08-07.1",
+    version: "2026-08-07.2",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -58,6 +58,7 @@
     defaultDaysPrior: 3,
     defaultDaysPost: 2,
     maxBufferDays: 3650,
+    viewPreferencesLocalStorageKey: "wise-capacity-tracker-view-preferences",
     absenceFeed: {
       enabled: true,
       cacheTtlMs: 15 * 60 * 1000,
@@ -129,6 +130,11 @@
     rowOrder: {},
     search: "",
     showUnassignedOnly: false,
+    showAllocationBuffers: true,
+    showAbsences: true,
+    conflictsOnly: false,
+    detailLevel: "overview",
+    conflicts: null,
     nativeStatusFilters: createDefaultNativeStatusFilters(),
     statusFilters: createDefaultStatusFilters(),
     dateRangeStart: defaultDateRange.start,
@@ -193,7 +199,11 @@
       normaliseHireHopProjectId: normaliseHireHopProjectId,
       readHireHopProjectId: readHireHopProjectId,
       buildProjectBufferSavePayload: buildProjectBufferSavePayload,
-      validateProjectBufferSavePayload: validateProjectBufferSavePayload
+      validateProjectBufferSavePayload: validateProjectBufferSavePayload,
+      buildConflictModel: buildConflictModel,
+      intervalsOverlap: intervalsOverlap,
+      getProjectActualInterval: getProjectActualInterval,
+      getProjectAllocationInterval: getProjectAllocationInterval
     }
   };
 
@@ -201,6 +211,7 @@
   boot();
 
   function boot() {
+    restoreViewPreferences();
     scheduleInstallEntryPoint(180);
 
     $(window).on("load.wiseCapacityTracker focus.wiseCapacityTracker", function () {
@@ -232,6 +243,12 @@
       nativeHireHopStatus: getNativeStatusFilterLabel(),
       groupMode: state.groupMode,
       cardLabelMode: state.cardLabelMode,
+      display: {
+        allocationBuffers: state.showAllocationBuffers,
+        absences: state.showAbsences,
+        conflictsOnly: state.conflictsOnly,
+        detailLevel: state.detailLevel
+      },
       absenceFeed: describeAbsenceFeed(),
       wiseStatuses: CFG.wiseStatuses.map(function (status) { return status.label; }),
       customFieldKeys: $.extend({}, CFG.customFieldKeys)
@@ -1167,6 +1184,28 @@
   function removeStoredAbsenceFeedUrl() {
     try {
       if (window.localStorage) window.localStorage.removeItem(CFG.absenceFeed.localStorageKey);
+    } catch (e) {}
+  }
+
+  function restoreViewPreferences() {
+    var preferences = null;
+    try {
+      preferences = window.localStorage ? tryParseJson(window.localStorage.getItem(CFG.viewPreferencesLocalStorageKey)) : null;
+    } catch (e) {
+      preferences = null;
+    }
+    if (!preferences || typeof preferences !== "object") return;
+    if (typeof preferences.showAllocationBuffers === "boolean") state.showAllocationBuffers = preferences.showAllocationBuffers;
+    if (typeof preferences.showAbsences === "boolean") state.showAbsences = preferences.showAbsences;
+  }
+
+  function persistViewPreferences() {
+    try {
+      if (!window.localStorage) return;
+      window.localStorage.setItem(CFG.viewPreferencesLocalStorageKey, JSON.stringify({
+        showAllocationBuffers: !!state.showAllocationBuffers,
+        showAbsences: !!state.showAbsences
+      }));
     } catch (e) {}
   }
 
@@ -2155,6 +2194,13 @@
     state.rows = view.rows;
     state.timeline = view.timeline;
     state.projectMap = view.projectMap;
+    state.conflicts = view.conflicts;
+    state.detailLevel = view.detailLevel;
+
+    $("#" + CFG.modalId)
+      .removeClass("is-detail-overview is-detail-team is-detail-individual is-conflict-lens")
+      .addClass("is-detail-" + view.detailLevel)
+      .toggleClass("is-conflict-lens", !!state.conflictsOnly);
 
     $(".wct-left-head").text(getGroupMode(state.groupMode).headerLabel);
     renderSummary(view);
@@ -2172,7 +2218,8 @@
       return;
     }
 
-    setStatus("", "");
+    if (state.conflictsOnly && !view.conflicts.total) setStatus("No predicted conflicts match the current filters.", "empty");
+    else setStatus("", "");
     renderTimelineHeader(view.timeline, view.capacity);
     renderProjectBars(view);
     renderTimelineTotals(view);
@@ -2205,9 +2252,19 @@
 
     dated.sort(sortProjectsByStart);
     var timeline = buildTimelineRange(dated);
-    var capacity = buildCapacityModel(dated, timeline);
-    var rows = buildRows(groupProjects(dated, state.groupMode), timeline);
+    var groups = groupProjects(dated, state.groupMode);
+    var rows = buildRows(groups, timeline);
+    var conflicts = buildConflictModel(rows, timeline);
+    var displayedDated = dated;
+    if (state.conflictsOnly) {
+      groups = filterGroupsToConflicts(groups, conflicts);
+      rows = buildRows(groups, timeline);
+      conflicts = buildConflictModel(rows, timeline);
+      displayedDated = collectRowProjects(rows);
+    }
+    var capacity = buildCapacityModel(displayedDated, timeline);
     var absenceSummary = buildVisibleAbsenceSummary(rows);
+    var detailLevel = getProgressiveDetailLevel(rows);
     var projectMap = {};
     for (var r = 0; r < rows.length; r++) {
       var rowProjects = rows[r].projects || [];
@@ -2218,11 +2275,13 @@
 
     return {
       visibleProjects: visible,
-      datedProjects: dated,
+      datedProjects: displayedDated,
       missingDateProjects: missing,
       timeline: timeline,
       capacity: capacity,
       absenceSummary: absenceSummary,
+      conflicts: conflicts,
+      detailLevel: detailLevel,
       rows: rows,
       projectMap: projectMap,
       totalHeight: rows.length ? rows[rows.length - 1].top + rows[rows.length - 1].height : 0
@@ -2265,6 +2324,201 @@
     }
 
     return rows;
+  }
+
+  function getProgressiveDetailLevel(rows) {
+    if (isPersonGroupMode(state.groupMode) && rows.length === 1) return "individual";
+    if (state.zoom === "quarter" || rows.length >= 8) return "overview";
+    return "team";
+  }
+
+  function collectRowProjects(rows) {
+    var seen = {};
+    var projects = [];
+    for (var r = 0; r < rows.length; r++) {
+      for (var p = 0; p < (rows[r].projects || []).length; p++) {
+        var project = rows[r].projects[p];
+        if (!project || seen[project.uid]) continue;
+        seen[project.uid] = true;
+        projects.push(project);
+      }
+    }
+    projects.sort(sortProjectsByStart);
+    return projects;
+  }
+
+  function filterGroupsToConflicts(groups, conflictModel) {
+    var result = [];
+    var affected = conflictModel && conflictModel.byProjectUid ? conflictModel.byProjectUid : {};
+    var byRowKey = conflictModel && conflictModel.byRowKey ? conflictModel.byRowKey : {};
+    for (var i = 0; i < groups.length; i++) {
+      var group = groups[i];
+      if (!byRowKey[group.key] || !byRowKey[group.key].length) continue;
+      var projects = (group.projects || []).filter(function (project) { return !!affected[project.uid]; });
+      if (!projects.length) continue;
+      result.push($.extend({}, group, { projects: projects }));
+    }
+    return result;
+  }
+
+  function buildConflictModel(rows, timeline, includeAllocationBuffers) {
+    var model = {
+      items: [],
+      byId: {},
+      byProjectUid: {},
+      byRowKey: {},
+      total: 0,
+      critical: 0,
+      warning: 0,
+      people: 0,
+      firstStart: null
+    };
+    if (!isPersonGroupMode(state.groupMode)) return model;
+    var allocationConflicts = includeAllocationBuffers == null ? isAllocationBufferMode() : !!includeAllocationBuffers;
+
+    var affectedPeople = {};
+    for (var r = 0; r < rows.length; r++) {
+      var row = rows[r];
+      row.conflicts = [];
+      row.conflictCount = 0;
+      row.criticalConflictCount = 0;
+      if (row.unassigned) continue;
+
+      var projects = collectRowProjects([row]);
+      var absences = row.absences || [];
+      for (var p = 0; p < projects.length; p++) {
+        var project = projects[p];
+        var actual = getProjectActualInterval(project);
+        var allocation = getProjectAllocationInterval(project);
+        if (!actual) continue;
+
+        for (var a = 0; a < absences.length; a++) {
+          var absence = absences[a];
+          var absenceInterval = { start: absence.start, endExclusive: absence.endExclusive };
+          if (intervalsOverlap(actual, absenceInterval)) {
+            addConflict(model, row, {
+              type: "actual_absence",
+              severity: "critical",
+              label: getProjectLabel(project) + " overlaps annual leave",
+              interval: intersectIntervals(actual, absenceInterval),
+              projects: [project],
+              absence: absence
+            }, timeline);
+          } else if (allocationConflicts && allocation && intervalsOverlap(allocation, absenceInterval)) {
+            addConflict(model, row, {
+              type: "allocation_absence",
+              severity: "warning",
+              label: getProjectLabel(project) + " allocation overlaps annual leave",
+              interval: intersectIntervals(allocation, absenceInterval),
+              projects: [project],
+              absence: absence
+            }, timeline);
+          }
+        }
+
+        for (var otherIndex = p + 1; otherIndex < projects.length; otherIndex++) {
+          var other = projects[otherIndex];
+          var otherActual = getProjectActualInterval(other);
+          var otherAllocation = getProjectAllocationInterval(other);
+          if (!otherActual) continue;
+          if (intervalsOverlap(actual, otherActual)) {
+            addConflict(model, row, {
+              type: "actual_actual",
+              severity: "critical",
+              label: getProjectLabel(project) + " overlaps " + getProjectLabel(other),
+              interval: intersectIntervals(actual, otherActual),
+              projects: [project, other]
+            }, timeline);
+          } else if (allocationConflicts && allocation && otherAllocation && intervalsOverlap(allocation, otherAllocation)) {
+            addConflict(model, row, {
+              type: "allocation_allocation",
+              severity: "warning",
+              label: getProjectLabel(project) + " allocation overlaps " + getProjectLabel(other),
+              interval: intersectIntervals(allocation, otherAllocation),
+              projects: [project, other]
+            }, timeline);
+          }
+        }
+      }
+
+      if (row.conflicts.length) affectedPeople[row.key] = true;
+      row.conflictCount = row.conflicts.length;
+      row.criticalConflictCount = row.conflicts.filter(function (conflict) { return conflict.severity === "critical"; }).length;
+    }
+    model.total = model.items.length;
+    model.people = Object.keys(affectedPeople).length;
+    return model;
+  }
+
+  function addConflict(model, row, draft, timeline) {
+    var interval = draft.interval;
+    if (!interval || !intervalOverlapsTimeline(interval, timeline)) return;
+    var projectUids = draft.projects.map(function (project) { return project.uid; }).sort();
+    var absenceUid = draft.absence ? draft.absence.uid : "";
+    var dedupeKey = [row.key, draft.type, projectUids.join(","), absenceUid, interval.start.getTime(), interval.endExclusive.getTime()].join(":");
+    if (model.byId[dedupeKey]) return;
+
+    var conflict = {
+      id: "wct-conflict-" + (model.items.length + 1),
+      rowKey: row.key,
+      personLabel: row.label,
+      type: draft.type,
+      severity: draft.severity,
+      label: draft.label,
+      start: interval.start,
+      endExclusive: interval.endExclusive,
+      projects: draft.projects,
+      projectUids: projectUids,
+      absence: draft.absence || null
+    };
+    model.byId[dedupeKey] = conflict;
+    model.byId[conflict.id] = conflict;
+    model.items.push(conflict);
+    model[conflict.severity]++;
+    model.byRowKey[row.key] = model.byRowKey[row.key] || [];
+    model.byRowKey[row.key].push(conflict);
+    row.conflicts.push(conflict);
+    for (var i = 0; i < projectUids.length; i++) {
+      model.byProjectUid[projectUids[i]] = model.byProjectUid[projectUids[i]] || [];
+      model.byProjectUid[projectUids[i]].push(conflict);
+    }
+    if (!model.firstStart || conflict.start.getTime() < model.firstStart.getTime()) model.firstStart = conflict.start;
+  }
+
+  function getProjectActualInterval(project) {
+    var start = getProjectStart(project);
+    var end = getProjectEnd(project) || start;
+    if (!start || !end) return null;
+    var endExclusive = end.getTime() > start.getTime() ? end : addDays(startOfDay(start), 1);
+    return { start: start, endExclusive: endExclusive };
+  }
+
+  function getProjectAllocationInterval(project) {
+    var actual = getProjectActualInterval(project);
+    if (!actual) return null;
+    var bufferStart = getProjectBufferStart(project) || actual.start;
+    var bufferEnd = getProjectBufferEnd(project) || actual.endExclusive;
+    return {
+      start: bufferStart.getTime() < actual.start.getTime() ? bufferStart : actual.start,
+      endExclusive: bufferEnd.getTime() > actual.endExclusive.getTime() ? bufferEnd : actual.endExclusive
+    };
+  }
+
+  function intervalsOverlap(a, b) {
+    return !!(a && b && a.start && a.endExclusive && b.start && b.endExclusive && a.start.getTime() < b.endExclusive.getTime() && a.endExclusive.getTime() > b.start.getTime());
+  }
+
+  function intersectIntervals(a, b) {
+    if (!intervalsOverlap(a, b)) return null;
+    return {
+      start: a.start.getTime() > b.start.getTime() ? a.start : b.start,
+      endExclusive: a.endExclusive.getTime() < b.endExclusive.getTime() ? a.endExclusive : b.endExclusive
+    };
+  }
+
+  function intervalOverlapsTimeline(interval, timeline) {
+    if (!timeline) return true;
+    return intervalsOverlap(interval, { start: timeline.start, endExclusive: getTimelineClipEnd(timeline) });
   }
 
   function getGroupAbsences(group, timeline) {
@@ -2489,7 +2743,15 @@
 
   function renderSummary(view) {
     var capacity = view.capacity || {};
+    var conflicts = view.conflicts || {};
     var items = [
+      {
+        label: state.conflictsOnly ? "Conflict view" : "Conflicts",
+        value: conflicts.total ? conflicts.critical + " critical | " + conflicts.warning + " warning" : "0",
+        button: true,
+        attr: 'data-conflict-toggle="true"',
+        className: "is-conflict-summary" + (conflicts.critical ? " is-critical" : conflicts.warning ? " is-warning" : "") + (state.conflictsOnly ? " is-active" : "")
+      },
       { label: "Visible", value: view.visibleProjects.length },
       { label: "Live", value: capacity.totalLive || 0 },
       { label: "Peak day", value: formatPeakSummary(capacity.maxDay, capacity.peakDayDate), dayNumber: capacity.peakDayNumber },
@@ -2503,9 +2765,11 @@
 
     $("#" + CFG.summaryId).html(items.map(function (item) {
       var clickable = item.dayNumber != null && item.dayNumber !== "" && Number(item.dayNumber) >= 0;
-      var tag = clickable ? "button" : "div";
-      var attrs = clickable ? ' type="button" data-scroll-day="' + escapeAttr(item.dayNumber) + '"' : "";
-      return '<' + tag + attrs + ' class="wct-summary-pill' + (clickable ? " is-clickable" : "") + '"><span>' + escapeHtml(item.label) + '</span><strong>' + item.value + '</strong></' + tag + '>';
+      var tag = clickable || item.button ? "button" : "div";
+      var attrs = tag === "button" ? ' type="button"' : "";
+      if (clickable) attrs += ' data-scroll-day="' + escapeAttr(item.dayNumber) + '"';
+      if (item.attr) attrs += " " + item.attr;
+      return '<' + tag + attrs + ' class="wct-summary-pill' + (clickable || item.button ? " is-clickable" : "") + (item.className ? " " + item.className : "") + '"><span>' + escapeHtml(item.label) + '</span><strong>' + item.value + '</strong></' + tag + '>';
     }).join(""));
   }
 
@@ -2592,7 +2856,8 @@
     }
     html.push('</div>');
     appendBodyDayGrid(html, timeline, width, height, view.capacity);
-    appendAbsenceBands(html, view.rows, timeline, width);
+    if (state.showAbsences) appendAbsenceBands(html, view.rows, timeline, width);
+    appendConflictBands(html, view.rows, timeline, width);
 
     var todayLeft = getTimelineX(timeline, new Date());
     if (todayLeft >= 0 && todayLeft <= width) {
@@ -2604,11 +2869,14 @@
       if (rowModel.type !== "group") continue;
       for (var p = 0; p < rowModel.projects.length; p++) {
         var project = rowModel.projects[p];
-        if (isAllocationBufferMode()) {
+        if (isAllocationBufferMode() && state.showAllocationBuffers) {
           html.push(renderProjectBuffer(rowModel, project, rowModel.lanes[project.uid] || 0, timeline, "prior"));
           html.push(renderProjectBuffer(rowModel, project, rowModel.lanes[project.uid] || 0, timeline, "post"));
         }
         html.push(renderProjectBar(rowModel, project, rowModel.lanes[project.uid] || 0, timeline));
+        if (view.detailLevel === "individual" && isAllocationBufferMode() && state.showAllocationBuffers) {
+          html.push(renderProjectEnvelopeLabel(rowModel, project, rowModel.lanes[project.uid] || 0, timeline));
+        }
       }
     }
 
@@ -2647,17 +2915,42 @@
     );
   }
 
+  function appendConflictBands(html, rows, timeline, width) {
+    for (var r = 0; r < rows.length; r++) {
+      var conflicts = rows[r].conflicts || [];
+      for (var c = 0; c < conflicts.length; c++) {
+        html.push(renderConflictBand(rows[r], conflicts[c], timeline, width));
+      }
+    }
+  }
+
+  function renderConflictBand(row, conflict, timeline, width) {
+    var clipEnd = getTimelineClipEnd(timeline);
+    var visibleStart = conflict.start.getTime() < timeline.start.getTime() ? timeline.start : conflict.start;
+    var visibleEnd = conflict.endExclusive.getTime() > clipEnd.getTime() ? clipEnd : conflict.endExclusive;
+    var left = clamp(getTimelineX(timeline, visibleStart), 0, width);
+    var right = clamp(getTimelineX(timeline, visibleEnd), 0, width);
+    return (
+      '<button type="button" class="wct-conflict-band is-' + escapeAttr(conflict.severity) + '" data-conflict-id="' + escapeAttr(conflict.id) + '" ' +
+        'style="left:' + left + 'px;top:' + row.top + 'px;width:' + Math.max(4, right - left) + 'px;height:' + row.height + 'px;" ' +
+        'title="' + escapeAttr(row.label + ": " + conflict.label + " (" + formatDate(conflict.start) + ")") + '"></button>'
+    );
+  }
+
   function renderLeftRows(rows, height) {
     var html = ['<div class="wct-left-inner" style="height:' + Math.max(height, 80) + 'px;">'];
 
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i];
       var absenceCount = row.absences ? row.absences.length : 0;
-      var rowMeta = row.count + " event" + (row.count === 1 ? "" : "s") + " | " + row.liveCount + " live | peak " + row.peakLiveLoad + " live at once" + (row.activeToday ? " | " + row.activeToday + " active today" : "") + (absenceCount ? " | " + absenceCount + " absence range" + (absenceCount === 1 ? "" : "s") : "");
+      var conflictCount = row.conflictCount || 0;
+      var rowMeta = row.count + " event" + (row.count === 1 ? "" : "s") + " | " + row.liveCount + " live | peak " + row.peakLiveLoad + " live at once" + (row.activeToday ? " | " + row.activeToday + " active today" : "") + (absenceCount ? " | " + absenceCount + " absence range" + (absenceCount === 1 ? "" : "s") : "") + (conflictCount ? " | " + conflictCount + " predicted conflict" + (conflictCount === 1 ? "" : "s") : "");
+      var firstConflictDay = conflictCount ? dayNumber(row.conflicts[0].start) : "";
       html.push(
-        '<div class="wct-left-row is-group' + (row.unassigned ? " is-unassigned" : "") + getCapacityClass(row.peakLiveLoad) + '" draggable="true" data-row-key="' + escapeAttr(row.key) + '" style="top:' + row.top + 'px;height:' + row.height + 'px;" title="' + escapeAttr(rowMeta) + '">' +
+        '<div class="wct-left-row is-group' + (row.unassigned ? " is-unassigned" : "") + (conflictCount ? " has-conflicts" : "") + (row.criticalConflictCount ? " has-critical-conflicts" : "") + getCapacityClass(row.peakLiveLoad) + '" draggable="true" data-row-key="' + escapeAttr(row.key) + '" style="top:' + row.top + 'px;height:' + row.height + 'px;" title="' + escapeAttr(rowMeta) + '">' +
           '<strong>' + escapeHtml(row.label) + '</strong>' +
-          '<span class="wct-load-summary">Live ' + escapeHtml(String(row.liveCount || 0)) + ' | Peak ' + escapeHtml(String(row.peakLiveLoad || 0)) + '</span>' +
+          '<span class="wct-row-metrics"><span class="wct-load-summary">Live ' + escapeHtml(String(row.liveCount || 0)) + ' | Peak ' + escapeHtml(String(row.peakLiveLoad || 0)) + '</span>' +
+          (conflictCount ? '<button type="button" class="wct-conflict-badge' + (row.criticalConflictCount ? " is-critical" : " is-warning") + '" data-row-key="' + escapeAttr(row.key) + '" data-conflict-day="' + escapeAttr(firstConflictDay) + '" title="Focus ' + escapeAttr(rowMeta) + '">' + conflictCount + '</button>' : "") + '</span>' +
         '</div>'
       );
     }
@@ -2681,11 +2974,13 @@
     if (maxWidth > 0) width = Math.min(width, maxWidth);
 
     var colors = getProjectBarColors(project);
+    var projectConflicts = state.conflicts && state.conflicts.byProjectUid ? state.conflicts.byProjectUid[project.uid] || [] : [];
+    var hasCritical = projectConflicts.some(function (conflict) { return conflict.severity === "critical"; });
     var top = row.top + CFG.lanePadding + (lane * (CFG.barHeight + CFG.laneGap));
     var title = getProjectLabel(project) + " | Kit " + formatDateTime(project.kitStart || start) + " - " + formatDateTime(project.kitEnd || end);
 
     return (
-      '<button type="button" class="wct-project-bar is-status-' + escapeAttr(project.statusKey || CFG.unknownStatusKey) + '" data-project-uid="' + escapeAttr(project.uid) + '" ' +
+      '<button type="button" class="wct-project-bar is-status-' + escapeAttr(project.statusKey || CFG.unknownStatusKey) + (projectConflicts.length ? " has-conflict" : "") + (hasCritical ? " has-critical-conflict" : "") + '" data-project-uid="' + escapeAttr(project.uid) + '" ' +
         'style="left:' + left + 'px;top:' + top + 'px;width:' + width + 'px;height:' + CFG.barHeight + 'px;background:' + escapeAttr(colors.background) + ';border-color:' + escapeAttr(colors.border) + ';color:' + escapeAttr(colors.text) + ';" ' +
         'title="' + escapeAttr(title) + '">' +
         '<span>' + escapeHtml(getCardLabel(project)) + '</span>' +
@@ -2702,16 +2997,39 @@
     var fieldLabel = side === "prior" ? "DaysPrior" : "DaysPost";
     var edgeLabel = side === "prior" ? "Drag to change days before" : "Drag to change days after";
     var hiddenHandle = geometry.edgeVisible ? "" : " style=\"display:none;\"";
+    var colors = getProjectBufferColors(project, side);
 
     return (
       '<div class="wct-project-buffer is-' + side + (project.bufferSaving ? " is-saving" : "") + '" data-project-uid="' + escapeAttr(project.uid) + '" data-buffer-side="' + side + '" ' +
-        'style="left:' + geometry.left + 'px;top:' + top + 'px;width:' + geometry.width + 'px;height:' + CFG.barHeight + 'px;" ' +
+        'style="left:' + geometry.left + 'px;top:' + top + 'px;width:' + geometry.width + 'px;height:' + CFG.barHeight + 'px;background:' + escapeAttr(colors.background) + ';border-color:' + escapeAttr(colors.border) + ';--wct-buffer-edge:' + escapeAttr(colors.edge) + ';" ' +
         'title="' + escapeAttr(fieldLabel + ": " + days + " day" + (days === 1 ? "" : "s")) + '">' +
         '<span class="wct-buffer-days" aria-hidden="true">' + escapeHtml(String(days)) + '</span>' +
         '<button type="button" class="wct-buffer-handle is-' + side + '" data-project-uid="' + escapeAttr(project.uid) + '" data-buffer-side="' + side + '" ' +
           'aria-label="' + escapeAttr(edgeLabel + " for " + getProjectLabel(project) + ". Current value " + days + " days.") + '" title="' + escapeAttr(edgeLabel) + '"' + hiddenHandle + '></button>' +
       '</div>'
     );
+  }
+
+  function getProjectBufferColors(project, side) {
+    var base = normaliseColour(project.statusColor || project.colour) || "#2563eb";
+    return {
+      background: colorToRgba(base, side === "prior" ? 0.14 : 0.10) || "rgba(37,99,235,.12)",
+      border: colorToRgba(base, 0.34) || "rgba(37,99,235,.34)",
+      edge: colorToRgba(base, 0.48) || "rgba(37,99,235,.48)"
+    };
+  }
+
+  function renderProjectEnvelopeLabel(row, project, lane, timeline) {
+    var interval = getProjectAllocationInterval(project);
+    if (!interval) return "";
+    var clipEnd = getTimelineClipEnd(timeline);
+    var visibleStart = interval.start.getTime() < timeline.start.getTime() ? timeline.start : interval.start;
+    var visibleEnd = interval.endExclusive.getTime() > clipEnd.getTime() ? clipEnd : interval.endExclusive;
+    var widthLimit = timeline.days * timeline.pixelsPerDay;
+    var left = clamp(getTimelineX(timeline, visibleStart), 0, widthLimit);
+    var right = clamp(getTimelineX(timeline, visibleEnd), 0, widthLimit);
+    var top = row.top + CFG.lanePadding + (lane * (CFG.barHeight + CFG.laneGap));
+    return '<div class="wct-project-envelope-label" style="left:' + left + 'px;top:' + top + 'px;width:' + Math.max(14, right - left) + 'px;height:' + CFG.barHeight + 'px;" title="' + escapeAttr(getProjectLabel(project)) + '">' + escapeHtml(getProjectLabel(project)) + '</div>';
   }
 
   function getProjectBufferGeometry(project, side, timeline) {
@@ -3072,6 +3390,30 @@
     syncTimelineScroll();
   }
 
+  function scrollToFirstConflict() {
+    setTimeout(function () {
+      if (!state.conflicts || !state.conflicts.firstStart) return;
+      scrollToDayNumber(dayNumber(state.conflicts.firstStart), { centerBias: 0.35 });
+    }, 30);
+  }
+
+  function focusConflictRow(rowKey, conflictDay) {
+    var label = "";
+    for (var i = 0; i < state.rows.length; i++) {
+      if (state.rows[i].key === rowKey) {
+        label = state.rows[i].label;
+        break;
+      }
+    }
+    if (!label) return;
+    state.search = label;
+    state.zoom = "week";
+    render();
+    setTimeout(function () {
+      if (isFinite(conflictDay)) scrollToDayNumber(conflictDay, { centerBias: 0.35 });
+    }, 30);
+  }
+
   function updateVisibleRangeText() {
     var timeline = state.timeline;
     var $range = $("#wise-capacity-tracker-visible-range");
@@ -3138,6 +3480,26 @@
       '</div>'
     ].join("");
 
+    var $popover = $("#" + CFG.popoverId).html(html).show();
+    positionPopover($popover, anchor);
+  }
+
+  function showConflictPopover(conflict, anchor) {
+    if (!conflict) return;
+    var projectNames = conflict.projects.map(function (project) { return getProjectLabel(project); }).join(" / ");
+    var html = [
+      '<div class="wct-popover-head">',
+        '<strong>' + escapeHtml(conflict.severity === "critical" ? "Critical conflict" : "Allocation warning") + '</strong>',
+        '<button type="button" class="wct-popover-close" aria-label="Close">x</button>',
+      '</div>',
+      '<div class="wct-popover-grid">',
+        detailItem("Person", conflict.personLabel),
+        detailItem("Issue", conflict.label),
+        detailItem("Projects", projectNames),
+        detailItem("From", formatDateTime(conflict.start)),
+        detailItem("To", formatDateTime(conflict.endExclusive)),
+      '</div>'
+    ].join("");
     var $popover = $("#" + CFG.popoverId).html(html).show();
     positionPopover($popover, anchor);
   }
@@ -3222,6 +3584,9 @@
             '<div class="wct-native-filter" id="' + CFG.nativeStatusFiltersId + '" aria-label="HireHop native status filters">' + renderNativeStatusFilterControls() + '</div>' +
             '<div class="wct-status-filter" id="' + CFG.statusFiltersId + '" aria-label="Wise status filters">' + renderStatusFilterControls() + '</div>' +
             '<label class="wct-check"><input id="wise-capacity-tracker-unassigned" type="checkbox"> <span id="wise-capacity-tracker-unassigned-label">Unassigned only</span></label>' +
+            '<label class="wct-check wct-view-check"><input id="wise-capacity-tracker-show-buffers" type="checkbox"> Pre/post days</label>' +
+            '<label class="wct-check wct-view-check"><input id="wise-capacity-tracker-show-absences" type="checkbox"> Annual leave</label>' +
+            '<label class="wct-check wct-conflict-lens-check"><input id="wise-capacity-tracker-conflicts-only" type="checkbox"> Conflicts only</label>' +
           '</div>' +
           '<div id="' + CFG.statusId + '" class="wct-status" style="display:none;"></div>' +
           '<div id="' + CFG.summaryId + '" class="wct-summary"></div>' +
@@ -3259,6 +3624,7 @@
 
     $("#wise-capacity-tracker-group").on("change.wiseCapacityTracker", function () {
       state.groupMode = this.value;
+      if (!isPersonGroupMode(state.groupMode)) state.conflictsOnly = false;
       render();
     });
 
@@ -3270,6 +3636,24 @@
     $("#wise-capacity-tracker-unassigned").on("change.wiseCapacityTracker", function () {
       state.showUnassignedOnly = this.checked;
       render();
+    });
+
+    $("#wise-capacity-tracker-show-buffers").on("change.wiseCapacityTracker", function () {
+      state.showAllocationBuffers = this.checked;
+      persistViewPreferences();
+      render();
+    });
+
+    $("#wise-capacity-tracker-show-absences").on("change.wiseCapacityTracker", function () {
+      state.showAbsences = this.checked;
+      persistViewPreferences();
+      render();
+    });
+
+    $("#wise-capacity-tracker-conflicts-only").on("change.wiseCapacityTracker", function () {
+      state.conflictsOnly = this.checked;
+      render();
+      scrollToFirstConflict();
     });
 
     $("#wise-capacity-tracker-date-start,#wise-capacity-tracker-date-end").on("change.wiseCapacityTracker", function () {
@@ -3316,9 +3700,20 @@
       event.preventDefault();
       scrollToDayNumber(Number($(this).attr("data-scroll-day")), { centerBias: 0.35 });
     });
+    $("#" + CFG.summaryId).on("click.wiseCapacityTracker", ".wct-summary-pill[data-conflict-toggle]", function (event) {
+      event.preventDefault();
+      state.conflictsOnly = !state.conflictsOnly;
+      render();
+      scrollToFirstConflict();
+    });
 
     $("#" + CFG.leftBodyId)
       .on("wheel.wiseCapacityTracker", scrollTimelineFromLeftColumn)
+      .on("click.wiseCapacityTracker", ".wct-conflict-badge", function (event) {
+        event.preventDefault();
+        event.stopPropagation();
+        focusConflictRow($(this).attr("data-row-key"), Number($(this).attr("data-conflict-day")));
+      })
       .on("dragstart.wiseCapacityTracker", ".wct-left-row", function (event) {
         draggedRowKey = $(this).attr("data-row-key") || "";
         $(this).addClass("is-dragging");
@@ -3360,6 +3755,11 @@
         event.preventDefault();
         var project = state.projectMap[$(this).attr("data-project-uid")];
         showProjectPopover(project, this);
+      })
+      .on("click.wiseCapacityTracker", ".wct-conflict-band", function (event) {
+        event.preventDefault();
+        var conflict = state.conflicts && state.conflicts.byId ? state.conflicts.byId[$(this).attr("data-conflict-id")] : null;
+        showConflictPopover(conflict, this);
       })
       .on("dblclick.wiseCapacityTracker", ".wct-project-bar", function (event) {
         event.preventDefault();
@@ -3574,6 +3974,9 @@
     $("#wise-capacity-tracker-card-label").val(state.cardLabelMode);
     $("#wise-capacity-tracker-search").val(state.search);
     $("#wise-capacity-tracker-unassigned").prop("checked", state.showUnassignedOnly);
+    $("#wise-capacity-tracker-show-buffers").prop("checked", state.showAllocationBuffers).prop("disabled", !isAllocationBufferMode());
+    $("#wise-capacity-tracker-show-absences").prop("checked", state.showAbsences).prop("disabled", !isPersonGroupMode(state.groupMode));
+    $("#wise-capacity-tracker-conflicts-only").prop("checked", state.conflictsOnly).prop("disabled", !isPersonGroupMode(state.groupMode));
     $("#wise-capacity-tracker-unassigned-label").text(getGroupMode(state.groupMode).emptyFilterLabel || "Unassigned only");
     $("#wise-capacity-tracker-date-start").val(formatDateInput(state.dateRangeStart));
     $("#wise-capacity-tracker-date-end").val(formatDateInput(state.dateRangeEnd));
@@ -3611,6 +4014,7 @@
       ".wct-date input{width:138px;min-width:138px;}" +
       ".wct-check{height:30px;display:flex;align-items:center;gap:6px;font-size:13px;color:#253244;white-space:nowrap;}" +
       ".wct-check input{margin:0;}" +
+      ".wct-view-check{padding:0 7px;border:1px solid #d8e0e9;border-radius:6px;background:rgba(255,255,255,.72);}.wct-view-check input:disabled{opacity:.45;}.wct-conflict-lens-check{height:30px;padding:0 8px;border:1px solid #f0b4b4;border-radius:6px;background:#fff7f7;color:#8f1d1d;font-weight:700;}" +
       ".wct-native-filter{display:flex;align-items:center;gap:7px;min-height:30px;padding:0 2px;}" +
       ".wct-native-filter-head{font-size:11px;text-transform:uppercase;color:#526071;font-weight:700;white-space:nowrap;}" +
       ".wct-status-filter{display:flex;align-items:center;gap:7px;min-height:30px;flex:1 1 560px;min-width:420px;}" +
@@ -3627,6 +4031,7 @@
       ".wct-summary-pill{display:flex;align-items:baseline;gap:7px;background:#fff;border:1px solid #dbe3ec;border-radius:6px;padding:5px 8px;min-height:28px;}" +
       "button.wct-summary-pill{font-family:inherit;cursor:pointer;}button.wct-summary-pill:hover{background:#eef6ff;border-color:#9fc5ef;}" +
       ".wct-summary-pill span{font-size:11px;text-transform:uppercase;color:#667085;font-weight:700;letter-spacing:0;}.wct-summary-pill strong{font-size:13px;color:#1f2937;font-weight:700;}" +
+      ".wct-summary-pill.is-conflict-summary{border-color:#d8dee7;background:#fbfcfe;}.wct-summary-pill.is-conflict-summary.is-warning{border-color:#f2c879;background:#fffbeb;}.wct-summary-pill.is-conflict-summary.is-critical{border-color:#efaaaa;background:#fff1f2;}.wct-summary-pill.is-conflict-summary.is-critical strong{color:#a31515;}.wct-summary-pill.is-conflict-summary.is-active{box-shadow:inset 0 0 0 2px #dc2626;background:#fff1f2;}" +
       ".wct-missing{margin:0 14px 6px;padding:7px 9px;border:1px solid #f0d38a;background:#fff8e6;border-radius:6px;color:#6b4e00;font-size:12px;display:flex;gap:10px;align-items:center;}.wct-missing span{color:#725c23;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}" +
       ".wct-grid{flex:1 1 auto;min-height:240px;display:grid;grid-template-columns:210px minmax(0,1fr);grid-template-rows:50px minmax(0,1fr) 42px;border-top:1px solid #d9e2ec;background:#fff;}" +
       ".wct-left-head{grid-column:1;grid-row:1;display:flex;align-items:center;padding:0 10px;border-right:1px solid #d9e2ec;border-bottom:1px solid #d9e2ec;background:#f8fafc;font-weight:700;font-size:11px;text-transform:uppercase;color:#526071;letter-spacing:0;}" +
@@ -3636,9 +4041,10 @@
       ".wct-left-inner{position:relative;min-height:100%;}" +
       ".wct-left-row{position:absolute;left:0;right:0;display:flex;align-items:center;justify-content:space-between;gap:8px;padding:0 8px;border-bottom:1px solid #edf1f5;overflow:hidden;background:#fff;cursor:grab;}" +
       ".wct-left-row.is-dragging{opacity:.52;cursor:grabbing;}.wct-left-row.is-drop-target{box-shadow:inset 0 0 0 2px rgba(37,99,235,.28);}" +
-      ".wct-left-row.is-group strong{font-size:12px;color:#102033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}.wct-load-summary{flex:0 0 auto;text-align:center;border:1px solid #dbe3ec;background:#f8fafc;border-radius:5px;padding:1px 5px;font-size:10px;color:#667085;white-space:nowrap;}.wct-left-row.is-unassigned{background:#fff8e6;}" +
+      ".wct-left-row.is-group strong{font-size:12px;color:#102033;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;}.wct-row-metrics{flex:0 0 auto;display:flex;align-items:center;gap:4px;}.wct-load-summary{flex:0 0 auto;text-align:center;border:1px solid #dbe3ec;background:#f8fafc;border-radius:5px;padding:1px 5px;font-size:10px;color:#667085;white-space:nowrap;}.wct-conflict-badge{min-width:21px;height:20px;border:1px solid #efb84f;border-radius:10px;background:#fffbeb;color:#92400e;font-size:10px;font-weight:800;cursor:pointer;padding:0 6px;}.wct-conflict-badge.is-critical{border-color:#ef9a9a;background:#fff1f2;color:#b42318;}.wct-left-row.is-unassigned{background:#fff8e6;}" +
       ".wct-left-row.is-load-low{border-left:4px solid #22c55e;background:linear-gradient(90deg,rgba(34,197,94,.10),#fff 52px);}.wct-left-row.is-load-medium{border-left:4px solid #f59e0b;background:linear-gradient(90deg,rgba(245,158,11,.13),#fff 58px);}.wct-left-row.is-load-high{border-left:4px solid #ef4444;background:linear-gradient(90deg,rgba(239,68,68,.14),#fff 66px);}" +
       ".wct-left-row.is-load-low .wct-load-summary{background:#ecfdf3;border-color:#86efac;color:#166534;}.wct-left-row.is-load-medium .wct-load-summary{background:#fff7ed;border-color:#fed7aa;color:#9a3412;}.wct-left-row.is-load-high .wct-load-summary{background:#fff1f2;border-color:#fecdd3;color:#9f1239;}" +
+      ".wct-left-row.has-critical-conflicts{border-left-color:#dc2626;background:linear-gradient(90deg,rgba(220,38,38,.12),#fff 72px);}.wct-modal.is-detail-overview .wct-load-summary{display:none;}" +
       ".wct-timeline-scroll{grid-column:2;grid-row:2;overflow:auto;position:relative;background:#fff;}" +
       ".wct-timeline-body{position:relative;min-width:100%;min-height:100%;}" +
       ".wct-left-total{grid-column:1;grid-row:3;display:flex;align-items:center;padding:0 10px;border-top:1px solid #d9e2ec;border-right:1px solid #d9e2ec;background:#f8fafc;font-size:11px;text-transform:uppercase;font-weight:700;color:#526071;letter-spacing:0;}" +
@@ -3651,17 +4057,18 @@
       ".wct-week-load{position:absolute;bottom:0;height:4px;border-radius:4px 4px 0 0;z-index:3;pointer-events:auto;opacity:.72;}.wct-week-load.is-load-low{background:#22c55e;}.wct-week-load.is-load-medium{background:#f59e0b;}.wct-week-load.is-load-high{background:#ef4444;}" +
       ".wct-row-backdrop{position:absolute;left:0;top:0;}.wct-row-line{position:absolute;left:0;right:0;border-bottom:1px solid #edf1f5;}.wct-row-line.is-group:nth-child(even){background:#fcfdff;}" +
       ".wct-day-gridline{position:absolute;top:0;border-left:1px solid #edf1f5;z-index:1;pointer-events:none;}.wct-day-gridline.is-weekend{background:rgba(238,243,248,.55);}.wct-day-gridline.is-load-low{background:rgba(34,197,94,.045);}.wct-day-gridline.is-load-medium{background:rgba(245,158,11,.07);}.wct-day-gridline.is-load-high{background:rgba(239,68,68,.085);}.wct-day-gridline.is-today{box-shadow:inset 2px 0 0 rgba(217,45,32,.36);}" +
-      ".wct-absence-band,.wct-project-buffer{background:repeating-linear-gradient(135deg,rgba(71,85,105,.18) 0,rgba(71,85,105,.18) 8px,rgba(71,85,105,.10) 8px,rgba(71,85,105,.10) 16px);border-left:1px solid rgba(71,85,105,.26);border-right:1px solid rgba(71,85,105,.20);}" +
-      ".wct-absence-band{position:absolute;z-index:2;pointer-events:auto;}" +
-      ".wct-today-line{position:absolute;top:0;width:0;border-left:2px solid #d92d20;z-index:5;pointer-events:none;}.wct-today-line span{position:absolute;top:4px;left:5px;background:#d92d20;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700;}" +
-      ".wct-project-buffer{position:absolute;z-index:3;pointer-events:none;overflow:visible;}" +
+      ".wct-absence-band{position:absolute;z-index:2;pointer-events:auto;background:repeating-linear-gradient(135deg,rgba(71,85,105,.18) 0,rgba(71,85,105,.18) 8px,rgba(71,85,105,.10) 8px,rgba(71,85,105,.10) 16px);border-left:1px solid rgba(71,85,105,.26);border-right:1px solid rgba(71,85,105,.20);}" +
+      ".wct-today-line{position:absolute;top:0;width:0;border-left:2px solid #d92d20;z-index:8;pointer-events:none;}.wct-today-line span{position:absolute;top:4px;left:5px;background:#d92d20;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700;}" +
+      ".wct-project-buffer{position:absolute;z-index:3;pointer-events:none;overflow:visible;border-left:1px solid;border-right:1px solid;box-shadow:inset 0 1px rgba(255,255,255,.34),inset 0 -1px rgba(255,255,255,.24);}" +
       ".wct-buffer-days{display:none;}" +
-      ".wct-buffer-handle{position:absolute;top:0;z-index:7;width:9px;height:24px;margin:0;padding:0;border:0;border-radius:0;background:rgba(71,85,105,.08);box-shadow:none;cursor:ew-resize;pointer-events:auto;touch-action:none;}" +
-      ".wct-buffer-handle.is-prior{left:-5px;border-left:1px solid rgba(71,85,105,.26);}.wct-buffer-handle.is-post{right:-5px;border-right:1px solid rgba(71,85,105,.20);}.wct-buffer-handle:hover,.wct-buffer-handle:focus{background:rgba(71,85,105,.20);outline:1px solid rgba(71,85,105,.28);}.wct-buffer-handle.is-dragging{background:rgba(71,85,105,.28);outline:1px solid rgba(71,85,105,.38);}" +
+      ".wct-buffer-handle{position:absolute;top:0;z-index:7;width:9px;height:24px;margin:0;padding:0;border:0;border-radius:0;background:rgba(255,255,255,.08);box-shadow:none;cursor:ew-resize;pointer-events:auto;touch-action:none;}" +
+      ".wct-buffer-handle.is-prior{left:-5px;border-left:2px solid var(--wct-buffer-edge);}.wct-buffer-handle.is-post{right:-5px;border-right:2px solid var(--wct-buffer-edge);}.wct-buffer-handle:hover,.wct-buffer-handle:focus{background:rgba(255,255,255,.42);outline:1px solid var(--wct-buffer-edge);}.wct-buffer-handle.is-dragging{background:rgba(255,255,255,.56);outline:2px solid var(--wct-buffer-edge);}" +
       ".wct-project-buffer.is-saving{opacity:.58;}.wct-project-buffer.is-saving .wct-buffer-handle{cursor:progress;}.wct-modal.is-buffer-dragging,.wct-modal.is-buffer-dragging *{user-select:none;}" +
-      ".wct-project-bar{position:absolute;z-index:4;border:1px solid rgba(15,23,42,.22);border-radius:5px;box-shadow:0 1px 2px rgba(15,23,42,.14);padding:0 7px;text-align:left;cursor:pointer;overflow:hidden;}" +
+      ".wct-conflict-band{position:absolute;z-index:5;margin:0;padding:0;border:0;border-top:2px solid;border-bottom:2px solid;pointer-events:none;opacity:.24;}.wct-conflict-band.is-critical{background:rgba(220,38,38,.25);border-color:rgba(185,28,28,.82);}.wct-conflict-band.is-warning{background:rgba(245,158,11,.23);border-color:rgba(180,83,9,.75);}.wct-modal.is-conflict-lens .wct-conflict-band{pointer-events:auto;opacity:.62;cursor:pointer;}.wct-modal.is-conflict-lens .wct-absence-band{opacity:.42;}.wct-modal.is-conflict-lens .wct-project-buffer{opacity:.72;}" +
+      ".wct-project-bar{position:absolute;z-index:6;border:1px solid rgba(15,23,42,.22);border-radius:5px;box-shadow:0 1px 2px rgba(15,23,42,.14);padding:0 7px;text-align:left;cursor:pointer;overflow:hidden;}" +
       ".wct-project-bar span{position:relative;z-index:2;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;line-height:22px;}" +
-      ".wct-project-bar:hover{filter:brightness(1.03);box-shadow:0 2px 7px rgba(15,23,42,.22);}" +
+      ".wct-project-bar:hover{filter:brightness(1.03);box-shadow:0 2px 7px rgba(15,23,42,.22);}.wct-project-bar.has-conflict{box-shadow:0 0 0 2px rgba(217,119,6,.72),0 2px 6px rgba(15,23,42,.2);}.wct-project-bar.has-critical-conflict{box-shadow:0 0 0 2px rgba(220,38,38,.88),0 2px 7px rgba(127,29,29,.30);}" +
+      ".wct-project-envelope-label{position:absolute;z-index:7;display:flex;align-items:center;padding:0 7px;pointer-events:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#102033;font-size:12px;font-weight:800;text-shadow:-1px -1px 0 rgba(255,255,255,.94),1px -1px 0 rgba(255,255,255,.94),-1px 1px 0 rgba(255,255,255,.94),1px 1px 0 rgba(255,255,255,.94);}.wct-modal.is-detail-individual .wct-project-bar span{visibility:hidden;}.wct-modal.is-detail-overview .wct-project-bar span{font-size:10px;}.wct-modal.is-detail-overview .wct-project-buffer{opacity:.56;}.wct-modal.is-detail-overview .wct-absence-band{opacity:.68;}" +
       ".wct-popover{position:absolute;z-index:20;width:420px;max-width:calc(100% - 24px);background:#fff;border:1px solid #b9c7d6;border-radius:8px;box-shadow:0 14px 34px rgba(15,23,42,.26);padding:12px;color:#1f2937;}" +
       ".wct-popover-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px;}.wct-popover-head strong{font-size:15px;line-height:1.25;}.wct-popover-close{border:0;background:transparent;color:#667085;font-size:16px;line-height:1;cursor:pointer;}" +
       ".wct-popover-grid{display:grid;grid-template-columns:90px 1fr;gap:5px 10px;font-size:12px;}.wct-detail-label{color:#667085;font-weight:700;}.wct-detail-value{color:#243244;min-width:0;overflow:hidden;text-overflow:ellipsis;}" +

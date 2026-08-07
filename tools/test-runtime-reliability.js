@@ -645,7 +645,14 @@ function testSourceGuards() {
   assert(!/\b(?:start|end|name|client|venue|status)\s*:/.test(bufferPayload), "buffer saves must not resubmit unrelated project fields");
   assert(captrack.includes("function validateProjectBufferSavePayload"), "buffer saves should fail closed before fetch when required update fields are invalid");
   assert(captrack.includes("var payloadError = validateProjectBufferSavePayload(payload, side)"), "the project-save request should run the fail-closed preflight");
-  assert(captrack.includes(".wct-absence-band,.wct-project-buffer{background:"), "allocation buffers should share the absence-band visual treatment");
+  assert(captrack.includes("function getProjectBufferColors"), "allocation buffers should use a transparent tint derived from their project colour");
+  assert(captrack.includes("function buildConflictModel"), "Capacity Tracker should build a shared person-level conflict model");
+  assert(captrack.includes('type: "actual_absence"'), "actual events overlapping absence should be classified as critical conflicts");
+  assert(captrack.includes('type: "allocation_allocation"'), "allocation-envelope overlaps should be classified as warnings");
+  assert(captrack.includes("wise-capacity-tracker-show-buffers"), "allocation buffer visibility should have an independent display toggle");
+  assert(captrack.includes("wise-capacity-tracker-show-absences"), "absence visibility should have an independent display toggle");
+  assert(captrack.includes("wise-capacity-tracker-conflicts-only"), "the dedicated conflict-only lens should be available");
+  assert(captrack.includes("function getProgressiveDetailLevel"), "Capacity Tracker should progressively reveal detail for overview, team and individual views");
   assert(captrack.includes('".wct-buffer-days{display:none;}"'), "subtle allocation buffers should not add a prominent day-count label");
 
   assert(shared.includes('projectSave: "/php_functions/project_save.php"'), "the shared HireHop contract should expose project partial saves");

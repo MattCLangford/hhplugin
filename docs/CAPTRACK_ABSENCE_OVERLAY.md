@@ -2,6 +2,8 @@
 
 `7-captrack.js` can overlay absence ranges in person-based views, but production auth must not live in the browser. The test helper `WiseCapacityTracker.setMs365AbsenceAccessToken(...)` is deliberately session-only.
 
+The display checkbox only hides or shows the neutral hatched absence bands. Absence data continues to feed conflict detection when the bands are hidden. Event/absence and event/event overlaps are critical; allocation/absence and allocation/allocation overlaps are warnings. The conflict-only lens filters the board to affected people and projects without changing the source data.
+
 ## Recommended Production Shape
 
 Use a small absence proxy:

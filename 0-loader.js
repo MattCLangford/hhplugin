@@ -18,7 +18,7 @@
       meta: { file: "3-meta.js", version: "0.2" },
       layout: { file: "4-layout.js", version: "0.2" },
       editor: { file: "6-editor2.js", version: "1.8", enabled: false },
-      captrack: { file: "7-captrack.js", version: "3.3" },
+      captrack: { file: "7-captrack.js", version: "3.4" },
       stage: { file: "8-stagedesigner.js", version: "2.4" },
       checklist: { file: "9-jobchecklist.js", version: "1.2" },
       projectJobs: { file: "10-projectjobs-qol.js", version: "1.0" },
