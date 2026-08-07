@@ -64,7 +64,7 @@
     {
       "file": "7-captrack.js",
       "status": "lazy-home-page",
-      "cacheVersion": "3.2",
+      "cacheVersion": "3.3",
       "role": "Full-page Wise capacity timeline, with a home-page entry button visible across all depots, using project-level custom fields, combined or separate Technical and Production grouping, editable DaysPrior/DaysPost allocation buffers, date-range filtering, Wise status controls, and sanitized absence overlay support.",
       "recommendedLoadOrder": 7
     },

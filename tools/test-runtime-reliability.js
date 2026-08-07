@@ -628,13 +628,25 @@ function testSourceGuards() {
   assert(captrack.includes("function getProjectGroupValues"), "combined manager grouping should support one project on both manager rows");
   assert(captrack.includes("function renderProjectBuffer"), "manager rows should render pre/post allocation buffers");
   assert(captrack.includes('on("pointerdown.wiseCapacityTracker", ".wct-buffer-handle"'), "allocation buffer edges should be draggable");
+  assert(captrack.includes('on("contextmenu.wiseCapacityTracker", ".wct-buffer-handle"'), "right-button allocation drags should not open the browser context menu");
   assert(captrack.includes('getHireHopEndpoint("projectSave", CFG.projectSaveEndpointFallback)'), "allocation changes should use the shared HireHop project-save endpoint");
+  assert(captrack.includes('var keys = ["PROJECT_ID", "ID", "id", "project_id", "NUMBER", "PROJECT_NUMBER"]'), "Capacity Tracker should prefer HireHop's explicit native record ID over display-number fallbacks");
+  assert(captrack.includes("function normaliseHireHopProjectId"), "Capacity Tracker should reject missing, non-numeric or non-positive project IDs");
+  assert(captrack.includes("hireHopId: hireHopProjectId"), "Capacity Tracker should keep the native HireHop ID separate from the Wise ID");
   const bufferPayload = captrack.slice(
     captrack.indexOf("  function buildProjectBufferSavePayload"),
     captrack.indexOf("  function readProjectBufferSaveError")
   );
-  assert(bufferPayload.includes('"DaysPrior" : "DaysPost"'), "buffer saves should target DaysPrior or DaysPost");
+  assert(bufferPayload.includes('side === "prior" ? "DaysPrior" : (side === "post" ? "DaysPost" : "")'), "buffer saves should target DaysPrior or DaysPost");
+  assert(bufferPayload.includes("id: hireHopProjectId"), "buffer saves should use HireHop's required id update parameter");
+  assert(!bufferPayload.includes("project:"), "buffer saves must not use the non-contract project parameter because a missing id creates a new project");
+  assert(bufferPayload.includes("custom_fields: JSON.stringify(fields)"), "HireHop project custom fields should be posted as a JSON string");
+  assert(!bufferPayload.includes("wiseJobNumber"), "buffer saves must never route through the Wise ID");
   assert(!/\b(?:start|end|name|client|venue|status)\s*:/.test(bufferPayload), "buffer saves must not resubmit unrelated project fields");
+  assert(captrack.includes("function validateProjectBufferSavePayload"), "buffer saves should fail closed before fetch when required update fields are invalid");
+  assert(captrack.includes("var payloadError = validateProjectBufferSavePayload(payload, side)"), "the project-save request should run the fail-closed preflight");
+  assert(captrack.includes(".wct-absence-band,.wct-project-buffer{background:"), "allocation buffers should share the absence-band visual treatment");
+  assert(captrack.includes('".wct-buffer-days{display:none;}"'), "subtle allocation buffers should not add a prominent day-count label");
 
   assert(shared.includes('projectSave: "/php_functions/project_save.php"'), "the shared HireHop contract should expose project partial saves");
 

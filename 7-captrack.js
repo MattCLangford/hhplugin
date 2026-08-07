@@ -11,7 +11,7 @@
   var LOG_PREFIX = "[Wise Capacity Tracker]";
 
   var CFG = {
-    version: "2026-08-06.1",
+    version: "2026-08-07.1",
     title: "Capacity Tracker",
     subtitle: "Wise project timeline grouped by team assignment, tier, status or venue",
     buttonLabel: "Capacity Tracker",
@@ -190,7 +190,10 @@
       parseAbsenceJsonEvents: parseAbsenceJsonEvents,
       normalisePersonName: normalisePersonName,
       parseBufferDays: parseBufferDays,
-      buildProjectBufferSavePayload: buildProjectBufferSavePayload
+      normaliseHireHopProjectId: normaliseHireHopProjectId,
+      readHireHopProjectId: readHireHopProjectId,
+      buildProjectBufferSavePayload: buildProjectBufferSavePayload,
+      validateProjectBufferSavePayload: validateProjectBufferSavePayload
     }
   };
 
@@ -1579,12 +1582,37 @@
   }
 
   function getProjectRowKey(row, index) {
-    var id = firstValue(row || {}, ["NUMBER", "PROJECT_ID", "PROJECT_NUMBER", "ID", "id", "project_id"]);
+    var id = readHireHopProjectId(row);
     return id ? "project:" + asText(id) : "row:" + index + ":" + normaliseSearch(JSON.stringify(row || {})).substr(0, 120);
+  }
+
+  function readHireHopProjectId(raw) {
+    /*
+     * Prefer HireHop's explicit record ID when it is present. search_list.php
+     * normally exposes the same native project identity as NUMBER, so retain
+     * NUMBER as the fallback. Wise's business ID is a custom field and must
+     * never be used for project.php or project_save.php routing.
+     */
+    var keys = ["PROJECT_ID", "ID", "id", "project_id", "NUMBER", "PROJECT_NUMBER"];
+    for (var i = 0; i < keys.length; i++) {
+      var id = normaliseHireHopProjectId(firstValue(raw || {}, [keys[i]]));
+      if (id) return id;
+    }
+    return "";
+  }
+
+  function normaliseHireHopProjectId(value) {
+    var text = asText(value);
+    if (!/^\d+$/.test(text)) return "";
+    var id = Number(text);
+    if (!isFinite(id) || id <= 0 || Math.floor(id) !== id) return "";
+    return String(id);
   }
 
   function normaliseProject(raw, index) {
     raw = raw || {};
+
+    var hireHopProjectId = readHireHopProjectId(raw);
 
     var onsiteStart = readHireHopDateTime(raw, ["JOB_DATE", "PROJECT_START", "ONSITE_START", "START_DATE", "START"], ["JOB_TIME", "PROJECT_START_TIME", "ONSITE_START_TIME", "START_TIME"], [["job", "date"], ["onsite", "start"]], [["job", "time"], ["onsite", "start", "time"]]);
     var onsiteEnd = readHireHopDateTime(raw, ["JOB_END", "PROJECT_END", "ONSITE_END", "END_DATE", "END"], ["JOB_END_TIME", "PROJECT_END_TIME", "ONSITE_END_TIME", "END_TIME"], [["job", "end"], ["onsite", "end"]], [["job", "end", "time"], ["onsite", "end", "time"]]);
@@ -1607,10 +1635,11 @@
     var daysPost = parseBufferDays(getCustomField(raw, CFG.customFieldKeys.daysPost), CFG.defaultDaysPost);
 
     var project = {
-      uid: "wct-project-" + (firstValue(raw, ["NUMBER", "PROJECT_ID", "ID", "id", "project_id"]) || index || Math.random()).toString().replace(/[^a-z0-9_-]+/gi, "-"),
+      uid: "wct-project-" + (hireHopProjectId || index || Math.random()).toString().replace(/[^a-z0-9_-]+/gi, "-"),
       raw: raw,
       kind: firstValue(raw, ["kind", "KIND", "TYPE", "type"]),
-      id: asText(firstValue(raw, ["NUMBER", "PROJECT_ID", "PROJECT_NUMBER", "ID", "id", "project_id"])),
+      id: hireHopProjectId,
+      hireHopId: hireHopProjectId,
       name: projectName || asText(firstValue(raw, ["JOB_NAME", "PROJECT_NAME", "NAME", "name", "project_name"])),
       wiseProjectName: projectName,
       nativeName: asText(firstValue(raw, ["JOB_NAME", "PROJECT_NAME", "NAME", "name", "project_name"])),
@@ -3324,6 +3353,9 @@
 
     $("#" + CFG.modalId)
       .on("pointerdown.wiseCapacityTracker", ".wct-buffer-handle", beginAllocationBufferDrag)
+      .on("contextmenu.wiseCapacityTracker", ".wct-buffer-handle", function (event) {
+        event.preventDefault();
+      })
       .on("click.wiseCapacityTracker", ".wct-project-bar", function (event) {
         event.preventDefault();
         var project = state.projectMap[$(this).attr("data-project-uid")];
@@ -3357,6 +3389,7 @@
     var side = $handle.attr("data-buffer-side");
     var original = event.originalEvent || event;
     if (!project || project.bufferSaving || (side !== "prior" && side !== "post")) return;
+    if (original.button != null && original.button !== 0 && original.button !== 2) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -3455,11 +3488,14 @@
   }
 
   function saveProjectBufferDays(project, side, value) {
-    if (!project || !project.id) return Promise.reject(new Error("This project has no HireHop Project ID."));
+    var hireHopProjectId = normaliseHireHopProjectId(project && (project.hireHopId || project.id));
+    if (!hireHopProjectId) return Promise.reject(new Error("This project has no HireHop Project ID."));
     if (typeof window.fetch !== "function") return Promise.reject(new Error("The browser fetch API is unavailable."));
 
     var endpoint = getHireHopEndpoint("projectSave", CFG.projectSaveEndpointFallback);
     var payload = buildProjectBufferSavePayload(project, side, value);
+    var payloadError = validateProjectBufferSavePayload(payload, side);
+    if (payloadError) return Promise.reject(new Error(payloadError));
     return window.fetch(endpoint, {
       method: "POST",
       credentials: "same-origin",
@@ -3474,6 +3510,9 @@
         if (!response.ok) throw new Error("HireHop returned HTTP " + response.status + ".");
         var saveError = readProjectBufferSaveError(text);
         if (saveError) throw new Error(saveError);
+        var responseJson = tryParseJson(text);
+        var returnedId = normaliseHireHopProjectId(responseJson && (responseJson.ID != null ? responseJson.ID : responseJson.id));
+        if (returnedId && returnedId !== payload.id) throw new Error("HireHop returned a different Project ID; the allocation change was not accepted.");
         return true;
       });
     });
@@ -3481,18 +3520,46 @@
 
   function buildProjectBufferSavePayload(project, side, value) {
     var fields = {};
-    fields[side === "prior" ? "DaysPrior" : "DaysPost"] = parseBufferDays(value, side === "prior" ? CFG.defaultDaysPrior : CFG.defaultDaysPost);
+    var hireHopProjectId = normaliseHireHopProjectId(project && (project.hireHopId || project.id));
+    var fieldName = side === "prior" ? "DaysPrior" : (side === "post" ? "DaysPost" : "");
+    if (fieldName) fields[fieldName] = parseBufferDays(value, side === "prior" ? CFG.defaultDaysPrior : CFG.defaultDaysPost);
     return {
-      project: project && project.id ? project.id : "",
-      custom_fields: fields
+      id: hireHopProjectId,
+      custom_fields: JSON.stringify(fields)
     };
+  }
+
+  function validateProjectBufferSavePayload(payload, side) {
+    if (!payload || !normaliseHireHopProjectId(payload.id)) {
+      return "The allocation change was blocked because the native HireHop Project ID is missing or invalid.";
+    }
+    if (side !== "prior" && side !== "post") {
+      return "The allocation change was blocked because the buffer side is invalid.";
+    }
+
+    var fields = typeof payload.custom_fields === "string" ? tryParseJson(payload.custom_fields) : payload.custom_fields;
+    if (!fields || typeof fields !== "object" || Array.isArray(fields)) {
+      return "The allocation change was blocked because the custom fields are missing or invalid.";
+    }
+
+    var fieldName = side === "prior" ? "DaysPrior" : "DaysPost";
+    var keys = Object.keys(fields);
+    var fieldValue = Number(fields[fieldName]);
+    if (keys.length !== 1 || keys[0] !== fieldName || !isFinite(fieldValue) || fieldValue < 0 || fieldValue > CFG.maxBufferDays || Math.floor(fieldValue) !== fieldValue) {
+      return "The allocation change was blocked because " + fieldName + " is missing or invalid.";
+    }
+    return "";
   }
 
   function readProjectBufferSaveError(responseText) {
     var text = asText(responseText);
     if (!text) return "";
     var json = tryParseJson(text);
-    var error = json && typeof json === "object" ? (json.error != null ? json.error : json.ERROR) : "";
+    var error = "";
+    if (json && typeof json === "object") {
+      error = json.error != null ? json.error : json.ERROR;
+      if (error == null || error === "") error = json.warning != null ? json.warning : json.WARNING;
+    }
     if (error != null && error !== "" && error !== false && Number(error) !== 0) {
       return String(error) === "327" ? "HireHop is temporarily rate limiting saves. Wait a minute and try again." : asText(error);
     }
@@ -3584,13 +3651,13 @@
       ".wct-week-load{position:absolute;bottom:0;height:4px;border-radius:4px 4px 0 0;z-index:3;pointer-events:auto;opacity:.72;}.wct-week-load.is-load-low{background:#22c55e;}.wct-week-load.is-load-medium{background:#f59e0b;}.wct-week-load.is-load-high{background:#ef4444;}" +
       ".wct-row-backdrop{position:absolute;left:0;top:0;}.wct-row-line{position:absolute;left:0;right:0;border-bottom:1px solid #edf1f5;}.wct-row-line.is-group:nth-child(even){background:#fcfdff;}" +
       ".wct-day-gridline{position:absolute;top:0;border-left:1px solid #edf1f5;z-index:1;pointer-events:none;}.wct-day-gridline.is-weekend{background:rgba(238,243,248,.55);}.wct-day-gridline.is-load-low{background:rgba(34,197,94,.045);}.wct-day-gridline.is-load-medium{background:rgba(245,158,11,.07);}.wct-day-gridline.is-load-high{background:rgba(239,68,68,.085);}.wct-day-gridline.is-today{box-shadow:inset 2px 0 0 rgba(217,45,32,.36);}" +
-      ".wct-absence-band{position:absolute;z-index:2;background:repeating-linear-gradient(135deg,rgba(71,85,105,.18) 0,rgba(71,85,105,.18) 8px,rgba(71,85,105,.10) 8px,rgba(71,85,105,.10) 16px);border-left:1px solid rgba(71,85,105,.26);border-right:1px solid rgba(71,85,105,.20);pointer-events:auto;}" +
+      ".wct-absence-band,.wct-project-buffer{background:repeating-linear-gradient(135deg,rgba(71,85,105,.18) 0,rgba(71,85,105,.18) 8px,rgba(71,85,105,.10) 8px,rgba(71,85,105,.10) 16px);border-left:1px solid rgba(71,85,105,.26);border-right:1px solid rgba(71,85,105,.20);}" +
+      ".wct-absence-band{position:absolute;z-index:2;pointer-events:auto;}" +
       ".wct-today-line{position:absolute;top:0;width:0;border-left:2px solid #d92d20;z-index:5;pointer-events:none;}.wct-today-line span{position:absolute;top:4px;left:5px;background:#d92d20;color:#fff;border-radius:4px;padding:2px 5px;font-size:10px;font-weight:700;}" +
-      ".wct-project-buffer{position:absolute;z-index:3;background:repeating-linear-gradient(135deg,rgba(71,85,105,.34) 0,rgba(71,85,105,.34) 6px,rgba(100,116,139,.24) 6px,rgba(100,116,139,.24) 12px);border-top:1px solid rgba(51,65,85,.42);border-bottom:1px solid rgba(51,65,85,.42);pointer-events:none;overflow:visible;}" +
-      ".wct-project-buffer.is-prior{border-left:1px solid rgba(51,65,85,.5);border-radius:5px 0 0 5px;}.wct-project-buffer.is-post{border-right:1px solid rgba(51,65,85,.5);border-radius:0 5px 5px 0;}" +
-      ".wct-buffer-days{display:block;overflow:hidden;text-align:center;color:#334155;font-size:10px;font-weight:700;line-height:22px;text-shadow:0 1px rgba(255,255,255,.75);white-space:nowrap;}" +
-      ".wct-buffer-handle{position:absolute;top:-3px;z-index:7;width:9px;height:28px;margin:0;padding:0;border:1px solid #475569;border-radius:3px;background:#e2e8f0;box-shadow:0 1px 3px rgba(15,23,42,.24);cursor:ew-resize;pointer-events:auto;touch-action:none;}" +
-      ".wct-buffer-handle.is-prior{left:-5px;}.wct-buffer-handle.is-post{right:-5px;}.wct-buffer-handle:hover,.wct-buffer-handle:focus{background:#cbd5e1;border-color:#1e3a5f;outline:2px solid rgba(37,99,235,.24);}.wct-buffer-handle.is-dragging{background:#94a3b8;border-color:#1e293b;}" +
+      ".wct-project-buffer{position:absolute;z-index:3;pointer-events:none;overflow:visible;}" +
+      ".wct-buffer-days{display:none;}" +
+      ".wct-buffer-handle{position:absolute;top:0;z-index:7;width:9px;height:24px;margin:0;padding:0;border:0;border-radius:0;background:rgba(71,85,105,.08);box-shadow:none;cursor:ew-resize;pointer-events:auto;touch-action:none;}" +
+      ".wct-buffer-handle.is-prior{left:-5px;border-left:1px solid rgba(71,85,105,.26);}.wct-buffer-handle.is-post{right:-5px;border-right:1px solid rgba(71,85,105,.20);}.wct-buffer-handle:hover,.wct-buffer-handle:focus{background:rgba(71,85,105,.20);outline:1px solid rgba(71,85,105,.28);}.wct-buffer-handle.is-dragging{background:rgba(71,85,105,.28);outline:1px solid rgba(71,85,105,.38);}" +
       ".wct-project-buffer.is-saving{opacity:.58;}.wct-project-buffer.is-saving .wct-buffer-handle{cursor:progress;}.wct-modal.is-buffer-dragging,.wct-modal.is-buffer-dragging *{user-select:none;}" +
       ".wct-project-bar{position:absolute;z-index:4;border:1px solid rgba(15,23,42,.22);border-radius:5px;box-shadow:0 1px 2px rgba(15,23,42,.14);padding:0 7px;text-align:left;cursor:pointer;overflow:hidden;}" +
       ".wct-project-bar span{position:relative;z-index:2;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;font-weight:700;line-height:22px;}" +
