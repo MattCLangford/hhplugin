@@ -17,6 +17,8 @@
   var STYLES_ID = "wise-job-groups-styles";
   var FALLBACK_ACCENT = "#f97316";
   var FALLBACK_ACCENT_RGB = "249,115,22";
+  var PROJECT_FALLBACK_ACCENT = "#64748b";
+  var PROJECT_FALLBACK_ACCENT_RGB = "100,116,139";
   var USER_DEPOT_KEYS = [
     "DEPOT_ID", "depot_id", "DEFAULT_DEPOT_ID", "default_depot_id",
     "BRANCH_ID", "branch_id", "WAREHOUSE_ID", "warehouse_id",
@@ -24,8 +26,8 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-08-14.11", maintainRecoveryMs: 5000 };
-  var PROJECT_CUSTOM_FIELDS = ["_Tier", "_Job_Number", "_JobNumber", "_Client", "_Venue", "_Revenue", "_revenue", "_Install", "_ShowStart", "_ShowEnd", "_Derig"];
+  var CFG = { version: "2026-08-14.12", maintainRecoveryMs: 5000 };
+  var PROJECT_CUSTOM_FIELDS = ["_Status", "_Tier", "_Job_Number", "_JobNumber", "_Client", "_Venue", "_Revenue", "_revenue", "_Install", "_ShowStart", "_ShowEnd", "_Derig"];
   var ICONS = {
     project: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17V4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5V17M1.5 17h17M7 7h2M11 7h2M7 11h2M11 11h2M8 17v-3h4v3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
     job: '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><rect x="2" y="4" width="16" height="13" rx="2"/><path d="M6 4V2h8v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="5" y="8" width="10" height="2" rx="1" fill="#fff"/><rect x="5" y="12" width="7" height="2" rx="1" fill="#fff"/></svg>',
@@ -37,6 +39,7 @@
     {
       key: "project-details",
       title: "Project Details",
+      note: "Project-level view · read only here",
       icon: ICONS.project,
       project: true,
       fields: [
@@ -324,23 +327,40 @@
       var group = GROUPS[g];
       var $section = makeGroup(group);
       var $body = $section.children(".wise-jg-body");
-      var pendingSubhead = "";
-
-      for (var f = 0; f < group.fields.length; f++) {
-        var spec = group.fields[f];
-        if (spec.section) pendingSubhead = spec.section;
-        var value = group.project ? readProjectFieldValue(spec) : readFieldValue($root, spec);
-        if (!value && !spec.always) continue;
-        if (pendingSubhead) {
-          renderSubhead($body, pendingSubhead);
-          pendingSubhead = "";
+      if (group.project) {
+        renderSubhead($body, "Project Timings");
+        var $projectTimings = $("<div></div>").addClass("wise-jg-project-date-grid").appendTo($body);
+        renderProjectFields($projectTimings, group.fields, true);
+        renderSubhead($body, "Project Information");
+        var $projectInfo = $("<div></div>").addClass("wise-jg-project-info-grid").appendTo($body);
+        renderProjectFields($projectInfo, group.fields, false);
+      } else {
+        var pendingSubhead = "";
+        for (var f = 0; f < group.fields.length; f++) {
+          var spec = group.fields[f];
+          if (spec.section) pendingSubhead = spec.section;
+          var value = readFieldValue($root, spec);
+          if (!value && !spec.always) continue;
+          if (pendingSubhead) {
+            renderSubhead($body, pendingSubhead);
+            pendingSubhead = "";
+          }
+          renderField($body, spec, value);
         }
-        renderField($body, spec, value);
       }
       (group.project ? $projectGrid : $jobGrid).append($section);
     }
-    $layout.append($projectGrid, $jobGrid);
+    $layout.append($jobGrid, $projectGrid);
     return $layout;
+  }
+
+  function renderProjectFields($body, fields, timings) {
+    for (var f = 0; f < fields.length; f++) {
+      var spec = fields[f];
+      if (!!spec.projectDate !== !!timings) continue;
+      var value = readProjectFieldValue(spec);
+      if (value || spec.always) renderField($body, spec, value);
+    }
   }
 
   function makeGroup(group) {
@@ -351,6 +371,7 @@
     var $header = $("<div></div>").addClass("wise-jg-hdr");
     $("<span></span>").addClass("wise-jg-icon").html(group.icon).appendTo($header);
     $("<span></span>").addClass("wise-jg-hdr-text").text(group.title).appendTo($header);
+    if (group.note) $("<span></span>").addClass("wise-jg-hdr-note").text(group.note).appendTo($header);
     $section.append($header, $("<div></div>").addClass("wise-jg-body"));
     return $section;
   }
@@ -776,6 +797,7 @@
         );
       }
     }
+    applyProjectAccentColour($root);
     $root.find("[data-wise-job-group='project-details']")
       .attr("aria-busy", state.parentProjectRequest ? "true" : "false")
       .attr("data-wise-project-state", state.parentProjectData ? "ready" : state.parentProjectError ? "error" : "loading");
@@ -1069,6 +1091,30 @@
     setStylePropertyIfChanged(element, "--wise-job-accent-rgb", rgb ? rgb.join(",") : FALLBACK_ACCENT_RGB);
   }
 
+  function applyProjectAccentColour($root) {
+    var element = $root.get(0);
+    if (!element) return;
+    var data = state.parentProjectData;
+    var colour = data ? customFieldToText(readProjectObjectValue(data, ["COLOUR", "COLOR", "STATUS_COLOUR", "STATUS_COLOR", "colour", "color"])) : "";
+    var rgb = parseRgb(colour);
+    if (!rgb && data) {
+      var status = customFieldToText(readProjectObjectValue(data, ["_Status", "~_Status", "STATUS_NAME", "status_name", "STATUS", "status"]));
+      rgb = parseRgb(projectStatusColour(status));
+    }
+    setStylePropertyIfChanged(element, "--wise-project-window-accent", rgb ? rgbToHex(rgb) : PROJECT_FALLBACK_ACCENT);
+    setStylePropertyIfChanged(element, "--wise-project-window-accent-rgb", rgb ? rgb.join(",") : PROJECT_FALLBACK_ACCENT_RGB);
+  }
+
+  function projectStatusColour(status) {
+    var value = normaliseText(status);
+    if (value === "closed lost") return "#7c8794";
+    if (value === "quote (new client)" || value === "quote (repeat client)" || value.indexOf("quote") === 0) return "#7c3aed";
+    if (value === "very likely") return "#f2c94c";
+    if (value === "hold" || value === "hold - work in progress") return "#f97316";
+    if (value === "confirmed") return "#16a34a";
+    return PROJECT_FALLBACK_ACCENT;
+  }
+
   function setStylePropertyIfChanged(element, name, value) {
     if (element.style.getPropertyValue(name) === value) return;
     element.style.setProperty(name, value);
@@ -1144,6 +1190,8 @@
     if (document.getElementById(STYLES_ID)) return;
     var accent = "var(--wise-job-accent," + FALLBACK_ACCENT + ")";
     var accentRgb = "var(--wise-job-accent-rgb," + FALLBACK_ACCENT_RGB + ")";
+    var projectAccent = "var(--wise-project-window-accent," + PROJECT_FALLBACK_ACCENT + ")";
+    var projectAccentRgb = "var(--wise-project-window-accent-rgb," + PROJECT_FALLBACK_ACCENT_RGB + ")";
     var root = ".wise-jg-active";
     var css = [
       root + "{box-sizing:border-box;}",
@@ -1151,41 +1199,48 @@
       // Fail closed in CSS too: even if a future discovery regression tries
       // to mount against shared #tabs, cards cannot display outside the
       // native details panel.
-      root + ">.wise-jg-layout{display:none!important;padding:5px;background:#fff;box-sizing:border-box;font-size:14px;line-height:1.35;}",
+      root + ">.wise-jg-layout{display:none!important;padding:3px;background:#fff;box-sizing:border-box;font-size:14px;line-height:1.3;}",
       "#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout,#details_tab" + root + ">.wise-jg-layout,#details_tab " + root + ">.wise-jg-layout{display:block!important;}",
-      root + " .wise-jg-project-grid{display:block;margin-bottom:10px;}",
-      root + " .wise-jg-job-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:stretch;}",
-      root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
-      root + " .wise-jg-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #eee;background:#fff;}",
+      root + " .wise-jg-project-grid{display:block;margin-top:8px;}",
+      root + " .wise-jg-job-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;align-items:stretch;}",
+      root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:8px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 6px rgba(0,0,0,.05);overflow:hidden;}",
+      root + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:6px 10px;border-bottom:1px solid #eee;background:#fff;}",
       root + " .wise-jg-hdr-text{font-weight:700;font-size:.8em;letter-spacing:.03em;text-transform:uppercase;color:#1f2937;}",
-      root + " .wise-jg-icon{display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(" + accentRgb + ",.2);border:1px solid rgba(" + accentRgb + ",.35);color:" + accent + ";}",
-      root + " .wise-jg-body{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;padding:4px 11px 9px;box-sizing:border-box;}",
-      root + " .wise-jg-subhead{grid-column:1 / -1;margin-top:6px;padding:10px 2px 5px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:.76em;font-weight:750;letter-spacing:.055em;line-height:1;text-transform:uppercase;}",
+      root + " .wise-jg-hdr-note{margin-left:auto;padding:2px 6px;border-radius:999px;color:#64748b;font-size:.7em;font-weight:650;letter-spacing:.02em;white-space:nowrap;}",
+      root + " .wise-jg-icon{display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;background:rgba(" + accentRgb + ",.18);border:1px solid rgba(" + accentRgb + ",.32);color:" + accent + ";}",
+      root + " .wise-jg-body{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;padding:3px 9px 6px;box-sizing:border-box;}",
+      root + " .wise-jg-subhead{grid-column:1 / -1;margin-top:3px;padding:6px 1px 3px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:.72em;font-weight:750;letter-spacing:.055em;line-height:1;text-transform:uppercase;}",
       root + " .wise-jg-subhead:first-child{margin-top:0;border-top:0;}",
-      root + " .wise-jg-field{display:grid;grid-template-columns:minmax(132px,auto) minmax(0,1fr);align-items:baseline;gap:8px;min-width:0;min-height:26px;padding:3px 2px;border-bottom:0;box-sizing:border-box;}",
+      root + " .wise-jg-field{display:grid;grid-template-columns:minmax(128px,auto) minmax(0,1fr);align-items:baseline;gap:7px;min-width:0;min-height:22px;padding:2px 1px;border-bottom:0;box-sizing:border-box;}",
       root + " .wise-jg-field[data-wise-span]{grid-column:auto;}",
       root + " .wise-jg-field-label{flex:0 0 auto;font-weight:700;color:#111827;white-space:nowrap;}",
       root + " .wise-jg-field-value{min-width:0;color:#1f2937;overflow-wrap:anywhere;}",
       root + " .wise-jg-field-value.wise-jg-empty{color:#9ca3af;}",
-      root + " .wise-jg-field-long-text{grid-template-columns:1fr;align-items:start;gap:3px;min-height:78px;padding-top:7px;}",
+      root + " .wise-jg-field-long-text{grid-template-columns:1fr;align-items:start;gap:2px;min-height:50px;padding-top:4px;}",
       root + " .wise-jg-field-long-text .wise-jg-field-label{white-space:normal;}",
       root + " .wise-jg-field-long-text .wise-jg-field-value{white-space:pre-wrap;line-height:1.35;}",
-      root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:12px 14px;}",
-      root + " [data-wise-job-group='project-details'] .wise-jg-field:not(.wise-jg-date-box){grid-column:span 2;}",
-      root + " [data-wise-job-group='project-details'] .wise-jg-subhead{grid-column:1 / -1;margin-top:2px;}",
-      root + " [data-wise-job-group='job-timings']{grid-column:1 / -1;grid-row:1;}",
-      root + " [data-wise-job-group='job-timings']>.wise-jg-body{grid-template-columns:repeat(9,minmax(0,1fr));gap:8px;padding:10px 12px 12px;}",
-      root + " [data-wise-job-group='job-details']{grid-column:1;grid-row:2;}",
-      root + " [data-wise-job-group='job-commercial-info']{grid-column:2;grid-row:2;}",
-      root + " .wise-jg-date-box{display:flex;flex-direction:column;align-items:stretch;gap:0;min-height:88px;padding:9px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fafafa;box-sizing:border-box;}",
-      root + " .wise-jg-date-box .wise-jg-field-label{min-height:2.4em;margin-bottom:8px;color:#374151;font-size:.78em;line-height:1.2;white-space:normal;}",
+      root + " [data-wise-job-group='project-details']{border:1px dashed rgba(" + projectAccentRgb + ",.36);border-left:4px solid " + projectAccent + ";background:rgba(" + projectAccentRgb + ",.025);box-shadow:0 1px 4px rgba(15,23,42,.05);}",
+      root + " [data-wise-job-group='project-details']>.wise-jg-hdr," + root + " [data-wise-job-group='project-details']>.wise-jg-body{background:rgba(" + projectAccentRgb + ",.025);}",
+      root + " [data-wise-job-group='project-details'] .wise-jg-icon{background:rgba(" + projectAccentRgb + ",.12);border-color:rgba(" + projectAccentRgb + ",.28);color:" + projectAccent + ";}",
+      root + " [data-wise-job-group='project-details'] .wise-jg-hdr-note{background:rgba(" + projectAccentRgb + ",.09);color:" + projectAccent + ";}",
+      root + " [data-wise-job-group='project-details']>.wise-jg-body{display:block;padding:6px 11px 8px 9px;}",
+      root + " .wise-jg-project-date-grid{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));gap:6px;}",
+      root + " .wise-jg-project-info-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;}",
+      root + " [data-wise-job-group='project-details'] .wise-jg-date-box{border-color:rgba(" + projectAccentRgb + ",.22);background:rgba(" + projectAccentRgb + ",.035);}",
+      root + " [data-wise-job-group='project-details'] .wise-jg-subhead{margin:0;padding:6px 1px 4px;}",
+      root + " [data-wise-job-group='job-details']{grid-column:1;grid-row:1;}",
+      root + " [data-wise-job-group='job-commercial-info']{grid-column:2;grid-row:1;}",
+      root + " [data-wise-job-group='job-timings']{grid-column:1 / -1;grid-row:2;}",
+      root + " [data-wise-job-group='job-timings']>.wise-jg-body{grid-template-columns:repeat(9,minmax(0,1fr));gap:6px;padding:6px 9px 8px;}",
+      root + " .wise-jg-date-box{display:flex;flex-direction:column;align-items:stretch;gap:0;height:74px;min-height:74px;max-height:74px;padding:6px 8px;border:1px solid #e5e7eb;border-radius:7px;background:#fafafa;box-sizing:border-box;overflow:hidden;}",
+      root + " .wise-jg-date-box .wise-jg-field-label{display:-webkit-box;height:2.4em;min-height:2.4em;max-height:2.4em;margin-bottom:3px;color:#374151;font-size:.72em;line-height:1.2;white-space:normal;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;}",
       root + " .wise-jg-date-box .wise-jg-field-value{display:flex;flex-direction:column;gap:2px;margin-top:auto;line-height:1.2;}",
-      root + " .wise-jg-date-value{font-weight:700;color:#111827;white-space:nowrap;}",
-      root + " .wise-jg-time-value{color:#6b7280;font-size:.9em;white-space:nowrap;}",
+      root + " .wise-jg-date-value{font-size:.92em;font-weight:700;color:#111827;white-space:nowrap;}",
+      root + " .wise-jg-time-value{color:#6b7280;font-size:.78em;white-space:nowrap;}",
       root + " .wise-jg-date-box .wise-jg-field-value.wise-jg-empty .wise-jg-date-value," + root + " .wise-jg-date-box .wise-jg-field-value.wise-jg-empty .wise-jg-time-value{color:#9ca3af;}",
-      "@media (max-width:1180px){" + root + " [data-wise-job-group='job-timings']>.wise-jg-body{grid-template-columns:repeat(3,minmax(0,1fr));}}",
-      "@media (max-width:760px){" + root + " .wise-jg-job-grid{grid-template-columns:1fr;}" + root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " [data-wise-job-group='project-details'] .wise-jg-field:not(.wise-jg-date-box){grid-column:1 / -1;}" + root + " [data-wise-job-group='project-details'] .wise-jg-subhead{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-timings']," + root + " [data-wise-job-group='job-details']," + root + " [data-wise-job-group='job-commercial-info']{grid-column:1;grid-row:auto;}" + root + " [data-wise-job-group='job-timings']{order:-1;}" + root + " [data-wise-job-group='job-timings']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " .wise-jg-field{grid-template-columns:minmax(118px,auto) minmax(0,1fr);}}",
-      "@media (max-width:480px){" + root + " [data-wise-job-group='project-details']>.wise-jg-body," + root + " [data-wise-job-group='job-timings']>.wise-jg-body{grid-template-columns:1fr;}" + root + " .wise-jg-field{grid-template-columns:1fr;gap:1px;}" + root + " .wise-jg-field-label{white-space:normal;} }"
+      "@media (max-width:1180px){" + root + " [data-wise-job-group='job-timings']>.wise-jg-body," + root + " .wise-jg-project-date-grid{grid-template-columns:repeat(3,minmax(0,1fr));}}",
+      "@media (max-width:760px){" + root + " .wise-jg-job-grid{grid-template-columns:1fr;}" + root + " [data-wise-job-group='job-details']," + root + " [data-wise-job-group='job-commercial-info']," + root + " [data-wise-job-group='job-timings']{grid-column:1;grid-row:auto;}" + root + " [data-wise-job-group='job-details']{order:1;}" + root + " [data-wise-job-group='job-commercial-info']{order:2;}" + root + " [data-wise-job-group='job-timings']{order:3;}" + root + " [data-wise-job-group='job-timings']>.wise-jg-body," + root + " .wise-jg-project-date-grid," + root + " .wise-jg-project-info-grid{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " .wise-jg-field{grid-template-columns:minmax(118px,auto) minmax(0,1fr);}}",
+      "@media (max-width:480px){" + root + " [data-wise-job-group='job-timings']>.wise-jg-body," + root + " .wise-jg-project-date-grid," + root + " .wise-jg-project-info-grid{grid-template-columns:1fr;}" + root + " .wise-jg-field{grid-template-columns:1fr;gap:1px;}" + root + " .wise-jg-field-label{white-space:normal;}" + root + " .wise-jg-hdr-note{white-space:normal;text-align:right;} }"
     ].join("\n");
     var style = document.createElement("style");
     style.id = STYLES_ID;
