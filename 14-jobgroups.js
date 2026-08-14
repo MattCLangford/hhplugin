@@ -24,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-08-14.3", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-08-14.4", maintainRecoveryMs: 5000 };
 
   var GROUPS = [
     {
@@ -306,17 +306,17 @@
   function findActiveJobDetailsPanel() {
     var $found = $();
     // Start from the class rather than #tabs because HireHop can retain more
-    // than one page widget with the same local IDs during navigation.
+    // than one page widget with the same local IDs during navigation. Some
+    // live builds do not keep the main tab's ui-tabs-active/ARIA markers in
+    // sync, so panel visibility plus the native job-field signature is the
+    // authoritative ownership test. Other job panels do not contain this
+    // signature and jQuery UI hides #main_tab when they become current.
     $(".hh-framework_tabs").each(function () {
       if ($found.length) return;
       var $tabs = $(this);
-      if (!isJobTabsContainer($tabs) || !$tabs.is(":visible")) return;
-      var $mainTab = $tabs.children("ul").first().children("li[data-kind='main']").first();
       var $panel = $tabs.children("#main_tab").first();
-      var selected = $mainTab.hasClass("ui-tabs-active") ||
-        $mainTab.hasClass("ui-state-active") ||
-        $mainTab.attr("aria-selected") === "true";
-      if (selected && $panel.length && isElementActuallyVisible($panel.get(0))) $found = $panel;
+      if (!$panel.length || !isElementActuallyVisible($panel.get(0))) return;
+      if (looksLikeJobInfoText(normaliseText($panel.text()))) $found = $panel;
     });
     return $found;
   }
@@ -326,7 +326,7 @@
     var ariaHidden = String(element.getAttribute && element.getAttribute("aria-hidden") || "").toLowerCase();
     if (ariaHidden === "true" || $(element).is(".ui-tabs-hide,.ui-helper-hidden")) return false;
     var style = window.getComputedStyle ? window.getComputedStyle(element) : element.style;
-    return !style || (style.display !== "none" && style.visibility !== "hidden");
+    return (!style || (style.display !== "none" && style.visibility !== "hidden")) && $(element).is(":visible");
   }
 
   function isInsideDetailsPanel(node, panel) {
