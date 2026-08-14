@@ -625,13 +625,13 @@ function testSourceGuards() {
   assert(jobGroups.includes('attributeFilter: ["style", "class"]'), "job accent observation should react to inline and class-based status colours");
   assert(jobGroups.includes("function setStylePropertyIfChanged"), "job accent writes should be idempotent to avoid mutation loops");
   assert(jobGroups.includes('!$(this).closest(".wise-jg-layout").length'), "job accent detection should not sample its own generated colour tints");
-  assert(jobGroups.includes("var $detailsPanel = findActiveJobDetailsPanel()"), "job cards should require HireHop's active native details panel");
+  assert(jobGroups.includes("var $detailsPanel = findJobDetailsPanel()"), "job cards should resolve HireHop's native details panel");
   assert(!jobGroups.includes("function isNonDetailJobTabCurrent"), "job cards should not rely on a fail-open negative tab check");
-  assert(jobGroups.includes('document.addEventListener("mousedown", captureJobTabIntent, true)'), "job tab transitions should remove cards before HireHop renders the destination tab");
-  assert(jobGroups.includes('kind && kind !== "main"'), "every non-main HireHop job tab should synchronously restore native content");
-  assert(jobGroups.includes('kind && kind !== "main"'), "capture-phase tab cleanup should use HireHop's native main-tab identity");
+  assert(!jobGroups.includes("captureJobTabIntent"), "job details should remain panel-contained rather than being torn down on tab clicks");
   assert(jobGroups.includes('$tabs.children("#main_tab")'), "job cards should resolve HireHop's native details content panel");
-  assert(jobGroups.includes('looksLikeJobInfoText(normaliseText($panel.text()))'), "a visible main panel should be recognised by its native job-field signature rather than unreliable active classes");
+  assert(jobGroups.includes('looksLikeJobInfoText(normaliseText($panel.text()))'), "the native main panel should be recognised by its job-field signature rather than unreliable active state");
+  assert(jobGroups.includes('if ($tabs.is(":visible")) $visiblePagePanel = $panel'), "hidden #main_tab should remain eligible when its containing job page is visible");
+  assert(!jobGroups.includes('addBack(selectors[i]).filter(":visible")'), "hidden native job details should remain discoverable while another tab is active");
   assert(jobGroups.includes("findJobInfoRoot($detailsPanel)"), "job field discovery should be scoped to the native details panel");
   assert(jobGroups.includes("isInsideDetailsPanel($root.get(0), $detailsPanel.get(0))"), "job cards should refuse any mount outside the details panel");
   assert(jobGroups.includes("restoreLayoutsOutsideDetailsPanel"), "previous shared-container layouts should be removed during migration");

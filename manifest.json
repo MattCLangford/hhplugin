@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "6.6",
+      "cacheVersion": "6.7",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -113,8 +113,8 @@
     {
       "file": "14-jobgroups.js",
       "status": "lazy-job-details",
-      "cacheVersion": "1.5",
-      "role": "Proposal Creation depot only: restyles the native job details information area into three balanced, responsive cards — Job Info, Job Dates and Times, and Job Commercial Info — with operational subgroups, natural reading order, and live accent refreshes when HireHop changes the current job or status colour. The layout is mounted exclusively inside a visible native #main_tab carrying the job-detail field signature, refuses shared #tabs ancestors, removes legacy orphan layouts, and restores native content before every non-main job tab renders. Goods out and Goods in are omitted presentation-only; HireHop's underlying job values and save behavior are unchanged.",
+      "cacheVersion": "1.6",
+      "role": "Proposal Creation depot only: restyles the native job details information area into three balanced, responsive cards — Job Info, Job Dates and Times, and Job Commercial Info — with operational subgroups, natural reading order, and live accent refreshes when HireHop changes the current job or status colour. Like the project-details enhancement, it transforms the native job #main_tab in place whether that panel is currently shown or hidden, refuses shared #tabs ancestors, and relies on HireHop's own panel visibility to isolate every other job tab. Goods out and Goods in are omitted presentation-only; HireHop's underlying job values and save behavior are unchanged.",
       "recommendedLoadOrder": 14
     },
     {
