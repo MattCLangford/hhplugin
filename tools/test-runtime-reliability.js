@@ -649,6 +649,11 @@ function testSourceGuards() {
   assert(jobGroups.includes('/php_functions/project_get_data.php?id='), "parent projects should use HireHop's direct project data endpoint");
   assert(jobGroups.includes('jobs: 0') && jobGroups.includes('projects: 1'), "the parent-project lookup must request project records rather than job records");
   assert(jobGroups.includes('if (spec.longText)') && jobGroups.includes('Never fall'), "memo fields should not fall through into the adjacent commercial cell");
+  assert(jobGroups.includes('font-size:14px'), "job details should use the same refined text scale as the project details cards");
+  assert(!jobGroups.includes("[data-wise-job-group='project-details']{border-left-width:10px;}"), "the project overview should use the same six-pixel accent rail as the other refined cards");
+  assert(jobGroups.includes('dateTime: true') && jobGroups.includes('function formatDateTime'), "all job timing fields should use the shared DD/MM/YYYY HH:mm display formatter");
+  assert(jobGroups.includes('project_get_data+search_list') && jobGroups.includes('PROJECT_CUSTOM_FIELDS'), "direct parent-project data should be supplemented with search-list custom fields");
+  assert(jobGroups.includes('parseProjectFieldContainer') && jobGroups.includes('normaliseProjectKeyName'), "project custom fields should support JSON bags and array payloads");
 
   const journey = fs.readFileSync(path.join(root, "11-projectjourney.js"), "utf8");
   const buildJourney = journey.slice(journey.indexOf("function buildJourneyHtml"), journey.indexOf("function buildHeaderSummary"));

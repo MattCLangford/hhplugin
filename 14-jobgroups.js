@@ -24,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-08-14.9", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-08-14.10", maintainRecoveryMs: 5000 };
   var PROJECT_CUSTOM_FIELDS = ["_Tier", "_Job_Number", "_JobNumber", "_Client", "_Venue", "_Revenue", "_revenue", "_Install", "_ShowStart", "_ShowEnd", "_Derig"];
   var ICONS = {
     project: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17V4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5V17M1.5 17h17M7 7h2M11 7h2M7 11h2M11 11h2M8 17v-3h4v3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -75,15 +75,15 @@
       title: "Job Timings",
       icon: ICONS.dates,
       fields: [
-        field("wise-prep-start", "Wise Prep Start", ["Wise Prep Start"], { always: true }),
-        field("kit-booking-start", "Kit Booking Start", ["Kit Booking Start"], { always: true }),
-        field("vehicle-load", "Vehicle Load", ["Vehicle Load"], { always: true }),
-        field("vehicle-install", "Vehicle Onsite - Install", ["Vehicle Onsite - Install", "Vehicle Onsite Install"], { always: true }),
-        field("project-start", "Project/Onsite Start", ["Project/Onsite Start", "Project Onsite Start"], { always: true }),
-        field("vehicle-derig", "Vehicle Onsite - Derig", ["Vehicle Onsite - Derig", "Vehicle Onsite Derig"], { always: true }),
-        field("project-end", "Project/Onsite End", ["Project/Onsite End", "Project Onsite End"], { always: true }),
-        field("vehicle-tip", "Vehicle Tip", ["Vehicle Tip"], { always: true }),
-        field("kit-booking-end", "Kit Booking End", ["Kit Booking End"], { always: true })
+        field("wise-prep-start", "Wise Prep Start", ["Wise Prep Start"], { always: true, dateTime: true }),
+        field("kit-booking-start", "Kit Booking Start", ["Kit Booking Start"], { always: true, dateTime: true }),
+        field("vehicle-load", "Vehicle Load", ["Vehicle Load"], { always: true, dateTime: true }),
+        field("vehicle-install", "Vehicle Onsite - Install", ["Vehicle Onsite - Install", "Vehicle Onsite Install"], { always: true, dateTime: true }),
+        field("project-start", "Project/Onsite Start", ["Project/Onsite Start", "Project Onsite Start"], { always: true, dateTime: true }),
+        field("vehicle-derig", "Vehicle Onsite - Derig", ["Vehicle Onsite - Derig", "Vehicle Onsite Derig"], { always: true, dateTime: true }),
+        field("project-end", "Project/Onsite End", ["Project/Onsite End", "Project Onsite End"], { always: true, dateTime: true }),
+        field("vehicle-tip", "Vehicle Tip", ["Vehicle Tip"], { always: true, dateTime: true }),
+        field("kit-booking-end", "Kit Booking End", ["Kit Booking End"], { always: true, dateTime: true })
       ]
     },
     {
@@ -134,6 +134,7 @@
       projectKeys: options.projectKeys || [],
       projectTimeKeys: options.projectTimeKeys || [],
       projectDate: !!options.projectDate,
+      dateTime: !!options.dateTime,
       longText: !!options.longText,
       timelineStep: !!options.timelineStep
     };
@@ -386,15 +387,25 @@
       if (timeValue) value = cleanValue(value + " " + timeValue);
     }
     value = customFieldToText(value);
-    return spec.projectDate ? formatProjectDateTime(value) : value;
+    return spec.projectDate ? formatDateTime(value) : value;
   }
 
   function readProjectObjectValue(object, keys) {
     if (!object || typeof object !== "object") return "";
     keys = keys || [];
-    var containers = [object, object.CUSTOM_FIELDS, object.custom_fields, object.fields, object.FIELDS];
+    var containers = [
+      object,
+      object.CUSTOM_FIELDS,
+      object.custom_fields,
+      object.CUSTOMFIELDS,
+      object.customFields,
+      object.PROJECT_CUSTOM_FIELDS,
+      object.project_custom_fields,
+      object.fields,
+      object.FIELDS
+    ];
     for (var c = 0; c < containers.length; c++) {
-      var container = containers[c];
+      var container = parseProjectFieldContainer(containers[c]);
       if (!container || typeof container !== "object") continue;
       for (var k = 0; k < keys.length; k++) {
         var variants = projectKeyVariants(keys[k]);
@@ -403,9 +414,29 @@
             return container[variants[v]];
           }
         }
+        if ($.isArray(container)) {
+          for (var i = 0; i < container.length; i++) {
+            var item = container[i] || {};
+            var name = item.NAME || item.name || item.KEY || item.key || item.FIELD || item.field || item.FIELD_NAME || item.field_name || item.CUSTOM_FIELD || item.custom_field;
+            if (normaliseProjectKeyName(name) !== normaliseProjectKeyName(keys[k])) continue;
+            var itemValue = item.VALUE != null ? item.VALUE : item.value;
+            if (itemValue == null) itemValue = item.TEXT != null ? item.TEXT : item.text;
+            if (itemValue == null) itemValue = item.DISPLAY != null ? item.DISPLAY : item.display;
+            if (itemValue != null && itemValue !== "") return itemValue;
+          }
+        }
       }
     }
     return "";
+  }
+
+  function parseProjectFieldContainer(value) {
+    if (!value || typeof value !== "string") return value;
+    try { return JSON.parse(value); } catch (error) { return null; }
+  }
+
+  function normaliseProjectKeyName(value) {
+    return String(value == null ? "" : value).toLowerCase().replace(/^[~_]+/, "").replace(/[^a-z0-9]+/g, "");
   }
 
   function projectKeyVariants(key) {
@@ -431,32 +462,61 @@
     return /\b\d{1,2}:\d{2}\b/.test(customFieldToText(value));
   }
 
-  function formatProjectDateTime(value) {
+  function formatDateTime(value) {
     value = cleanValue(value);
-    if (!value || /[A-Za-z]+day,/.test(value)) return value;
+    if (!value) return value;
+
+    var day;
+    var month;
+    var year;
+    var hour;
+    var minute;
     var match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s]+(\d{1,2}):(\d{2}))?/);
-    if (!match) return value;
-    var year = Number(match[1]);
-    var month = Number(match[2]);
-    var day = Number(match[3]);
+    if (match) {
+      year = Number(match[1]);
+      month = Number(match[2]);
+      day = Number(match[3]);
+      hour = match[4];
+      minute = match[5];
+    } else {
+      match = value.match(/^(?:[A-Za-z]+,?\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\s+(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/i);
+      if (match) {
+        var monthNames = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+        month = monthNames.indexOf(match[2].toLowerCase()) + 1;
+        if (!month) return value;
+        day = Number(match[1]);
+        year = Number(match[3]);
+        hour = match[4];
+        minute = match[5];
+      } else {
+        match = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?/);
+        if (!match) return value;
+        day = Number(match[1]);
+        month = Number(match[2]);
+        year = Number(match[3]);
+        hour = match[4];
+        minute = match[5];
+      }
+    }
+
     var date = new Date(year, month - 1, day);
-    if (isNaN(date.getTime())) return value;
-    var weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-    var months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    var suffix = (day % 10 === 1 && day % 100 !== 11) ? "st" : (day % 10 === 2 && day % 100 !== 12) ? "nd" : (day % 10 === 3 && day % 100 !== 13) ? "rd" : "th";
-    var output = weekdays[date.getDay()] + ", " + day + suffix + " " + months[month - 1] + " " + year;
-    if (match[4] != null) output += " " + ("0" + match[4]).slice(-2) + ":" + match[5];
-    return output;
+    if (isNaN(date.getTime()) || date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return value;
+    if (hour == null) {
+      hour = "00";
+      minute = "00";
+    }
+    return ("0" + day).slice(-2) + "/" + ("0" + month).slice(-2) + "/" + year + " " + ("0" + hour).slice(-2) + ":" + minute;
   }
 
   function readFieldValue($root, spec) {
     var customValue = readCustomFieldValue($root, spec);
-    if (customValue.found) return customValue.value;
+    if (customValue.found) return spec.dateTime ? formatDateTime(customValue.value) : customValue.value;
 
     var matches = findLabelMatches($root, spec);
     if (!matches.length) return "";
     var $label = $(matches[Math.min(spec.occurrence, matches.length - 1)]);
-    return readValueFromLabel($label, spec);
+    var value = readValueFromLabel($label, spec);
+    return spec.dateTime ? formatDateTime(value) : value;
   }
 
   function readCustomFieldValue($root, spec) {
@@ -813,15 +873,21 @@
     var directUrl = "/php_functions/project_get_data.php?id=" + encodeURIComponent(projectId);
     return requestJson("job-groups-project-data:" + projectId, directUrl)
       .then(function (json) {
-        var project = json && json.data && typeof json.data === "object" && !$.isArray(json.data) ? json.data : json;
+        var project = json && json.data && typeof json.data === "object" && !$.isArray(json.data)
+          ? $.extend(true, {}, json, json.data)
+          : json;
         if (project && project.error) throw new Error("HireHop project data error: " + project.error);
         if (!project || typeof project !== "object" || extractProjectRecordId(project) !== projectId) {
           throw new Error("HireHop returned an invalid project record for " + projectId + ".");
         }
-        state.parentProjectSource = "project_get_data";
-        return project;
-      })
-      .catch(function (directError) {
+        return requestProjectRecordFromSearch(projectId).then(function (searchProject) {
+          state.parentProjectSource = "project_get_data+search_list";
+          return $.extend(true, {}, project, searchProject);
+        }, function () {
+          state.parentProjectSource = "project_get_data";
+          return project;
+        });
+      }, function (directError) {
         return requestProjectRecordFromSearch(projectId).then(function (project) {
           state.parentProjectSource = "search_list_fallback";
           return project;
@@ -862,10 +928,17 @@
       project_custom_fields: PROJECT_CUSTOM_FIELDS.join(","),
       custom_fields: PROJECT_CUSTOM_FIELDS.join(","),
       wise_cache: Date.now(),
-      pq_filter: JSON.stringify(filter)
+      pq_filter: filter
     };
+    return requestProjectSearchResponse(endpoint, params, projectId, false).catch(function () {
+      params.pq_filter = JSON.stringify(filter);
+      return requestProjectSearchResponse(endpoint, params, projectId, true);
+    });
+  }
+
+  function requestProjectSearchResponse(endpoint, params, projectId, jsonFilter) {
     var url = endpoint + (endpoint.indexOf("?") === -1 ? "?" : "&") + $.param(params);
-    return requestJson("job-groups-project-search:" + projectId, url).then(function (json) {
+    return requestJson("job-groups-project-search:" + projectId + ":" + (jsonFilter ? "json" : "native"), url).then(function (json) {
       var rows = extractResponseRows(json);
       for (var i = 0; i < rows.length; i++) {
         var row = rows[i] && rows[i].rowData ? rows[i].rowData : rows[i];
@@ -1061,18 +1134,18 @@
       // Fail closed in CSS too: even if a future discovery regression tries
       // to mount against shared #tabs, cards cannot display outside the
       // native details panel.
-      root + ">.wise-jg-layout{display:none!important;padding:5px;background:#fff;box-sizing:border-box;font-size:16px;line-height:1.35;}",
+      root + ">.wise-jg-layout{display:none!important;padding:5px;background:#fff;box-sizing:border-box;font-size:14px;line-height:1.35;}",
       "#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout,#details_tab" + root + ">.wise-jg-layout,#details_tab " + root + ">.wise-jg-layout{display:block!important;}",
       root + " .wise-jg-project-grid{display:block;margin-bottom:10px;}",
       root + " .wise-jg-job-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;}",
       root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
-      root + " .wise-jg-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e5e7eb;background:#fff;}",
+      root + " .wise-jg-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #eee;background:#fff;}",
       root + " .wise-jg-hdr-text{font-weight:700;font-size:.8em;letter-spacing:.03em;text-transform:uppercase;color:#1f2937;}",
-      root + " .wise-jg-icon{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(" + accentRgb + ",.2);border:1px solid rgba(" + accentRgb + ",.35);color:" + accent + ";}",
+      root + " .wise-jg-icon{display:inline-flex;flex:0 0 auto;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(" + accentRgb + ",.2);border:1px solid rgba(" + accentRgb + ",.35);color:" + accent + ";}",
       root + " .wise-jg-body{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;padding:4px 11px 9px;box-sizing:border-box;}",
       root + " .wise-jg-subhead{grid-column:1 / -1;margin-top:6px;padding:10px 2px 5px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:.76em;font-weight:750;letter-spacing:.055em;line-height:1;text-transform:uppercase;}",
       root + " .wise-jg-subhead:first-child{margin-top:0;border-top:0;}",
-      root + " .wise-jg-field{display:grid;grid-template-columns:minmax(132px,auto) minmax(0,1fr);align-items:baseline;gap:8px;min-width:0;min-height:25px;padding:4px 2px;border-bottom:1px solid #f0f1f3;box-sizing:border-box;}",
+      root + " .wise-jg-field{display:grid;grid-template-columns:minmax(132px,auto) minmax(0,1fr);align-items:baseline;gap:8px;min-width:0;min-height:26px;padding:3px 2px;border-bottom:0;box-sizing:border-box;}",
       root + " .wise-jg-field[data-wise-span]{grid-column:auto;}",
       root + " .wise-jg-field-label{flex:0 0 auto;font-weight:700;color:#111827;white-space:nowrap;}",
       root + " .wise-jg-field-value{min-width:0;color:#1f2937;overflow-wrap:anywhere;}",
@@ -1080,8 +1153,7 @@
       root + " .wise-jg-field-long-text{grid-template-columns:1fr;align-items:start;gap:3px;min-height:78px;padding-top:7px;}",
       root + " .wise-jg-field-long-text .wise-jg-field-label{white-space:normal;}",
       root + " .wise-jg-field-long-text .wise-jg-field-value{white-space:pre-wrap;line-height:1.35;}",
-      root + " [data-wise-job-group='project-details']{border-left-width:10px;}",
-      root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:repeat(3,minmax(0,1fr));gap:0 16px;padding:14px;counter-reset:wise-project-timing;}",
+      root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:repeat(3,minmax(0,1fr));gap:0 16px;padding:12px 14px;counter-reset:wise-project-timing;}",
       root + " .wise-jg-field-timing{grid-column:1 / -1;counter-increment:wise-project-timing;position:relative;padding-left:30px;}",
       root + " .wise-jg-field-timing:before{content:counter(wise-project-timing);position:absolute;left:0;top:5px;display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:" + accent + ";color:#fff;font-size:10px;font-weight:800;line-height:1;box-shadow:0 0 0 3px #fff;z-index:1;}",
       root + " .wise-jg-field-timing:after{content:'';position:absolute;left:8px;top:23px;bottom:-7px;width:2px;background:rgba(" + accentRgb + ",.25);}",
