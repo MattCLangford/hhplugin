@@ -25,7 +25,7 @@
       projectJourney: { file: "11-projectjourney.js", version: "0.7" },
       projectGroups: { file: "12-projectgroups.js", version: "0.13" },
       proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.8" },
-      jobGroups: { file: "14-jobgroups.js", version: "1.1" },
+      jobGroups: { file: "14-jobgroups.js", version: "1.3" },
       supplyingCommercial: { file: "15-supplyingcommercial.js", version: "3.0" },
       externalMod: { file: "16-externalmod.js", version: "0.3" }
     }

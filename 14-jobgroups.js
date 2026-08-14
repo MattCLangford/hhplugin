@@ -24,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-07-21.8", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-08-14.2", maintainRecoveryMs: 5000 };
 
   var GROUPS = [
     {
@@ -91,7 +91,17 @@
   ];
 
   var ALL_LABELS = buildAllLabels();
-  var state = { maintainTimer: null, maintainScheduled: null, lastRoot: null, recoveryCount: 0, recoveryChecks: 12 };
+  var state = {
+    maintainTimer: null,
+    maintainScheduled: null,
+    accentObserver: null,
+    accentObserverRoot: null,
+    requestedTabLabel: "",
+    tabIntentAt: 0,
+    lastRoot: null,
+    recoveryCount: 0,
+    recoveryChecks: 12
+  };
 
   bootstrap();
 
@@ -120,6 +130,7 @@
         state.maintainTimer = null;
       }
     }, CFG.maintainRecoveryMs);
+    installJobTabIntentCapture();
     $(window).on("load.wiseJobGroups focus.wiseJobGroups hashchange.wiseJobGroups", function () { scheduleMaintain(60); });
     $(document)
       .on("ajaxComplete.wiseJobGroups", function () { scheduleMaintain(80); })
@@ -137,14 +148,25 @@
   }
 
   function maintain() {
-    if (isNonDetailJobTabCurrent() || isSupplyingPanelCurrent()) {
+    // This root is shared/reused by several HireHop job tabs. Never infer
+    // ownership merely from the continued presence of hidden job fields:
+    // the enhancement is allowed to mount only while Job details itself is
+    // positively identified as the current tab.
+    if (!isJobDetailsTabCurrent()) {
       restoreJobInfoLayouts();
       return;
     }
     restoreStaleJobInfoLayouts();
     var $root = findJobInfoRoot();
     if (!$root.length || !isProposalCreationDepot()) return;
-    if ($root.hasClass(ROOT_CLASS)) return;
+    if ($root.hasClass(ROOT_CLASS)) {
+      // Unlike the project layout, this layout is a rendered copy of the
+      // hidden native job fields. Keep its copied accent variables live when
+      // HireHop changes the current job/status without replacing the root.
+      applyAccentColour($root);
+      maintainAccentObserver($root);
+      return;
+    }
 
     applyAccentColour($root);
     var $nativeNodes = findNativeJobSourceNodes($root);
@@ -167,6 +189,7 @@
     $layout.insertBefore($nativeNodes.first());
     $root.addClass(ROOT_CLASS);
     state.lastRoot = $root.get(0);
+    maintainAccentObserver($root);
   }
 
   function findNativeJobSourceNodes($root) {
@@ -222,37 +245,171 @@
       else $node.removeAttr("aria-hidden");
     });
     $root.removeClass(ROOT_CLASS);
-    if (state.lastRoot === $root.get(0)) state.lastRoot = null;
-  }
-
-  function isSupplyingPanelCurrent() {
-    var panel = document.getElementById("items_tab");
-    if (!panel) return false;
-    var ariaHidden = String(panel.getAttribute && panel.getAttribute("aria-hidden") || "").toLowerCase();
-    if (ariaHidden === "true") return false;
-    if (ariaHidden === "false") return true;
-    var $panel = $(panel);
-    if ($panel.is(".ui-tabs-hide,[hidden]")) return false;
-    var style = window.getComputedStyle ? window.getComputedStyle(panel) : panel.style;
-    return !style || (style.display !== "none" && style.visibility !== "hidden");
-  }
-
-  function isNonDetailJobTabCurrent() {
-    var selectors = [
-      "#tabs > ul li.ui-tabs-active", "#tabs > ul li.ui-state-active", "#tabs > ul li.active", "#tabs > ul [aria-selected='true']",
-      ".hh-framework_tabs > ul li.ui-tabs-active", ".hh-framework_tabs > ul li.ui-state-active", ".hh-framework_tabs > ul li.active", ".hh-framework_tabs > ul [aria-selected='true']",
-      ".ui-tabs > ul.ui-tabs-nav li.ui-tabs-active", ".ui-tabs > ul.ui-tabs-nav li.ui-state-active", ".ui-tabs > ul.ui-tabs-nav li.active", ".ui-tabs > ul.ui-tabs-nav [aria-selected='true']"
-    ];
-    var $active = $(selectors.join(","));
-    for (var i = 0; i < $active.length; i++) {
-      var $item = $active.eq(i);
-      var $host = $item.closest("ul");
-      var hostText = normaliseText($host.text());
-      if (hostText.indexOf("job details") === -1 || hostText.indexOf("supplying") === -1) continue;
-      var label = normaliseText($item.text());
-      return label.indexOf("job details") === -1 && label.indexOf("event requirements") === -1;
+    if (state.lastRoot === $root.get(0)) {
+      state.lastRoot = null;
     }
-    return false;
+    if (state.accentObserverRoot === $root.get(0)) {
+      stopAccentObserver();
+    }
+  }
+
+  function installJobTabIntentCapture() {
+    if (window.__wiseJobGroupsTabCaptureInstalled || !document.addEventListener) return;
+    window.__wiseJobGroupsTabCaptureInstalled = true;
+    document.addEventListener("mousedown", captureJobTabIntent, true);
+    document.addEventListener("click", captureJobTabIntent, true);
+  }
+
+  // Capture runs before HireHop's own tab handler. Removing the cards here
+  // prevents even a one-frame flash above the destination tab while its
+  // native panel is being selected or loaded.
+  function captureJobTabIntent(event) {
+    var $tab = $(event.target).closest("li,[role='tab'],a");
+    if (!$tab.length) return;
+    var $host = $tab.closest("ul");
+    if (!isJobTabsHost($host)) return;
+
+    var label = getJobTabLabel($tab);
+    if (!label) return;
+    state.requestedTabLabel = label;
+    state.tabIntentAt = Date.now();
+
+    if (!isJobDetailsLabel(label)) {
+      restoreJobInfoLayouts();
+      scheduleMaintain(event.type === "click" ? 20 : 0);
+    } else if (event.type === "click") {
+      // Wait until HireHop has made the native details panel current before
+      // reading and rebuilding it; mousedown alone is only user intent.
+      scheduleMaintain(20);
+    }
+  }
+
+  function isJobDetailsTabCurrent() {
+    var $host = findJobTabsHost();
+    if (!$host.length) return false;
+
+    // During a click transition the old tab can remain marked active until
+    // HireHop's handler runs. Honour the captured destination during that
+    // small window, then prefer the native active/panel state.
+    if (state.requestedTabLabel && Date.now() - state.tabIntentAt < 750) {
+      return isJobDetailsLabel(state.requestedTabLabel);
+    }
+
+    var activeLabel = readNativeActiveJobTabLabel($host);
+    if (activeLabel) {
+      state.requestedTabLabel = activeLabel;
+      return isJobDetailsLabel(activeLabel);
+    }
+
+    var panelLabel = readVisibleJobTabPanelLabel($host);
+    if (panelLabel) {
+      state.requestedTabLabel = panelLabel;
+      return isJobDetailsLabel(panelLabel);
+    }
+
+    // A captured click remains a safer fallback than the presence of job
+    // fields in the shared content root, which persists across every tab.
+    return !!state.requestedTabLabel && isJobDetailsLabel(state.requestedTabLabel);
+  }
+
+  function findJobTabsHost() {
+    var $hosts = $("#tabs > ul,.hh-framework-tabs > ul,.hh-framework_tabs > ul,.ui-tabs > ul.ui-tabs-nav,ul.ui-tabs-nav");
+    for (var i = 0; i < $hosts.length; i++) {
+      if (isJobTabsHost($hosts.eq(i))) return $hosts.eq(i);
+    }
+    return $();
+  }
+
+  function isJobTabsHost($host) {
+    if (!$host || !$host.length || $host.closest("#items_tab").length) return false;
+    var text = normaliseText($host.text());
+    if (text.indexOf("job details") === -1 && text.indexOf("event requirements") === -1) return false;
+    var supporting = 0;
+    var expected = ["tasks", "notes", "files", "supplying", "archive", "schedule", "emails"];
+    for (var i = 0; i < expected.length; i++) {
+      if (text.indexOf(expected[i]) !== -1) supporting += 1;
+    }
+    return supporting >= 2;
+  }
+
+  function getJobTabLabel($tab) {
+    var $item = $tab.is("li,[role='tab']") ? $tab : $tab.closest("li,[role='tab']");
+    var $labelSource = $item.length ? $item : $tab;
+    return normaliseText($labelSource.text()).replace(/\s*\(\d+\)\s*$/, "");
+  }
+
+  function isJobDetailsLabel(label) {
+    label = normaliseText(label);
+    return label.indexOf("job details") !== -1 || label.indexOf("event requirements") !== -1;
+  }
+
+  function readNativeActiveJobTabLabel($host) {
+    var $tabs = $host.children("li,[role='tab']");
+    if (!$tabs.length) $tabs = $host.children().has("a");
+    var $active = $tabs.filter(function () {
+      var $tab = $(this);
+      var className = String($tab.attr("class") || "") + " " + String($tab.children("a").first().attr("class") || "");
+      return $tab.attr("aria-selected") === "true" ||
+        $tab.children("a").first().attr("aria-selected") === "true" ||
+        /(^|\s)(?:ui-tabs-active|ui-state-active|active|is-active|selected|current)(?:\s|$)/i.test(className);
+    }).first();
+    if ($active.length) return getJobTabLabel($active);
+
+    // Older HireHop tab builds expose selection only through their visual
+    // style. The selected tab is the single strongly coloured tab in this
+    // otherwise neutral navigation row (as in the live page screenshots).
+    var visual = [];
+    $tabs.each(function () {
+      var $tab = $(this);
+      var tab = this;
+      var anchor = $tab.children("a").first().get(0);
+      var score = Math.max(jobTabVisualScore(tab), jobTabVisualScore(anchor));
+      if (score > 0) visual.push({ label: getJobTabLabel($tab), score: score });
+    });
+    visual.sort(function (a, b) { return b.score - a.score; });
+    return visual.length && (!visual[1] || visual[0].score > visual[1].score) ? visual[0].label : "";
+  }
+
+  function jobTabVisualScore(element) {
+    if (!element || !window.getComputedStyle) return 0;
+    var style;
+    try { style = window.getComputedStyle(element); } catch (err) { return 0; }
+    var background = parseRgb(style.backgroundColor);
+    var foreground = parseRgb(style.color);
+    if (!background) return 0;
+    var chroma = Math.max.apply(Math, background) - Math.min.apply(Math, background);
+    var brightness = (background[0] * 299 + background[1] * 587 + background[2] * 114) / 1000;
+    if (chroma < 35 || brightness > 225) return 0;
+    var score = chroma + (225 - brightness);
+    if (foreground && Math.min.apply(Math, foreground) > 220) score += 80;
+    return score;
+  }
+
+  function readVisibleJobTabPanelLabel($host) {
+    var $tabs = $host.children("li,[role='tab']");
+    if (!$tabs.length) $tabs = $host.children().has("a");
+    var visible = [];
+    $tabs.each(function () {
+      var $tab = $(this);
+      var $anchor = $tab.children("a").first();
+      var panelId = String($tab.attr("aria-controls") || $anchor.attr("aria-controls") || "");
+      var href = String($anchor.attr("href") || "");
+      var hashIndex = href.lastIndexOf("#");
+      if (!panelId && hashIndex !== -1 && hashIndex < href.length - 1) panelId = href.slice(hashIndex + 1);
+      if (!panelId) return;
+      var panel = document.getElementById(panelId);
+      if (!panel || !isElementActuallyVisible(panel)) return;
+      visible.push(getJobTabLabel($tab));
+    });
+    return visible.length === 1 ? visible[0] : "";
+  }
+
+  function isElementActuallyVisible(element) {
+    if (!element || element.hidden) return false;
+    var ariaHidden = String(element.getAttribute && element.getAttribute("aria-hidden") || "").toLowerCase();
+    if (ariaHidden === "true" || $(element).is(".ui-tabs-hide,.ui-helper-hidden")) return false;
+    var style = window.getComputedStyle ? window.getComputedStyle(element) : element.style;
+    return !style || (style.display !== "none" && style.visibility !== "hidden");
   }
 
   function renderLayout($root) {
@@ -554,13 +711,56 @@
     var element = $root.get(0);
     if (!element) return;
     var rgb = parseRgb(element.style.backgroundColor) || findVisibleAccent($root);
-    element.style.setProperty("--wise-job-accent", rgb ? rgbToHex(rgb) : FALLBACK_ACCENT);
-    element.style.setProperty("--wise-job-accent-rgb", rgb ? rgb.join(",") : FALLBACK_ACCENT_RGB);
+    setStylePropertyIfChanged(element, "--wise-job-accent", rgb ? rgbToHex(rgb) : FALLBACK_ACCENT);
+    setStylePropertyIfChanged(element, "--wise-job-accent-rgb", rgb ? rgb.join(",") : FALLBACK_ACCENT_RGB);
+  }
+
+  function setStylePropertyIfChanged(element, name, value) {
+    if (element.style.getPropertyValue(name) === value) return;
+    element.style.setProperty(name, value);
+  }
+
+  // Status/job switches can update only an inline style or class and may not
+  // produce an AJAX completion or a new root node. Observe the active native
+  // information area so those colour-only changes refresh the card accents
+  // immediately. Idempotent CSS-variable writes prevent observer loops.
+  function maintainAccentObserver($root) {
+    var element = $root && $root.get(0);
+    if (!element || !window.MutationObserver) return;
+    if (state.accentObserver && state.accentObserverRoot === element) return;
+
+    stopAccentObserver();
+    state.accentObserverRoot = element;
+    state.accentObserver = new MutationObserver(function (mutations) {
+      for (var i = 0; i < mutations.length; i++) {
+        var $target = $(mutations[i].target);
+        if (mutations[i].type === "attributes" && !$target.closest(".wise-jg-layout").length) {
+          scheduleMaintain(0);
+          return;
+        }
+      }
+    });
+    state.accentObserver.observe(element, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ["style", "class"]
+    });
+  }
+
+  function stopAccentObserver() {
+    if (state.accentObserver) state.accentObserver.disconnect();
+    state.accentObserver = null;
+    state.accentObserverRoot = null;
   }
 
   function findVisibleAccent($root) {
     var found = null;
-    $root.find("div,header,table,tr").slice(0, 24).each(function () {
+    // Once rendered, generated card elements also contain accent-tinted
+    // backgrounds. Exclude them so a refresh always reads HireHop's native
+    // status colour rather than feeding our own tint back into the accent.
+    $root.find("div,header,table,tr").filter(function () {
+      return !$(this).closest(".wise-jg-layout").length;
+    }).slice(0, 24).each(function () {
       if (found) return;
       var value = this.style && this.style.backgroundColor;
       if (!value && window.getComputedStyle) value = window.getComputedStyle(this).backgroundColor;

@@ -616,6 +616,21 @@ function testSourceGuards() {
   assert(jobGroups.includes("findNativeJobSourceNodes"), "job cards should hide only positively identified native field blocks");
   assert(!jobGroups.includes('root + "{display:block!important'), "job cards must not force layout onto HireHop's shared route wrapper");
   assert(jobGroups.includes('click.wiseJobGroups'), "job tab clicks should trigger immediate layout ownership checks");
+  const activeJobLayout = jobGroups.slice(
+    jobGroups.indexOf("if ($root.hasClass(ROOT_CLASS))"),
+    jobGroups.indexOf("var $nativeNodes = findNativeJobSourceNodes")
+  );
+  assert(activeJobLayout.includes("applyAccentColour($root)"), "an existing job layout should refresh its copied accent on every maintenance pass");
+  assert(jobGroups.includes("function maintainAccentObserver"), "job accents should observe colour-only native DOM changes");
+  assert(jobGroups.includes('attributeFilter: ["style", "class"]'), "job accent observation should react to inline and class-based status colours");
+  assert(jobGroups.includes("function setStylePropertyIfChanged"), "job accent writes should be idempotent to avoid mutation loops");
+  assert(jobGroups.includes('!$(this).closest(".wise-jg-layout").length'), "job accent detection should not sample its own generated colour tints");
+  assert(jobGroups.includes("if (!isJobDetailsTabCurrent())"), "job cards should require positive Job details tab ownership");
+  assert(!jobGroups.includes("function isNonDetailJobTabCurrent"), "job cards should not rely on a fail-open negative tab check");
+  assert(jobGroups.includes('document.addEventListener("mousedown", captureJobTabIntent, true)'), "job tab transitions should remove cards before HireHop renders the destination tab");
+  assert(jobGroups.includes("if (!isJobDetailsLabel(label)) restoreJobInfoLayouts()"), "every non-detail job tab should synchronously restore native content");
+  assert(jobGroups.includes("function readVisibleJobTabPanelLabel"), "job tab ownership should use visible native panels when available");
+  assert(jobGroups.includes("function jobTabVisualScore"), "older HireHop tabs should support their visual selected state");
 
   const journey = fs.readFileSync(path.join(root, "11-projectjourney.js"), "utf8");
   const buildJourney = journey.slice(journey.indexOf("function buildJourneyHtml"), journey.indexOf("function buildHeaderSummary"));
