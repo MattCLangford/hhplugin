@@ -640,13 +640,15 @@ function testSourceGuards() {
   assert(jobGroups.includes('#details_tab" + root + ">.wise-jg-layout'), "CSS should allow cards inside the live #details_tab panel");
   assert(jobGroups.includes('var PROJECT_GROUPS = ['), "job details should render a dedicated parent-project overview above the job cards");
   assert(jobGroups.includes('var JOB_GROUPS = ['), "job-only fields should remain separated from parent-project fields");
-  assert(jobGroups.includes('key: "project-timings"'), "parent project timings should have their own ordered container");
+  assert(jobGroups.includes('section: "Project Timings"') && !jobGroups.includes('key: "project-timings"'), "project timings should follow details inside one full-width project card");
   assert(jobGroups.includes('counter-increment:wise-project-timing'), "project timings should be presented as an explicit sequential list");
-  assert(jobGroups.includes('key: "job-details"') && jobGroups.includes('key: "job-dates"'), "the lower layout should contain the requested Job Details and Job Dates cards");
+  assert(jobGroups.includes('key: "job-details"') && jobGroups.includes('key: "job-timings"'), "the lower layout should use the requested Job Details and Job Timings cards");
   assert(!jobGroups.includes('field("company"') && !jobGroups.includes('field("price-group"') && !jobGroups.includes('field("job-id"'), "unrequested legacy job fields should not be rendered");
   assert(jobGroups.includes('"_Tier", "_Job_Number"') && jobGroups.includes('"_Install", "_ShowStart", "_ShowEnd", "_Derig"'), "project overview fields should use the established HireHop logical custom-field names");
   assert(jobGroups.includes('function maintainParentProject'), "the job page should resolve and load its parent project data");
+  assert(jobGroups.includes('/php_functions/project_get_data.php?id='), "parent projects should use HireHop's direct project data endpoint");
   assert(jobGroups.includes('jobs: 0') && jobGroups.includes('projects: 1'), "the parent-project lookup must request project records rather than job records");
+  assert(jobGroups.includes('if (spec.longText)') && jobGroups.includes('Never fall'), "memo fields should not fall through into the adjacent commercial cell");
 
   const journey = fs.readFileSync(path.join(root, "11-projectjourney.js"), "utf8");
   const buildJourney = journey.slice(journey.indexOf("function buildJourneyHtml"), journey.indexOf("function buildHeaderSummary"));

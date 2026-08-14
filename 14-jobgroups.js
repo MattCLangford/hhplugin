@@ -24,11 +24,10 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-08-14.7", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-08-14.9", maintainRecoveryMs: 5000 };
   var PROJECT_CUSTOM_FIELDS = ["_Tier", "_Job_Number", "_JobNumber", "_Client", "_Venue", "_Revenue", "_revenue", "_Install", "_ShowStart", "_ShowEnd", "_Derig"];
   var ICONS = {
     project: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17V4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5V17M1.5 17h17M7 7h2M11 7h2M7 11h2M11 11h2M8 17v-3h4v3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
-    timings: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2" stroke-linecap="round"/></svg>',
     job: '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><rect x="2" y="4" width="16" height="13" rx="2"/><path d="M6 4V2h8v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="5" y="8" width="10" height="2" rx="1" fill="#fff"/><rect x="5" y="12" width="7" height="2" rx="1" fill="#fff"/></svg>',
     dates: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3.5" width="16" height="14" rx="2"/><path d="M6 1.5v4M14 1.5v4M2 7.5h16"/><circle cx="10" cy="12" r="3"/><path d="M10 10.5V12l1.3.9" stroke-linecap="round"/></svg>',
     commercial: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M2 7h16M5 12h4M12 12h3" stroke-linecap="round"/></svg>'
@@ -43,24 +42,15 @@
       fields: [
         field("project-tier", "Tier", ["Tier"], { always: true, projectKeys: ["_Tier", "~_Tier", "TIER", "tier"] }),
         field("project-wise-job-number", "Wise job number", ["Wise job number"], { always: true, projectKeys: ["_Job_Number", "_JobNumber", "~_Job_Number", "~_JobNumber", "WISE_JOB_NUMBER", "JOB_NUMBER"] }),
-        field("project-client", "Client", ["Client"], { always: true, projectKeys: ["_Client", "~_Client", "CLIENT", "CLIENT_NAME", "client"] }),
-        field("project-venue", "Venue", ["Venue"], { always: true, projectKeys: ["_Venue", "~_Venue", "VENUE", "VENUE_NAME", "venue"] }),
-        field("project-revenue", "Revenue", ["Revenue"], { always: true, projectKeys: ["_Revenue", "_revenue", "~_Revenue", "REVENUE", "revenue"] })
-      ]
-    },
-    {
-      key: "project-timings",
-      title: "Project Timings",
-      icon: ICONS.timings,
-      project: true,
-      timeline: true,
-      fields: [
-        field("project-onsite-start", "Project/Onsite Start", ["Project/Onsite Start"], { always: true, projectDate: true, projectKeys: ["START_DATETIME", "START_DATE_TIME", "PROJECT_START_DATE_TIME", "START_DATE", "DATE", "PROJECT_DATE", "JOB_DATE"], projectTimeKeys: ["START_TIME", "PROJECT_TIME", "TIME", "JOB_TIME"] }),
-        field("project-install-start", "Install Start", ["Install Start"], { always: true, projectDate: true, projectKeys: ["_Install", "~_Install", "INSTALL", "INSTALL_START"] }),
-        field("project-show-start", "Show Start", ["Show Start"], { always: true, projectDate: true, projectKeys: ["_ShowStart", "~_ShowStart", "SHOW_START", "showStart"] }),
-        field("project-show-end", "Show End", ["Show End"], { always: true, projectDate: true, projectKeys: ["_ShowEnd", "~_ShowEnd", "SHOW_END", "showEnd"] }),
-        field("project-derig-start", "Derig Start", ["Derig Start"], { always: true, projectDate: true, projectKeys: ["_Derig", "~_Derig", "DERIG", "DERIG_START"] }),
-        field("project-onsite-end", "Project/Onsite End", ["Project/Onsite End"], { always: true, projectDate: true, projectKeys: ["END_DATETIME", "END_DATE_TIME", "PROJECT_END_DATE_TIME", "END_DATE", "DATE_END", "PROJECT_END", "JOB_END"], projectTimeKeys: ["END_TIME", "PROJECT_END_TIME", "TIME_END", "JOB_END_TIME"] })
+        field("project-client", "Client", ["Client"], { always: true, projectKeys: ["_Client", "~_Client", "CLIENT", "CLIENT_NAME", "COMPANY", "client"] }),
+        field("project-venue", "Venue", ["Venue"], { always: true, projectKeys: ["_Venue", "~_Venue", "VENUE", "VENUE_NAME", "DELIVER_TO", "venue"] }),
+        field("project-revenue", "Revenue", ["Revenue"], { always: true, projectKeys: ["_Revenue", "_revenue", "~_Revenue", "REVENUE", "revenue"] }),
+        field("project-onsite-start", "Project/Onsite Start", ["Project/Onsite Start"], { always: true, section: "Project Timings", timelineStep: true, projectDate: true, projectKeys: ["START_DATETIME", "START_DATE_TIME", "PROJECT_START_DATE_TIME", "START_DATE", "DATE", "PROJECT_DATE", "JOB_DATE"], projectTimeKeys: ["START_TIME", "PROJECT_TIME", "TIME", "JOB_TIME"] }),
+        field("project-install-start", "Install Start", ["Install Start"], { always: true, timelineStep: true, projectDate: true, projectKeys: ["_Install", "~_Install", "INSTALL", "INSTALL_START"] }),
+        field("project-show-start", "Show Start", ["Show Start"], { always: true, timelineStep: true, projectDate: true, projectKeys: ["_ShowStart", "~_ShowStart", "SHOW_START", "showStart"] }),
+        field("project-show-end", "Show End", ["Show End"], { always: true, timelineStep: true, projectDate: true, projectKeys: ["_ShowEnd", "~_ShowEnd", "SHOW_END", "showEnd"] }),
+        field("project-derig-start", "Derig Start", ["Derig Start"], { always: true, timelineStep: true, projectDate: true, projectKeys: ["_Derig", "~_Derig", "DERIG", "DERIG_START"] }),
+        field("project-onsite-end", "Project/Onsite End", ["Project/Onsite End"], { always: true, timelineStep: true, projectDate: true, projectKeys: ["END_DATETIME", "END_DATE_TIME", "PROJECT_END_DATE_TIME", "END_DATE", "DATE_END", "PROJECT_END", "JOB_END"], projectTimeKeys: ["END_TIME", "PROJECT_END_TIME", "TIME_END", "JOB_END_TIME"] })
       ]
     }
   ];
@@ -81,8 +71,8 @@
       ]
     },
     {
-      key: "job-dates",
-      title: "Job Dates",
+      key: "job-timings",
+      title: "Job Timings",
       icon: ICONS.dates,
       fields: [
         field("wise-prep-start", "Wise Prep Start", ["Wise Prep Start"], { always: true }),
@@ -122,6 +112,7 @@
     activeJobId: "",
     parentProjectId: "",
     parentProjectData: null,
+    parentProjectSource: "",
     parentProjectRequest: null,
     parentProjectError: "",
     recoveryCount: 0,
@@ -143,7 +134,8 @@
       projectKeys: options.projectKeys || [],
       projectTimeKeys: options.projectTimeKeys || [],
       projectDate: !!options.projectDate,
-      longText: !!options.longText
+      longText: !!options.longText,
+      timelineStep: !!options.timelineStep
     };
   }
 
@@ -368,6 +360,7 @@
       .attr("data-wise-job-field", spec.key)
       .attr("data-wise-span", spec.span);
     if (spec.longText) $field.addClass("wise-jg-field-long-text");
+    if (spec.timelineStep) $field.addClass("wise-jg-field-timing");
     $("<span></span>").addClass("wise-jg-field-label").text(spec.label).appendTo($field);
     $("<span></span>")
       .addClass("wise-jg-field-value")
@@ -507,6 +500,17 @@
     if ($cell.length) {
       var cellInline = stripLeadingLabel(getOwnText($cell.get(0)), spec);
       if (cellInline) return cleanValue(cellInline);
+      if (spec.longText) {
+        var $copy = $cell.clone();
+        $copy.find("label,b,strong,th,td,span,div").filter(function () {
+          return matchesSpecLabel(getOwnText(this), spec, false);
+        }).first().remove();
+        var containedValue = cleanValue(stripLeadingLabel($copy.text(), spec) || $copy.text());
+        // Memo-style cells often occupy one half of a wide row. Never fall
+        // through to the following cell, which contains unrelated commercial
+        // fields on HireHop's legacy job layout.
+        return containedValue;
+      }
       var tableValue = readFollowingCells($cell);
       if (tableValue) return tableValue;
     }
@@ -679,6 +683,7 @@
     state.activeJobId = "";
     state.parentProjectId = "";
     state.parentProjectData = null;
+    state.parentProjectSource = "";
     state.parentProjectRequest = null;
     state.parentProjectError = "";
   }
@@ -694,7 +699,7 @@
           .text(value || "—");
       }
     }
-    $root.find("[data-wise-job-group='project-details'],[data-wise-job-group='project-timings']")
+    $root.find("[data-wise-job-group='project-details']")
       .attr("aria-busy", state.parentProjectRequest ? "true" : "false")
       .attr("data-wise-project-state", state.parentProjectData ? "ready" : state.parentProjectError ? "error" : "loading");
   }
@@ -805,6 +810,28 @@
   }
 
   function requestProjectRecord(projectId) {
+    var directUrl = "/php_functions/project_get_data.php?id=" + encodeURIComponent(projectId);
+    return requestJson("job-groups-project-data:" + projectId, directUrl)
+      .then(function (json) {
+        var project = json && json.data && typeof json.data === "object" && !$.isArray(json.data) ? json.data : json;
+        if (project && project.error) throw new Error("HireHop project data error: " + project.error);
+        if (!project || typeof project !== "object" || extractProjectRecordId(project) !== projectId) {
+          throw new Error("HireHop returned an invalid project record for " + projectId + ".");
+        }
+        state.parentProjectSource = "project_get_data";
+        return project;
+      })
+      .catch(function (directError) {
+        return requestProjectRecordFromSearch(projectId).then(function (project) {
+          state.parentProjectSource = "search_list_fallback";
+          return project;
+        }).catch(function (searchError) {
+          throw new Error("Direct project lookup failed (" + directError.message + "); search fallback failed (" + searchError.message + ").");
+        });
+      });
+  }
+
+  function requestProjectRecordFromSearch(projectId) {
     var endpoint = "/php_functions/search_list.php";
     var shared = window.WiseProposalSectionBuilderHireHop;
     if (shared && shared.endpoints && shared.endpoints.searchList) endpoint = shared.endpoints.searchList;
@@ -838,7 +865,7 @@
       pq_filter: JSON.stringify(filter)
     };
     var url = endpoint + (endpoint.indexOf("?") === -1 ? "?" : "&") + $.param(params);
-    return requestJson("job-groups-project:" + projectId, url).then(function (json) {
+    return requestJson("job-groups-project-search:" + projectId, url).then(function (json) {
       var rows = extractResponseRows(json);
       for (var i = 0; i < rows.length; i++) {
         var row = rows[i] && rows[i].rowData ? rows[i].rowData : rows[i];
@@ -1034,16 +1061,16 @@
       // Fail closed in CSS too: even if a future discovery regression tries
       // to mount against shared #tabs, cards cannot display outside the
       // native details panel.
-      root + ">.wise-jg-layout{display:none!important;padding:5px;background:#fff;box-sizing:border-box;}",
+      root + ">.wise-jg-layout{display:none!important;padding:5px;background:#fff;box-sizing:border-box;font-size:16px;line-height:1.35;}",
       "#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout,#details_tab" + root + ">.wise-jg-layout,#details_tab " + root + ">.wise-jg-layout{display:block!important;}",
-      root + " .wise-jg-project-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.12fr);gap:10px;align-items:stretch;margin-bottom:10px;}",
+      root + " .wise-jg-project-grid{display:block;margin-bottom:10px;}",
       root + " .wise-jg-job-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;}",
       root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
-      root + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid #e5e7eb;background:#fff;}",
-      root + " .wise-jg-hdr-text{font-weight:700;font-size:.76em;letter-spacing:.025em;text-transform:uppercase;color:#1f2937;}",
-      root + " .wise-jg-icon{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:6px;background:rgba(" + accentRgb + ",.18);border:1px solid rgba(" + accentRgb + ",.32);color:" + accent + ";}",
+      root + " .wise-jg-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #e5e7eb;background:#fff;}",
+      root + " .wise-jg-hdr-text{font-weight:700;font-size:.8em;letter-spacing:.03em;text-transform:uppercase;color:#1f2937;}",
+      root + " .wise-jg-icon{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:7px;background:rgba(" + accentRgb + ",.2);border:1px solid rgba(" + accentRgb + ",.35);color:" + accent + ";}",
       root + " .wise-jg-body{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;padding:4px 11px 9px;box-sizing:border-box;}",
-      root + " .wise-jg-subhead{margin-top:6px;padding:7px 2px 4px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:.69em;font-weight:750;letter-spacing:.055em;line-height:1;text-transform:uppercase;}",
+      root + " .wise-jg-subhead{grid-column:1 / -1;margin-top:6px;padding:10px 2px 5px;border-top:1px solid #e5e7eb;color:#6b7280;font-size:.76em;font-weight:750;letter-spacing:.055em;line-height:1;text-transform:uppercase;}",
       root + " .wise-jg-subhead:first-child{margin-top:0;border-top:0;}",
       root + " .wise-jg-field{display:grid;grid-template-columns:minmax(132px,auto) minmax(0,1fr);align-items:baseline;gap:8px;min-width:0;min-height:25px;padding:4px 2px;border-bottom:1px solid #f0f1f3;box-sizing:border-box;}",
       root + " .wise-jg-field[data-wise-span]{grid-column:auto;}",
@@ -1053,12 +1080,14 @@
       root + " .wise-jg-field-long-text{grid-template-columns:1fr;align-items:start;gap:3px;min-height:78px;padding-top:7px;}",
       root + " .wise-jg-field-long-text .wise-jg-field-label{white-space:normal;}",
       root + " .wise-jg-field-long-text .wise-jg-field-value{white-space:pre-wrap;line-height:1.35;}",
-      root + " .wise-jg-timeline .wise-jg-body{position:relative;counter-reset:wise-project-timing;padding-left:18px;}",
-      root + " .wise-jg-timeline .wise-jg-body:before{content:'';position:absolute;left:25px;top:17px;bottom:20px;width:2px;background:rgba(" + accentRgb + ",.25);}",
-      root + " .wise-jg-timeline .wise-jg-field{counter-increment:wise-project-timing;position:relative;padding-left:30px;}",
-      root + " .wise-jg-timeline .wise-jg-field:before{content:counter(wise-project-timing);position:absolute;left:0;top:5px;display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:" + accent + ";color:#fff;font-size:10px;font-weight:800;line-height:1;box-shadow:0 0 0 3px #fff;z-index:1;}",
-      "@media (max-width:1180px){" + root + " .wise-jg-project-grid{grid-template-columns:1fr;}" + root + " .wise-jg-job-grid{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " [data-wise-job-group='job-details']{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-details']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;}" + root + " [data-wise-job-group='job-details'] .wise-jg-field-long-text{grid-column:1 / -1;}}",
-      "@media (max-width:760px){" + root + " .wise-jg-project-grid," + root + " .wise-jg-job-grid{grid-template-columns:1fr;}" + root + " [data-wise-job-group='job-details']{grid-column:auto;}" + root + " [data-wise-job-group='job-details']>.wise-jg-body{grid-template-columns:1fr;gap:0;}" + root + " [data-wise-job-group='job-details'] .wise-jg-field-long-text{grid-column:auto;}" + root + " .wise-jg-field{grid-template-columns:minmax(118px,auto) minmax(0,1fr);}}",
+      root + " [data-wise-job-group='project-details']{border-left-width:10px;}",
+      root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:repeat(3,minmax(0,1fr));gap:0 16px;padding:14px;counter-reset:wise-project-timing;}",
+      root + " .wise-jg-field-timing{grid-column:1 / -1;counter-increment:wise-project-timing;position:relative;padding-left:30px;}",
+      root + " .wise-jg-field-timing:before{content:counter(wise-project-timing);position:absolute;left:0;top:5px;display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:" + accent + ";color:#fff;font-size:10px;font-weight:800;line-height:1;box-shadow:0 0 0 3px #fff;z-index:1;}",
+      root + " .wise-jg-field-timing:after{content:'';position:absolute;left:8px;top:23px;bottom:-7px;width:2px;background:rgba(" + accentRgb + ",.25);}",
+      root + " .wise-jg-field-timing:last-child:after{display:none;}",
+      "@media (max-width:1180px){" + root + " .wise-jg-job-grid{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " [data-wise-job-group='job-details']{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-details']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;}" + root + " [data-wise-job-group='job-details'] .wise-jg-field-long-text{grid-column:1 / -1;}}",
+      "@media (max-width:760px){" + root + " .wise-jg-job-grid{grid-template-columns:1fr;}" + root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:1fr;gap:0;}" + root + " [data-wise-job-group='job-details']{grid-column:auto;}" + root + " [data-wise-job-group='job-details']>.wise-jg-body{grid-template-columns:1fr;gap:0;}" + root + " [data-wise-job-group='job-details'] .wise-jg-field-long-text{grid-column:auto;}" + root + " .wise-jg-field{grid-template-columns:minmax(118px,auto) minmax(0,1fr);}}",
       "@media (max-width:480px){" + root + " .wise-jg-field{grid-template-columns:1fr;gap:1px;}" + root + " .wise-jg-field-label{white-space:normal;} }"
     ].join("\n");
     var style = document.createElement("style");
@@ -1090,6 +1119,7 @@
         grouped: $root.hasClass(ROOT_CLASS),
         activeJobId: state.activeJobId,
         parentProjectId: state.parentProjectId,
+        parentProjectSource: state.parentProjectSource,
         parentProjectState: state.parentProjectData ? "ready" : state.parentProjectRequest ? "loading" : state.parentProjectError ? "error" : "idle",
         parentProjectError: state.parentProjectError,
         renderedFields: $root.find(".wise-jg-field").length,
