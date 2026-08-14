@@ -26,7 +26,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-08-14.12", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-08-14.13", maintainRecoveryMs: 5000 };
   var PROJECT_CUSTOM_FIELDS = ["_Status", "_Tier", "_Job_Number", "_JobNumber", "_Client", "_Venue", "_Revenue", "_revenue", "_Install", "_ShowStart", "_ShowEnd", "_Derig"];
   var ICONS = {
     project: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17V4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5V17M1.5 17h17M7 7h2M11 7h2M7 11h2M11 11h2M8 17v-3h4v3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -116,6 +116,7 @@
     parentProjectId: "",
     parentProjectData: null,
     parentProjectSource: "",
+    parentProjectSupplementError: "",
     parentProjectRequest: null,
     parentProjectError: "",
     recoveryCount: 0,
@@ -430,7 +431,6 @@
     if (!object || typeof object !== "object") return "";
     keys = keys || [];
     var containers = [
-      object,
       object.CUSTOM_FIELDS,
       object.custom_fields,
       object.CUSTOMFIELDS,
@@ -438,7 +438,8 @@
       object.PROJECT_CUSTOM_FIELDS,
       object.project_custom_fields,
       object.fields,
-      object.FIELDS
+      object.FIELDS,
+      object
     ];
     for (var c = 0; c < containers.length; c++) {
       var container = parseProjectFieldContainer(containers[c]);
@@ -448,6 +449,14 @@
         for (var v = 0; v < variants.length; v++) {
           if (Object.prototype.hasOwnProperty.call(container, variants[v]) && container[variants[v]] != null && container[variants[v]] !== "") {
             return container[variants[v]];
+          }
+        }
+        if (!$.isArray(container)) {
+          var containerKeys = Object.keys(container);
+          for (var p = 0; p < containerKeys.length; p++) {
+            var property = containerKeys[p];
+            if (normaliseProjectKeyName(property) !== normaliseProjectKeyName(keys[k])) continue;
+            if (container[property] != null && container[property] !== "") return container[property];
           }
         }
         if ($.isArray(container)) {
@@ -473,6 +482,26 @@
 
   function normaliseProjectKeyName(value) {
     return String(value == null ? "" : value).toLowerCase().replace(/^[~_]+/, "").replace(/[^a-z0-9]+/g, "");
+  }
+
+  function describeProjectKeys(object) {
+    if (!object || typeof object !== "object") return [];
+    var keys = Object.keys(object);
+    var containers = [object.CUSTOM_FIELDS, object.custom_fields, object.CUSTOMFIELDS, object.customFields, object.PROJECT_CUSTOM_FIELDS, object.project_custom_fields, object.fields, object.FIELDS];
+    for (var c = 0; c < containers.length; c++) {
+      var container = parseProjectFieldContainer(containers[c]);
+      if (!container || typeof container !== "object") continue;
+      if ($.isArray(container)) {
+        for (var i = 0; i < container.length; i++) {
+          var item = container[i] || {};
+          var name = item.NAME || item.name || item.KEY || item.key || item.FIELD || item.field || item.FIELD_NAME || item.field_name || item.CUSTOM_FIELD || item.custom_field;
+          if (name) keys.push(String(name));
+        }
+      } else {
+        keys = keys.concat(Object.keys(container));
+      }
+    }
+    return keys.filter(function (key, index) { return keys.indexOf(key) === index; }).slice(0, 100);
   }
 
   function projectKeyVariants(key) {
@@ -780,6 +809,7 @@
     state.parentProjectId = "";
     state.parentProjectData = null;
     state.parentProjectSource = "";
+    state.parentProjectSupplementError = "";
     state.parentProjectRequest = null;
     state.parentProjectError = "";
   }
@@ -909,7 +939,9 @@
   }
 
   function requestProjectRecord(projectId) {
-    var directUrl = "/php_functions/project_get_data.php?id=" + encodeURIComponent(projectId);
+    var directUrl = "/php_functions/project_get_data.php?id=" + encodeURIComponent(projectId) +
+      "&include_project_custom_fields=1&include_custom_fields=1&project_custom_fields=" + encodeURIComponent(PROJECT_CUSTOM_FIELDS.join(",")) +
+      "&custom_fields=" + encodeURIComponent(PROJECT_CUSTOM_FIELDS.join(","));
     return requestJson("job-groups-project-data:" + projectId, directUrl)
       .then(function (json) {
         var project = json && json.data && typeof json.data === "object" && !$.isArray(json.data)
@@ -919,15 +951,18 @@
         if (!project || typeof project !== "object" || extractProjectRecordId(project) !== projectId) {
           throw new Error("HireHop returned an invalid project record for " + projectId + ".");
         }
-        return requestProjectRecordFromSearch(projectId).then(function (searchProject) {
+        return requestProjectRecordFromSearch(projectId, project).then(function (searchProject) {
+          state.parentProjectSupplementError = "";
           state.parentProjectSource = "project_get_data+search_list";
           return $.extend(true, {}, project, searchProject);
-        }, function () {
+        }, function (searchError) {
+          state.parentProjectSupplementError = searchError && searchError.message ? searchError.message : String(searchError || "Project custom-field supplement failed.");
           state.parentProjectSource = "project_get_data";
           return project;
         });
       }, function (directError) {
-        return requestProjectRecordFromSearch(projectId).then(function (project) {
+        return requestProjectRecordFromSearch(projectId, null).then(function (project) {
+          state.parentProjectSupplementError = "";
           state.parentProjectSource = "search_list_fallback";
           return project;
         }).catch(function (searchError) {
@@ -936,7 +971,7 @@
       });
   }
 
-  function requestProjectRecordFromSearch(projectId) {
+  function requestProjectRecordFromSearch(projectId, hintProject) {
     var endpoint = "/php_functions/search_list.php";
     var shared = window.WiseProposalSectionBuilderHireHop;
     if (shared && shared.endpoints && shared.endpoints.searchList) endpoint = shared.endpoints.searchList;
@@ -944,6 +979,7 @@
       mode: "AND",
       data: [{ condition: "equal", dataIndx: "NUMBER", dataType: "integer", value: Number(projectId) }]
     };
+    var range = getProjectSearchRange(hintProject);
     var params = {
       local: formatSearchDateTime(new Date()),
       tz: getTimezone(),
@@ -960,27 +996,51 @@
       needs_bill: 0,
       only_open_ended: 0,
       status: "",
-      from_date: "2000-01-01 00:00:00",
-      to_date: "2100-12-31 23:59:59",
+      from_date: range.from,
+      to_date: range.to,
       include_project_custom_fields: 1,
       include_custom_fields: 1,
       project_custom_fields: PROJECT_CUSTOM_FIELDS.join(","),
       custom_fields: PROJECT_CUSTOM_FIELDS.join(","),
-      wise_cache: Date.now(),
-      pq_filter: filter
+      wise_cache: Date.now()
     };
-    return requestProjectSearchResponse(endpoint, params, projectId, false).catch(function () {
-      params.pq_filter = JSON.stringify(filter);
-      return requestProjectSearchResponse(endpoint, params, projectId, true);
+    var nativeFilterParams = $.extend({}, params, { pq_filter: filter });
+    return requestProjectSearchResponse(endpoint, nativeFilterParams, projectId, "native-filter").catch(function () {
+      var jsonFilterParams = $.extend({}, params, { pq_filter: JSON.stringify(filter) });
+      return requestProjectSearchResponse(endpoint, jsonFilterParams, projectId, "json-filter");
+    }).catch(function () {
+      if (!range.narrowed) throw new Error("HireHop did not return parent project " + projectId + " from either exact filter shape.");
+      var dateWindowParams = $.extend({}, params, { rows: 250 });
+      return requestProjectSearchResponse(endpoint, dateWindowParams, projectId, "date-window");
     });
   }
 
-  function requestProjectSearchResponse(endpoint, params, projectId, jsonFilter) {
+  function getProjectSearchRange(project) {
+    var fallback = { from: "2000-01-01 00:00:00", to: "2100-12-31 23:59:59", narrowed: false };
+    if (!project || typeof project !== "object") return fallback;
+    var start = parseProjectSearchDate(readProjectObjectValue(project, ["START_DATE", "JOB_DATE", "PROJECT_START", "DATE"]));
+    var end = parseProjectSearchDate(readProjectObjectValue(project, ["END_DATE", "JOB_END", "PROJECT_END", "DATE_END"])) || start;
+    if (!start) return fallback;
+    if (end && end.getTime() < start.getTime()) end = start;
+    var from = new Date(start.getFullYear(), start.getMonth(), start.getDate() - 7, 0, 0, 0);
+    var to = new Date(end.getFullYear(), end.getMonth(), end.getDate() + 7, 23, 59, 59);
+    return { from: formatSearchDateTime(from), to: formatSearchDateTime(to), narrowed: true };
+  }
+
+  function parseProjectSearchDate(value) {
+    value = customFieldToText(value);
+    var match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return null;
+    var date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+    return isNaN(date.getTime()) ? null : date;
+  }
+
+  function requestProjectSearchResponse(endpoint, params, projectId, mode) {
     var url = endpoint + (endpoint.indexOf("?") === -1 ? "?" : "&") + $.param(params);
-    return requestJson("job-groups-project-search:" + projectId + ":" + (jsonFilter ? "json" : "native"), url).then(function (json) {
+    return requestJson("job-groups-project-search:" + projectId + ":" + mode, url).then(function (json) {
       var rows = extractResponseRows(json);
       for (var i = 0; i < rows.length; i++) {
-        var row = rows[i] && rows[i].rowData ? rows[i].rowData : rows[i];
+        var row = rows[i] && rows[i].rowData ? $.extend(true, {}, rows[i], rows[i].rowData) : rows[i];
         if (extractProjectRecordId(row) === projectId) return row;
       }
       if (json && typeof json === "object" && extractProjectRecordId(json) === projectId) return json;
@@ -1016,7 +1076,10 @@
     if ($.isArray(json.data)) return json.data;
     if ($.isArray(json.rows)) return json.rows;
     if ($.isArray(json.items)) return json.items;
+    if ($.isArray(json.records)) return json.records;
     if (json.data && $.isArray(json.data.data)) return json.data.data;
+    if (json.data && $.isArray(json.data.rows)) return json.data.rows;
+    if (json.data && $.isArray(json.data.records)) return json.data.records;
     return [];
   }
 
@@ -1272,8 +1335,10 @@
         activeJobId: state.activeJobId,
         parentProjectId: state.parentProjectId,
         parentProjectSource: state.parentProjectSource,
+        parentProjectSupplementError: state.parentProjectSupplementError,
         parentProjectState: state.parentProjectData ? "ready" : state.parentProjectRequest ? "loading" : state.parentProjectError ? "error" : "idle",
         parentProjectError: state.parentProjectError,
+        parentProjectAvailableKeys: describeProjectKeys(state.parentProjectData),
         renderedFields: $root.find(".wise-jg-field").length,
         renderedValues: $root.find(".wise-jg-field-value").map(function () {
           var $value = $(this);

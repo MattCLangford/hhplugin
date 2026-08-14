@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "7.4",
+      "cacheVersion": "7.5",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -113,8 +113,8 @@
     {
       "file": "14-jobgroups.js",
       "status": "lazy-job-details",
-      "cacheVersion": "2.3",
-      "role": "Proposal Creation depot only: replaces the native read-only job information area with a dense job-first comparison layout. Job Details and Job Commercial Info form the top two-column row, followed by nine fixed-size Job Timing cards. A recessed read-only parent-project window sits last, showing six fixed-size Project Timing cards before five compact project information fields. Every timing card separates its label, DD/MM/YYYY date and HH:mm time. Job-owned cards retain the live job status accent, while the project window uses its independently loaded project colour/status through a quieter four-pixel rail, tinted background, dashed boundary and read-only note. Parent data is resolved from the live job relationship through HireHop's documented project_get_data endpoint and supplemented with search-list custom fields across object, JSON and array payload shapes. Memo extraction is confined to its own legacy table cell so it cannot absorb adjacent commercial fields. The native source remains intact and hidden; the layout transforms only legacy #details_tab or newer #main_tab and remains isolated from every other job tab.",
+      "cacheVersion": "2.4",
+      "role": "Proposal Creation depot only: replaces the native read-only job information area with a dense job-first comparison layout. Job Details and Job Commercial Info form the top two-column row, followed by nine fixed-size Job Timing cards. A recessed read-only parent-project window sits last, showing six fixed-size Project Timing cards before five compact project information fields. Every timing card separates its label, DD/MM/YYYY date and HH:mm time. Job-owned cards retain the live job status accent, while the project window uses its independently loaded project colour/status through a quieter four-pixel rail, tinted background, dashed boundary and read-only note. Parent data is resolved from the live job relationship through HireHop's documented project_get_data endpoint with custom-field flags, then supplemented from search-list using both exact-filter encodings and a narrow date-window fallback. Custom fields are matched across wrapper/rowData envelopes, nested response collections, object keys with normalised prefixes, JSON bags and arrays. Diagnostics expose supplement failures and available parent keys. Memo extraction is confined to its own legacy table cell so it cannot absorb adjacent commercial fields. The native source remains intact and hidden; the layout transforms only legacy #details_tab or newer #main_tab and remains isolated from every other job tab.",
       "recommendedLoadOrder": 14
     },
     {

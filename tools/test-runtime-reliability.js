@@ -662,6 +662,10 @@ function testSourceGuards() {
   assert(jobGroups.includes('dateTime: true') && jobGroups.includes('function formatDateTime'), "all job timing fields should use the shared DD/MM/YYYY HH:mm display formatter");
   assert(jobGroups.includes('project_get_data+search_list') && jobGroups.includes('PROJECT_CUSTOM_FIELDS'), "direct parent-project data should be supplemented with search-list custom fields");
   assert(jobGroups.includes('parseProjectFieldContainer') && jobGroups.includes('normaliseProjectKeyName'), "project custom fields should support JSON bags and array payloads");
+  assert(jobGroups.includes('normaliseProjectKeyName(property)') && jobGroups.includes('Object.keys(container)'), "object-form project custom fields should match regardless of tilde, underscore or display-key formatting");
+  assert(jobGroups.includes('rows[i].rowData ? $.extend(true, {}, rows[i], rows[i].rowData)'), "search results should preserve custom fields on both the response wrapper and rowData");
+  assert(jobGroups.includes('getProjectSearchRange') && jobGroups.includes('date-window'), "project custom-field lookup should retry in the direct record's narrow date window when exact filters return no row");
+  assert(jobGroups.includes('parentProjectSupplementError') && jobGroups.includes('parentProjectAvailableKeys'), "parent-project diagnostics should explain missing custom-field supplements and expose returned key names");
 
   const journey = fs.readFileSync(path.join(root, "11-projectjourney.js"), "utf8");
   const buildJourney = journey.slice(journey.indexOf("function buildJourneyHtml"), journey.indexOf("function buildHeaderSummary"));
