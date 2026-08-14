@@ -24,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-08-14.10", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-08-14.11", maintainRecoveryMs: 5000 };
   var PROJECT_CUSTOM_FIELDS = ["_Tier", "_Job_Number", "_JobNumber", "_Client", "_Venue", "_Revenue", "_revenue", "_Install", "_ShowStart", "_ShowEnd", "_Derig"];
   var ICONS = {
     project: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17V4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5V17M1.5 17h17M7 7h2M11 7h2M7 11h2M11 11h2M8 17v-3h4v3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
@@ -362,13 +362,28 @@
       .attr("data-wise-span", spec.span);
     if (spec.longText) $field.addClass("wise-jg-field-long-text");
     if (spec.timelineStep) $field.addClass("wise-jg-field-timing");
+    if (spec.projectDate || spec.dateTime) $field.addClass("wise-jg-date-box");
     $("<span></span>").addClass("wise-jg-field-label").text(spec.label).appendTo($field);
-    $("<span></span>")
-      .addClass("wise-jg-field-value")
-      .toggleClass("wise-jg-empty", !value)
-      .text(value || "—")
-      .appendTo($field);
+    var $value = $("<span></span>").addClass("wise-jg-field-value").appendTo($field);
+    setRenderedFieldValue($value, spec, value);
     $body.append($field);
+  }
+
+  function setRenderedFieldValue($value, spec, value) {
+    $value.empty().toggleClass("wise-jg-empty", !value);
+    if (!spec.projectDate && !spec.dateTime) {
+      $value.text(value || "—");
+      return;
+    }
+    var parts = splitDateTime(value);
+    $("<span></span>").addClass("wise-jg-date-value").text(parts.date).appendTo($value);
+    $("<span></span>").addClass("wise-jg-time-value").text(parts.time).appendTo($value);
+  }
+
+  function splitDateTime(value) {
+    value = cleanValue(value);
+    var match = value.match(/^(\d{2}\/\d{2}\/\d{4})\s+(\d{2}:\d{2})$/);
+    return match ? { date: match[1], time: match[2] } : { date: value || "—", time: "—" };
   }
 
   function renderSubhead($body, label) {
@@ -754,9 +769,11 @@
       for (var f = 0; f < PROJECT_GROUPS[g].fields.length; f++) {
         var spec = PROJECT_GROUPS[g].fields[f];
         var value = readProjectFieldValue(spec);
-        $root.find(".wise-jg-layout [data-wise-job-field='" + spec.key + "'] .wise-jg-field-value")
-          .toggleClass("wise-jg-empty", !value)
-          .text(value || "—");
+        setRenderedFieldValue(
+          $root.find(".wise-jg-layout [data-wise-job-field='" + spec.key + "'] .wise-jg-field-value"),
+          spec,
+          value
+        );
       }
     }
     $root.find("[data-wise-job-group='project-details']")
@@ -1137,7 +1154,7 @@
       root + ">.wise-jg-layout{display:none!important;padding:5px;background:#fff;box-sizing:border-box;font-size:14px;line-height:1.35;}",
       "#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout,#details_tab" + root + ">.wise-jg-layout,#details_tab " + root + ">.wise-jg-layout{display:block!important;}",
       root + " .wise-jg-project-grid{display:block;margin-bottom:10px;}",
-      root + " .wise-jg-job-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;}",
+      root + " .wise-jg-job-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:stretch;}",
       root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
       root + " .wise-jg-hdr{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #eee;background:#fff;}",
       root + " .wise-jg-hdr-text{font-weight:700;font-size:.8em;letter-spacing:.03em;text-transform:uppercase;color:#1f2937;}",
@@ -1153,14 +1170,22 @@
       root + " .wise-jg-field-long-text{grid-template-columns:1fr;align-items:start;gap:3px;min-height:78px;padding-top:7px;}",
       root + " .wise-jg-field-long-text .wise-jg-field-label{white-space:normal;}",
       root + " .wise-jg-field-long-text .wise-jg-field-value{white-space:pre-wrap;line-height:1.35;}",
-      root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:repeat(3,minmax(0,1fr));gap:0 16px;padding:12px 14px;counter-reset:wise-project-timing;}",
-      root + " .wise-jg-field-timing{grid-column:1 / -1;counter-increment:wise-project-timing;position:relative;padding-left:30px;}",
-      root + " .wise-jg-field-timing:before{content:counter(wise-project-timing);position:absolute;left:0;top:5px;display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:" + accent + ";color:#fff;font-size:10px;font-weight:800;line-height:1;box-shadow:0 0 0 3px #fff;z-index:1;}",
-      root + " .wise-jg-field-timing:after{content:'';position:absolute;left:8px;top:23px;bottom:-7px;width:2px;background:rgba(" + accentRgb + ",.25);}",
-      root + " .wise-jg-field-timing:last-child:after{display:none;}",
-      "@media (max-width:1180px){" + root + " .wise-jg-job-grid{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " [data-wise-job-group='job-details']{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-details']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;}" + root + " [data-wise-job-group='job-details'] .wise-jg-field-long-text{grid-column:1 / -1;}}",
-      "@media (max-width:760px){" + root + " .wise-jg-job-grid{grid-template-columns:1fr;}" + root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:1fr;gap:0;}" + root + " [data-wise-job-group='job-details']{grid-column:auto;}" + root + " [data-wise-job-group='job-details']>.wise-jg-body{grid-template-columns:1fr;gap:0;}" + root + " [data-wise-job-group='job-details'] .wise-jg-field-long-text{grid-column:auto;}" + root + " .wise-jg-field{grid-template-columns:minmax(118px,auto) minmax(0,1fr);}}",
-      "@media (max-width:480px){" + root + " .wise-jg-field{grid-template-columns:1fr;gap:1px;}" + root + " .wise-jg-field-label{white-space:normal;} }"
+      root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;padding:12px 14px;}",
+      root + " [data-wise-job-group='project-details'] .wise-jg-field:not(.wise-jg-date-box){grid-column:span 2;}",
+      root + " [data-wise-job-group='project-details'] .wise-jg-subhead{grid-column:1 / -1;margin-top:2px;}",
+      root + " [data-wise-job-group='job-timings']{grid-column:1 / -1;grid-row:1;}",
+      root + " [data-wise-job-group='job-timings']>.wise-jg-body{grid-template-columns:repeat(9,minmax(0,1fr));gap:8px;padding:10px 12px 12px;}",
+      root + " [data-wise-job-group='job-details']{grid-column:1;grid-row:2;}",
+      root + " [data-wise-job-group='job-commercial-info']{grid-column:2;grid-row:2;}",
+      root + " .wise-jg-date-box{display:flex;flex-direction:column;align-items:stretch;gap:0;min-height:88px;padding:9px 10px;border:1px solid #e5e7eb;border-radius:8px;background:#fafafa;box-sizing:border-box;}",
+      root + " .wise-jg-date-box .wise-jg-field-label{min-height:2.4em;margin-bottom:8px;color:#374151;font-size:.78em;line-height:1.2;white-space:normal;}",
+      root + " .wise-jg-date-box .wise-jg-field-value{display:flex;flex-direction:column;gap:2px;margin-top:auto;line-height:1.2;}",
+      root + " .wise-jg-date-value{font-weight:700;color:#111827;white-space:nowrap;}",
+      root + " .wise-jg-time-value{color:#6b7280;font-size:.9em;white-space:nowrap;}",
+      root + " .wise-jg-date-box .wise-jg-field-value.wise-jg-empty .wise-jg-date-value," + root + " .wise-jg-date-box .wise-jg-field-value.wise-jg-empty .wise-jg-time-value{color:#9ca3af;}",
+      "@media (max-width:1180px){" + root + " [data-wise-job-group='job-timings']>.wise-jg-body{grid-template-columns:repeat(3,minmax(0,1fr));}}",
+      "@media (max-width:760px){" + root + " .wise-jg-job-grid{grid-template-columns:1fr;}" + root + " [data-wise-job-group='project-details']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " [data-wise-job-group='project-details'] .wise-jg-field:not(.wise-jg-date-box){grid-column:1 / -1;}" + root + " [data-wise-job-group='project-details'] .wise-jg-subhead{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-timings']," + root + " [data-wise-job-group='job-details']," + root + " [data-wise-job-group='job-commercial-info']{grid-column:1;grid-row:auto;}" + root + " [data-wise-job-group='job-timings']{order:-1;}" + root + " [data-wise-job-group='job-timings']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " .wise-jg-field{grid-template-columns:minmax(118px,auto) minmax(0,1fr);}}",
+      "@media (max-width:480px){" + root + " [data-wise-job-group='project-details']>.wise-jg-body," + root + " [data-wise-job-group='job-timings']>.wise-jg-body{grid-template-columns:1fr;}" + root + " .wise-jg-field{grid-template-columns:1fr;gap:1px;}" + root + " .wise-jg-field-label{white-space:normal;} }"
     ].join("\n");
     var style = document.createElement("style");
     style.id = STYLES_ID;
@@ -1195,7 +1220,12 @@
         parentProjectState: state.parentProjectData ? "ready" : state.parentProjectRequest ? "loading" : state.parentProjectError ? "error" : "idle",
         parentProjectError: state.parentProjectError,
         renderedFields: $root.find(".wise-jg-field").length,
-        renderedValues: $root.find(".wise-jg-field-value").map(function () { return $(this).text(); }).get()
+        renderedValues: $root.find(".wise-jg-field-value").map(function () {
+          var $value = $(this);
+          var date = $value.children(".wise-jg-date-value").text();
+          var time = $value.children(".wise-jg-time-value").text();
+          return date || time ? cleanValue(date + " " + time) : $value.text();
+        }).get()
       };
     }
   };

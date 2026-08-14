@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "7.2",
+      "cacheVersion": "7.3",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -113,8 +113,8 @@
     {
       "file": "14-jobgroups.js",
       "status": "lazy-job-details",
-      "cacheVersion": "2.1",
-      "role": "Proposal Creation depot only: replaces the native read-only job information area with a responsive full-width parent-project card above three exact job cards. Project Details reads Tier, Wise job number, Client, Venue and Revenue, followed in the same card by a numbered Project Timings sequence using the native project wrapper dates plus _Install, _ShowStart, _ShowEnd and _Derig. The lower Job Details, Job Timings and Job Commercial Info cards contain only the explicitly selected job fields. Typography, header sizing, icon sizing and six-pixel accent rails follow the refined Project Details page, and all displayed project/job timings use DD/MM/YYYY HH:mm. Parent data is resolved from the live job relationship through HireHop's documented project_get_data endpoint and supplemented with search-list custom fields across object, JSON and array payload shapes. Memo extraction is confined to its own legacy table cell so it cannot absorb adjacent commercial fields. The native source remains intact and hidden; the layout transforms only legacy #details_tab or newer #main_tab, remains isolated from every other job tab, and keeps live status-colour accents.",
+      "cacheVersion": "2.2",
+      "role": "Proposal Creation depot only: replaces the native read-only job information area with a responsive comparison layout. Project Details reads Tier, Wise job number, Client, Venue and Revenue, followed by six left-to-right Project Timing cards. A full-width row of nine matching Job Timing cards follows immediately beneath, then Job Details and Job Commercial Info form the final two-column row. Every timing card separates its label, DD/MM/YYYY date and HH:mm time for direct visual comparison. Typography, header sizing, icon sizing and six-pixel accent rails follow the refined Project Details page. Parent data is resolved from the live job relationship through HireHop's documented project_get_data endpoint and supplemented with search-list custom fields across object, JSON and array payload shapes. Memo extraction is confined to its own legacy table cell so it cannot absorb adjacent commercial fields. The native source remains intact and hidden; the layout transforms only legacy #details_tab or newer #main_tab, remains isolated from every other job tab, and keeps live status-colour accents.",
       "recommendedLoadOrder": 14
     },
     {

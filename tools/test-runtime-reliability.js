@@ -641,7 +641,11 @@ function testSourceGuards() {
   assert(jobGroups.includes('var PROJECT_GROUPS = ['), "job details should render a dedicated parent-project overview above the job cards");
   assert(jobGroups.includes('var JOB_GROUPS = ['), "job-only fields should remain separated from parent-project fields");
   assert(jobGroups.includes('section: "Project Timings"') && !jobGroups.includes('key: "project-timings"'), "project timings should follow details inside one full-width project card");
-  assert(jobGroups.includes('counter-increment:wise-project-timing'), "project timings should be presented as an explicit sequential list");
+  assert(jobGroups.includes('wise-jg-date-box') && jobGroups.includes('wise-jg-date-value') && jobGroups.includes('wise-jg-time-value'), "project and job timings should render as label/date/time cards");
+  assert(jobGroups.includes("grid-template-columns:repeat(6,minmax(0,1fr))"), "the project timing section should provide one left-to-right row of six timing cards");
+  assert(jobGroups.includes("grid-template-columns:repeat(9,minmax(0,1fr))"), "the job timing section should provide one left-to-right row of nine timing cards");
+  assert(jobGroups.includes("[data-wise-job-group='job-timings']{grid-column:1 / -1;grid-row:1;}"), "job timings should sit full width above the two lower job information cards");
+  assert(!jobGroups.includes('counter-increment:wise-project-timing'), "the former numbered vertical project timeline should be removed");
   assert(jobGroups.includes('key: "job-details"') && jobGroups.includes('key: "job-timings"'), "the lower layout should use the requested Job Details and Job Timings cards");
   assert(!jobGroups.includes('field("company"') && !jobGroups.includes('field("price-group"') && !jobGroups.includes('field("job-id"'), "unrequested legacy job fields should not be rendered");
   assert(jobGroups.includes('"_Tier", "_Job_Number"') && jobGroups.includes('"_Install", "_ShowStart", "_ShowEnd", "_Derig"'), "project overview fields should use the established HireHop logical custom-field names");
