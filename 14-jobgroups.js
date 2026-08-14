@@ -1,7 +1,7 @@
 /* Wise Job Details Layout
  * Proposal Creation-only canonical presentation for the read-only job page.
  * HireHop's native DOM remains in place but hidden; this module reads its live
- * values and renders a clean, deterministic three-card layout.
+ * values and renders a clean, deterministic project-overview plus job-card layout.
  */
 (function () {
   "use strict";
@@ -24,71 +24,93 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-08-14.6", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-08-14.7", maintainRecoveryMs: 5000 };
+  var PROJECT_CUSTOM_FIELDS = ["_Tier", "_Job_Number", "_JobNumber", "_Client", "_Venue", "_Revenue", "_revenue", "_Install", "_ShowStart", "_ShowEnd", "_Derig"];
+  var ICONS = {
+    project: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 17V4.5A1.5 1.5 0 0 1 4.5 3h11A1.5 1.5 0 0 1 17 4.5V17M1.5 17h17M7 7h2M11 7h2M7 11h2M11 11h2M8 17v-3h4v3" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    timings: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.5V10l3 2" stroke-linecap="round"/></svg>',
+    job: '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><rect x="2" y="4" width="16" height="13" rx="2"/><path d="M6 4V2h8v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="5" y="8" width="10" height="2" rx="1" fill="#fff"/><rect x="5" y="12" width="7" height="2" rx="1" fill="#fff"/></svg>',
+    dates: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3.5" width="16" height="14" rx="2"/><path d="M6 1.5v4M14 1.5v4M2 7.5h16"/><circle cx="10" cy="12" r="3"/><path d="M10 10.5V12l1.3.9" stroke-linecap="round"/></svg>',
+    commercial: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M2 7h16M5 12h4M12 12h3" stroke-linecap="round"/></svg>'
+  };
 
-  var GROUPS = [
+  var PROJECT_GROUPS = [
     {
-      key: "job-info",
-      title: "Job Info",
-      icon: '<svg viewBox="0 0 20 20" width="14" height="14" fill="currentColor"><rect x="2" y="4" width="16" height="13" rx="2"/><path d="M6 4V2h8v2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="5" y="8" width="10" height="2" rx="1" fill="#fff"/><rect x="5" y="12" width="7" height="2" rx="1" fill="#fff"/></svg>',
+      key: "project-details",
+      title: "Project Details",
+      icon: ICONS.project,
+      project: true,
       fields: [
-        field("job-id", "Job ID", ["Job ID", "Job ID#"], { always: true, section: "Job" }),
-        field("job-name", "Job name", ["Job name"], { span: 2 }),
-        field("job-type", "Job type", ["Job type"]),
-        field("company", "Company", ["Company"], { section: "Client & venue" }),
-        field("contact-name", "Contact name", ["Contact name"], { span: 2 }),
-        field("venue", "Venue", ["Venue"]),
-        field("address", "Address", ["Address"], { span: 2 }),
-        field("delivery-address", "Delivery address", ["Delivery address"], { span: 2 }),
-        field("collection-address", "Collection address", ["Collection address"], { span: 2 }),
-        field("use-at-address", "Use at address", ["Use at address"], { span: 2 }),
-        field("contact-telephone", "Contact telephone", ["Telephone"], { occurrence: 0 }),
-        field("mobile", "Mobile", ["Mobile"]),
-        field("email", "Email", ["Email"]),
-        field("venue-telephone", "Venue telephone", ["Telephone"], { occurrence: 1 }),
-        field("warehouse", "Warehouse", ["Warehouse Name", "Warehouse"], { section: "Operations & record" }),
-        field("technical", "Technical", ["Technical"]),
-        field("empties", "Empties stored on truck?", ["Empties stored on truck?", "Empties stored on truck"], { always: true }),
-        field("created-by", "Created by", ["Created by"], { span: 2 }),
-        field("version", "Version", ["Version"], { always: true }),
-        field("job-memo", "Job memo", ["Job memo"], { span: 4 })
+        field("project-tier", "Tier", ["Tier"], { always: true, projectKeys: ["_Tier", "~_Tier", "TIER", "tier"] }),
+        field("project-wise-job-number", "Wise job number", ["Wise job number"], { always: true, projectKeys: ["_Job_Number", "_JobNumber", "~_Job_Number", "~_JobNumber", "WISE_JOB_NUMBER", "JOB_NUMBER"] }),
+        field("project-client", "Client", ["Client"], { always: true, projectKeys: ["_Client", "~_Client", "CLIENT", "CLIENT_NAME", "client"] }),
+        field("project-venue", "Venue", ["Venue"], { always: true, projectKeys: ["_Venue", "~_Venue", "VENUE", "VENUE_NAME", "venue"] }),
+        field("project-revenue", "Revenue", ["Revenue"], { always: true, projectKeys: ["_Revenue", "_revenue", "~_Revenue", "REVENUE", "revenue"] })
       ]
     },
     {
-      key: "job-dates-times",
-      title: "Job Dates and Times",
-      icon: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3.5" width="16" height="14" rx="2"/><path d="M6 1.5v4M14 1.5v4M2 7.5h16"/><circle cx="10" cy="12" r="3"/><path d="M10 10.5V12l1.3.9" stroke-linecap="round"/></svg>',
+      key: "project-timings",
+      title: "Project Timings",
+      icon: ICONS.timings,
+      project: true,
+      timeline: true,
       fields: [
-        field("kit-booking-start", "Kit Booking Start", ["Kit Booking Start"], { always: true, section: "Booking & preparation" }),
+        field("project-onsite-start", "Project/Onsite Start", ["Project/Onsite Start"], { always: true, projectDate: true, projectKeys: ["START_DATETIME", "START_DATE_TIME", "PROJECT_START_DATE_TIME", "START_DATE", "DATE", "PROJECT_DATE", "JOB_DATE"], projectTimeKeys: ["START_TIME", "PROJECT_TIME", "TIME", "JOB_TIME"] }),
+        field("project-install-start", "Install Start", ["Install Start"], { always: true, projectDate: true, projectKeys: ["_Install", "~_Install", "INSTALL", "INSTALL_START"] }),
+        field("project-show-start", "Show Start", ["Show Start"], { always: true, projectDate: true, projectKeys: ["_ShowStart", "~_ShowStart", "SHOW_START", "showStart"] }),
+        field("project-show-end", "Show End", ["Show End"], { always: true, projectDate: true, projectKeys: ["_ShowEnd", "~_ShowEnd", "SHOW_END", "showEnd"] }),
+        field("project-derig-start", "Derig Start", ["Derig Start"], { always: true, projectDate: true, projectKeys: ["_Derig", "~_Derig", "DERIG", "DERIG_START"] }),
+        field("project-onsite-end", "Project/Onsite End", ["Project/Onsite End"], { always: true, projectDate: true, projectKeys: ["END_DATETIME", "END_DATE_TIME", "PROJECT_END_DATE_TIME", "END_DATE", "DATE_END", "PROJECT_END", "JOB_END"], projectTimeKeys: ["END_TIME", "PROJECT_END_TIME", "TIME_END", "JOB_END_TIME"] })
+      ]
+    }
+  ];
+
+  var JOB_GROUPS = [
+    {
+      key: "job-details",
+      title: "Job Details",
+      icon: ICONS.job,
+      fields: [
+        field("job-name", "Job name", ["Job name"], { always: true }),
+        field("job-type", "Job Type", ["Job type"], { always: true }),
+        field("version", "Version", ["Version"], { always: true }),
+        field("contact-name", "Contact name", ["Contact name"], { always: true }),
+        field("email", "Email", ["Email"], { always: true }),
+        field("mobile", "Mobile", ["Mobile"], { always: true }),
+        field("job-memo", "Job memo", ["Job memo"], { always: true, longText: true })
+      ]
+    },
+    {
+      key: "job-dates",
+      title: "Job Dates",
+      icon: ICONS.dates,
+      fields: [
         field("wise-prep-start", "Wise Prep Start", ["Wise Prep Start"], { always: true }),
+        field("kit-booking-start", "Kit Booking Start", ["Kit Booking Start"], { always: true }),
         field("vehicle-load", "Vehicle Load", ["Vehicle Load"], { always: true }),
-        field("vehicle-install", "Vehicle Onsite - Install", ["Vehicle Onsite - Install", "Vehicle Onsite Install"], { always: true, section: "On site" }),
+        field("vehicle-install", "Vehicle Onsite - Install", ["Vehicle Onsite - Install", "Vehicle Onsite Install"], { always: true }),
         field("project-start", "Project/Onsite Start", ["Project/Onsite Start", "Project Onsite Start"], { always: true }),
-        field("project-end", "Project/Onsite End", ["Project/Onsite End", "Project Onsite End"], { always: true }),
         field("vehicle-derig", "Vehicle Onsite - Derig", ["Vehicle Onsite - Derig", "Vehicle Onsite Derig"], { always: true }),
-        field("vehicle-tip", "Vehicle Tip", ["Vehicle Tip"], { always: true, section: "Return" }),
+        field("project-end", "Project/Onsite End", ["Project/Onsite End", "Project Onsite End"], { always: true }),
+        field("vehicle-tip", "Vehicle Tip", ["Vehicle Tip"], { always: true }),
         field("kit-booking-end", "Kit Booking End", ["Kit Booking End"], { always: true })
       ]
     },
     {
       key: "job-commercial-info",
       title: "Job Commercial Info",
-      icon: '<svg viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="16" height="14" rx="2"/><path d="M2 7h16M5 12h4M12 12h3" stroke-linecap="round"/></svg>',
+      icon: ICONS.commercial,
       fields: [
-        field("price-group", "Price group", ["Price group"], { section: "Pricing" }),
-        field("price-structure", "Price structure", ["Price structure"]),
-        field("charge-period", "Charge period", ["Charge period"]),
-        field("client-reference", "Client reference", ["Client reference"], { section: "Billing & returns" }),
-        field("credit-period", "Credit period", ["Credit period"]),
-        field("late-fees", "Calculate late fees", ["Calculate late fees"]),
-        field("early-returns", "Allow early returns", ["Allow early returns"]),
-        field("default-discount", "Default discount/markup", ["Default discount/markup"], { section: "Adjustments & commission" }),
         field("discretionary-discount", "Discretionary discount", ["Discretionary Discount", "Discretionary discount"], { always: true }),
         field("venue-commission", "Venue commission", ["Venue Commission", "Venue commission"], { always: true }),
-        field("client-commission", "Client commission", ["Client Commission", "Client commission"], { always: true })
+        field("client-commission", "Client commission", ["Client Commission", "Client commission"], { always: true }),
+        field("charge-period", "Charge period", ["Charge period"], { always: true })
       ]
     }
   ];
+
+  var GROUPS = PROJECT_GROUPS.concat(JOB_GROUPS);
+  var JOB_ID_SPEC = field("internal-job-id", "Job ID", ["Job ID", "Job ID#"], { always: true });
 
   var ALL_LABELS = buildAllLabels();
   var state = {
@@ -97,6 +119,11 @@
     accentObserver: null,
     accentObserverRoot: null,
     lastRoot: null,
+    activeJobId: "",
+    parentProjectId: "",
+    parentProjectData: null,
+    parentProjectRequest: null,
+    parentProjectError: "",
     recoveryCount: 0,
     recoveryChecks: 12
   };
@@ -112,7 +139,11 @@
       occurrence: Number(options.occurrence) || 0,
       span: Number(options.span) || 1,
       section: String(options.section || ""),
-      always: !!options.always
+      always: !!options.always,
+      projectKeys: options.projectKeys || [],
+      projectTimeKeys: options.projectTimeKeys || [],
+      projectDate: !!options.projectDate,
+      longText: !!options.longText
     };
   }
 
@@ -170,6 +201,7 @@
       // HireHop changes the current job/status without replacing the root.
       applyAccentColour($root);
       maintainAccentObserver($root);
+      maintainParentProject($root);
       return;
     }
 
@@ -195,6 +227,7 @@
     $root.addClass(ROOT_CLASS);
     state.lastRoot = $root.get(0);
     maintainAccentObserver($root);
+    maintainParentProject($root);
   }
 
   function findNativeJobSourceNodes($root) {
@@ -252,6 +285,7 @@
     $root.removeClass(ROOT_CLASS);
     if (state.lastRoot === $root.get(0)) {
       state.lastRoot = null;
+      resetParentProjectState();
     }
     if (state.accentObserverRoot === $root.get(0)) {
       stopAccentObserver();
@@ -291,6 +325,8 @@
 
   function renderLayout($root) {
     var $layout = $("<div></div>").addClass("wise-jg-layout");
+    var $projectGrid = $("<div></div>").addClass("wise-jg-project-grid");
+    var $jobGrid = $("<div></div>").addClass("wise-jg-job-grid");
     for (var g = 0; g < GROUPS.length; g++) {
       var group = GROUPS[g];
       var $section = makeGroup(group);
@@ -300,7 +336,7 @@
       for (var f = 0; f < group.fields.length; f++) {
         var spec = group.fields[f];
         if (spec.section) pendingSubhead = spec.section;
-        var value = readFieldValue($root, spec);
+        var value = group.project ? readProjectFieldValue(spec) : readFieldValue($root, spec);
         if (!value && !spec.always) continue;
         if (pendingSubhead) {
           renderSubhead($body, pendingSubhead);
@@ -308,13 +344,17 @@
         }
         renderField($body, spec, value);
       }
-      $layout.append($section);
+      (group.project ? $projectGrid : $jobGrid).append($section);
     }
+    $layout.append($projectGrid, $jobGrid);
     return $layout;
   }
 
   function makeGroup(group) {
-    var $section = $("<section></section>").attr("data-wise-job-group", group.key).addClass("wise-jg-section");
+    var $section = $("<section></section>")
+      .attr("data-wise-job-group", group.key)
+      .toggleClass("wise-jg-timeline", !!group.timeline)
+      .addClass("wise-jg-section");
     var $header = $("<div></div>").addClass("wise-jg-hdr");
     $("<span></span>").addClass("wise-jg-icon").html(group.icon).appendTo($header);
     $("<span></span>").addClass("wise-jg-hdr-text").text(group.title).appendTo($header);
@@ -327,6 +367,7 @@
       .addClass("wise-jg-field")
       .attr("data-wise-job-field", spec.key)
       .attr("data-wise-span", spec.span);
+    if (spec.longText) $field.addClass("wise-jg-field-long-text");
     $("<span></span>").addClass("wise-jg-field-label").text(spec.label).appendTo($field);
     $("<span></span>")
       .addClass("wise-jg-field-value")
@@ -341,6 +382,78 @@
       .addClass("wise-jg-subhead")
       .text(label)
       .appendTo($body);
+  }
+
+  function readProjectFieldValue(spec) {
+    var data = state.parentProjectData;
+    if (!data || typeof data !== "object") return "";
+    var value = readProjectObjectValue(data, spec.projectKeys);
+    if (spec.projectDate && spec.projectTimeKeys.length && !valueHasTime(value)) {
+      var timeValue = readProjectObjectValue(data, spec.projectTimeKeys);
+      if (timeValue) value = cleanValue(value + " " + timeValue);
+    }
+    value = customFieldToText(value);
+    return spec.projectDate ? formatProjectDateTime(value) : value;
+  }
+
+  function readProjectObjectValue(object, keys) {
+    if (!object || typeof object !== "object") return "";
+    keys = keys || [];
+    var containers = [object, object.CUSTOM_FIELDS, object.custom_fields, object.fields, object.FIELDS];
+    for (var c = 0; c < containers.length; c++) {
+      var container = containers[c];
+      if (!container || typeof container !== "object") continue;
+      for (var k = 0; k < keys.length; k++) {
+        var variants = projectKeyVariants(keys[k]);
+        for (var v = 0; v < variants.length; v++) {
+          if (Object.prototype.hasOwnProperty.call(container, variants[v]) && container[variants[v]] != null && container[variants[v]] !== "") {
+            return container[variants[v]];
+          }
+        }
+      }
+    }
+    return "";
+  }
+
+  function projectKeyVariants(key) {
+    key = String(key || "");
+    var bare = key.replace(/^~/, "");
+    var variants = [key, bare, "~" + bare];
+    var lower = bare.toLowerCase();
+    if (variants.indexOf(lower) === -1) variants.push(lower);
+    return variants;
+  }
+
+  function customFieldToText(value) {
+    if (value == null) return "";
+    if (typeof value !== "object") return cleanValue(value);
+    var keys = ["VALUE", "value", "DISPLAY", "display", "TEXT", "text", "NAME", "name"];
+    for (var i = 0; i < keys.length; i++) {
+      if (value[keys[i]] != null && typeof value[keys[i]] !== "object") return cleanValue(value[keys[i]]);
+    }
+    return "";
+  }
+
+  function valueHasTime(value) {
+    return /\b\d{1,2}:\d{2}\b/.test(customFieldToText(value));
+  }
+
+  function formatProjectDateTime(value) {
+    value = cleanValue(value);
+    if (!value || /[A-Za-z]+day,/.test(value)) return value;
+    var match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s]+(\d{1,2}):(\d{2}))?/);
+    if (!match) return value;
+    var year = Number(match[1]);
+    var month = Number(match[2]);
+    var day = Number(match[3]);
+    var date = new Date(year, month - 1, day);
+    if (isNaN(date.getTime())) return value;
+    var weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    var months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    var suffix = (day % 10 === 1 && day % 100 !== 11) ? "st" : (day % 10 === 2 && day % 100 !== 12) ? "nd" : (day % 10 === 3 && day % 100 !== 13) ? "rd" : "th";
+    var output = weekdays[date.getDay()] + ", " + day + suffix + " " + months[month - 1] + " " + year;
+    if (match[4] != null) output += " " + ("0" + match[4]).slice(-2) + ":" + match[5];
+    return output;
   }
 
   function readFieldValue($root, spec) {
@@ -484,15 +597,19 @@
 
   function buildAllLabels() {
     var labels = [];
-    for (var g = 0; g < GROUPS.length; g++) {
-      for (var f = 0; f < GROUPS[g].fields.length; f++) {
-        var aliases = GROUPS[g].fields[f].aliases;
+    // Only native job labels participate in DOM row-boundary detection.
+    // Parent-project labels are read from API objects and would otherwise make
+    // values such as "Client 1" look like the start of a new native field.
+    for (var g = 0; g < JOB_GROUPS.length; g++) {
+      for (var f = 0; f < JOB_GROUPS[g].fields.length; f++) {
+        var aliases = JOB_GROUPS[g].fields[f].aliases;
         for (var a = 0; a < aliases.length; a++) {
           var label = normaliseLabel(aliases[a]);
           if (labels.indexOf(label) === -1) labels.push(label);
         }
       }
     }
+    labels.push(normaliseLabel("Job ID"), normaliseLabel("Job ID#"));
     labels.sort(function (a, b) { return b.length - a.length; });
     return labels;
   }
@@ -510,6 +627,268 @@
 
   function normaliseLabel(value) {
     return normaliseText(value).replace(/[#:?]+/g, " ").replace(/\s+/g, " ").replace(/^\s+|\s+$/g, "");
+  }
+
+  function maintainParentProject($root) {
+    var jobId = normaliseNumericId(readFieldValue($root, JOB_ID_SPEC)) || getCurrentJobIdFromLocation();
+    if (!jobId) return;
+    if (state.activeJobId !== jobId) {
+      resetParentProjectState();
+      state.activeJobId = jobId;
+      refreshProjectFieldValues($root);
+    }
+    if (state.parentProjectData) {
+      refreshProjectFieldValues($root);
+      return;
+    }
+    if (state.parentProjectRequest || state.parentProjectError) return;
+
+    var parentId = findParentProjectId($root);
+    var requestJobId = jobId;
+    state.parentProjectRequest = (parentId ? Promise.resolve({ id: parentId, project: findWindowProjectData(parentId) }) : requestJobDetail(jobId))
+      .then(function (result) {
+        if (requestJobId !== state.activeJobId) return null;
+        var resolvedId = parentId || extractParentProjectId(result, jobId);
+        var embeddedProject = result && result.project && typeof result.project === "object"
+          ? result.project
+          : extractEmbeddedProject(result, resolvedId);
+        if (!resolvedId && embeddedProject) resolvedId = extractProjectRecordId(embeddedProject);
+        if (!resolvedId) throw new Error("The parent project ID was not exposed by this job.");
+        state.parentProjectId = resolvedId;
+        if (embeddedProject && projectRecordHasRequestedFields(embeddedProject)) return embeddedProject;
+        return requestProjectRecord(resolvedId);
+      })
+      .then(function (projectData) {
+        if (requestJobId !== state.activeJobId || !projectData) return;
+        state.parentProjectData = projectData;
+        state.parentProjectError = "";
+        refreshProjectFieldValues($root);
+      })
+      .catch(function (error) {
+        if (requestJobId !== state.activeJobId) return;
+        state.parentProjectError = error && error.message ? error.message : String(error || "Parent project lookup failed.");
+        log("Parent project lookup failed; job fields remain available", state.parentProjectError);
+        refreshProjectFieldValues($root);
+      })
+      .then(function () {
+        if (requestJobId === state.activeJobId) state.parentProjectRequest = null;
+      });
+  }
+
+  function resetParentProjectState() {
+    state.activeJobId = "";
+    state.parentProjectId = "";
+    state.parentProjectData = null;
+    state.parentProjectRequest = null;
+    state.parentProjectError = "";
+  }
+
+  function refreshProjectFieldValues($root) {
+    if (!$root || !$root.length) return;
+    for (var g = 0; g < PROJECT_GROUPS.length; g++) {
+      for (var f = 0; f < PROJECT_GROUPS[g].fields.length; f++) {
+        var spec = PROJECT_GROUPS[g].fields[f];
+        var value = readProjectFieldValue(spec);
+        $root.find(".wise-jg-layout [data-wise-job-field='" + spec.key + "'] .wise-jg-field-value")
+          .toggleClass("wise-jg-empty", !value)
+          .text(value || "—");
+      }
+    }
+    $root.find("[data-wise-job-group='project-details'],[data-wise-job-group='project-timings']")
+      .attr("aria-busy", state.parentProjectRequest ? "true" : "false")
+      .attr("data-wise-project-state", state.parentProjectData ? "ready" : state.parentProjectError ? "error" : "loading");
+  }
+
+  function findParentProjectId($root) {
+    var $scope = $root.closest("#details_tab,#main_tab");
+    if (!$scope.length) $scope = $root;
+    var found = "";
+    $scope.find("a[href],button[onclick],[data-project-id],[data-project]").each(function () {
+      if (found) return;
+      var $element = $(this);
+      var text = [$element.attr("href"), $element.attr("onclick"), $element.attr("data-project-id"), $element.attr("data-project")].join(" ");
+      var match = text.match(/project\.php[^\s'\"]*[?&](?:id|project|project_id)=(\d+)/i);
+      if (!match) match = text.match(/(?:project-id|project_id|data-project-id)[^\d]{0,5}(\d+)/i);
+      if (match) found = normaliseNumericId(match[1]);
+    });
+    if (found) return found;
+
+    var selectors = ["input[name='project_id']", "input[name='project']", "#project_id", "[data-parent-project-id]"];
+    for (var i = 0; i < selectors.length; i++) {
+      var $candidate = $scope.find(selectors[i]).first();
+      var value = $candidate.val() || $candidate.attr("data-parent-project-id") || $candidate.attr("data-project-id");
+      found = normaliseNumericId(value);
+      if (found) return found;
+    }
+
+    var objects = [window.job_data, window.jobData, window.currentJob, window.job];
+    var jobId = state.activeJobId || getCurrentJobIdFromLocation();
+    for (var o = 0; o < objects.length; o++) {
+      found = extractParentProjectId(objects[o], jobId);
+      if (found) return found;
+    }
+    return "";
+  }
+
+  function getCurrentJobIdFromLocation() {
+    var href = String(window.location && window.location.href || "");
+    var match = href.match(/[?&](?:job|job_id|id)=(\d+)/i) || href.match(/\/job\/(\d+)/i);
+    return match ? normaliseNumericId(match[1]) : "";
+  }
+
+  function extractParentProjectId(object, currentJobId) {
+    if (!object || typeof object !== "object") return "";
+    var priority = ["PROJECT_ID", "project_id", "PARENT_PROJECT_ID", "parent_project_id", "PROJECT_NUMBER", "project_number"];
+    for (var i = 0; i < priority.length; i++) {
+      var id = normaliseNumericId(object[priority[i]]);
+      if (id) return id;
+    }
+    var projectValue = object.PROJECT != null ? object.PROJECT : object.project;
+    if (projectValue && typeof projectValue === "object") {
+      var embeddedId = extractProjectRecordId(projectValue);
+      if (embeddedId) return embeddedId;
+    } else {
+      var scalarId = normaliseNumericId(projectValue);
+      if (scalarId) return scalarId;
+    }
+    var mainId = normaliseNumericId(object.MAIN_ID != null ? object.MAIN_ID : object.main_id);
+    return mainId && mainId !== currentJobId ? mainId : "";
+  }
+
+  function extractEmbeddedProject(object, projectId) {
+    if (!object || typeof object !== "object") return null;
+    var candidates = [object.PROJECT, object.project, object.PROJECT_DATA, object.project_data, object.parentProject];
+    for (var i = 0; i < candidates.length; i++) {
+      if (!candidates[i] || typeof candidates[i] !== "object") continue;
+      var id = extractProjectRecordId(candidates[i]);
+      if (!projectId || !id || id === projectId) return candidates[i];
+    }
+    return null;
+  }
+
+  function extractProjectRecordId(object) {
+    if (!object || typeof object !== "object") return "";
+    var keys = ["PROJECT_ID", "project_id", "ID", "id", "NUMBER", "PROJECT_NUMBER"];
+    for (var i = 0; i < keys.length; i++) {
+      var id = normaliseNumericId(object[keys[i]]);
+      if (id) return id;
+    }
+    return "";
+  }
+
+  function normaliseNumericId(value) {
+    var match = String(value == null ? "" : value).match(/\d+/);
+    return match && Number(match[0]) > 0 ? String(Number(match[0])) : "";
+  }
+
+  function findWindowProjectData(projectId) {
+    var candidates = [window.proj_data, window.projectData, window.currentProject, window.project];
+    for (var i = 0; i < candidates.length; i++) {
+      if (!candidates[i] || typeof candidates[i] !== "object") continue;
+      if (extractProjectRecordId(candidates[i]) === projectId) return candidates[i];
+    }
+    return null;
+  }
+
+  function projectRecordHasRequestedFields(project) {
+    if (!project || typeof project !== "object") return false;
+    for (var g = 0; g < PROJECT_GROUPS.length; g++) {
+      for (var f = 0; f < PROJECT_GROUPS[g].fields.length; f++) {
+        if (readProjectObjectValue(project, PROJECT_GROUPS[g].fields[f].projectKeys) !== "") return true;
+      }
+    }
+    return false;
+  }
+
+  function requestJobDetail(jobId) {
+    return requestJson("job-groups-job:" + jobId, "api/job_data.php?job=" + encodeURIComponent(jobId));
+  }
+
+  function requestProjectRecord(projectId) {
+    var endpoint = "/php_functions/search_list.php";
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    if (shared && shared.endpoints && shared.endpoints.searchList) endpoint = shared.endpoints.searchList;
+    var filter = {
+      mode: "AND",
+      data: [{ condition: "equal", dataIndx: "NUMBER", dataType: "integer", value: Number(projectId) }]
+    };
+    var params = {
+      local: formatSearchDateTime(new Date()),
+      tz: getTimezone(),
+      page: 1,
+      rows: 25,
+      jobs: 0,
+      projects: 1,
+      open: 1,
+      closed: 1,
+      money_owed: 0,
+      is_late: 0,
+      mine: 0,
+      no_user: 0,
+      needs_bill: 0,
+      only_open_ended: 0,
+      status: "",
+      from_date: "2000-01-01 00:00:00",
+      to_date: "2100-12-31 23:59:59",
+      include_project_custom_fields: 1,
+      include_custom_fields: 1,
+      project_custom_fields: PROJECT_CUSTOM_FIELDS.join(","),
+      custom_fields: PROJECT_CUSTOM_FIELDS.join(","),
+      wise_cache: Date.now(),
+      pq_filter: JSON.stringify(filter)
+    };
+    var url = endpoint + (endpoint.indexOf("?") === -1 ? "?" : "&") + $.param(params);
+    return requestJson("job-groups-project:" + projectId, url).then(function (json) {
+      var rows = extractResponseRows(json);
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i] && rows[i].rowData ? rows[i].rowData : rows[i];
+        if (extractProjectRecordId(row) === projectId) return row;
+      }
+      if (json && typeof json === "object" && extractProjectRecordId(json) === projectId) return json;
+      throw new Error("HireHop did not return parent project " + projectId + ".");
+    });
+  }
+
+  function requestJson(key, url) {
+    var factory = function () {
+      return new Promise(function (resolve, reject) {
+        $.ajax({
+          url: url,
+          method: "GET",
+          dataType: "json",
+          success: resolve,
+          error: function (xhr, status, error) {
+            var failure = new Error(String(error || status || "HireHop data request failed"));
+            failure.status = Number(xhr && xhr.status) || 0;
+            reject(failure);
+          }
+        });
+      });
+    };
+    var shared = window.WiseProposalSectionBuilderHireHop;
+    var requests = shared && shared.requests;
+    if (!requests || typeof requests.request !== "function") return factory();
+    return requests.request(key, factory, { priority: 20, minGapMs: 1250, cacheTtlMs: 5 * 60 * 1000 });
+  }
+
+  function extractResponseRows(json) {
+    if ($.isArray(json)) return json;
+    if (!json || typeof json !== "object") return [];
+    if ($.isArray(json.data)) return json.data;
+    if ($.isArray(json.rows)) return json.rows;
+    if ($.isArray(json.items)) return json.items;
+    if (json.data && $.isArray(json.data.data)) return json.data.data;
+    return [];
+  }
+
+  function formatSearchDateTime(date) {
+    function pad(value) { return ("0" + value).slice(-2); }
+    return date.getFullYear() + "-" + pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + " " + pad(date.getHours()) + ":" + pad(date.getMinutes()) + ":" + pad(date.getSeconds());
+  }
+
+  function getTimezone() {
+    if (window.timezone) return String(window.timezone);
+    try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) { return ""; }
   }
 
   function escapeRegExp(value) {
@@ -532,7 +911,9 @@
   }
 
   function looksLikeJobInfoText(text) {
-    return text.indexOf("job id") !== -1 &&
+    var label = normaliseLabel(text);
+    var hasJobId = label === "job id" || label.indexOf("job id ") === 0 || label.indexOf(" job id ") !== -1;
+    return hasJobId &&
       (text.indexOf("kit booking") !== -1 || text.indexOf("job memo") !== -1 || text.indexOf("client reference") !== -1);
   }
 
@@ -653,8 +1034,10 @@
       // Fail closed in CSS too: even if a future discovery regression tries
       // to mount against shared #tabs, cards cannot display outside the
       // native details panel.
-      root + ">.wise-jg-layout{display:none!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;padding:5px;background:#fff;box-sizing:border-box;}",
-      "#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout,#details_tab" + root + ">.wise-jg-layout,#details_tab " + root + ">.wise-jg-layout{display:grid!important;}",
+      root + ">.wise-jg-layout{display:none!important;padding:5px;background:#fff;box-sizing:border-box;}",
+      "#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout,#details_tab" + root + ">.wise-jg-layout,#details_tab " + root + ">.wise-jg-layout{display:block!important;}",
+      root + " .wise-jg-project-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.12fr);gap:10px;align-items:stretch;margin-bottom:10px;}",
+      root + " .wise-jg-job-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;}",
       root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
       root + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid #e5e7eb;background:#fff;}",
       root + " .wise-jg-hdr-text{font-weight:700;font-size:.76em;letter-spacing:.025em;text-transform:uppercase;color:#1f2937;}",
@@ -667,8 +1050,15 @@
       root + " .wise-jg-field-label{flex:0 0 auto;font-weight:700;color:#111827;white-space:nowrap;}",
       root + " .wise-jg-field-value{min-width:0;color:#1f2937;overflow-wrap:anywhere;}",
       root + " .wise-jg-field-value.wise-jg-empty{color:#9ca3af;}",
-      "@media (max-width:1280px){" + root + ">.wise-jg-layout{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " [data-wise-job-group='job-info']{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;}" + root + " [data-wise-job-group='job-info'] .wise-jg-subhead{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-info'] .wise-jg-field[data-wise-span='2']," + root + " [data-wise-job-group='job-info'] .wise-jg-field[data-wise-span='4']{grid-column:1 / -1;}}",
-      "@media (max-width:760px){" + root + ">.wise-jg-layout{grid-template-columns:1fr;}" + root + " [data-wise-job-group='job-info']{grid-column:auto;}" + root + " [data-wise-job-group='job-info']>.wise-jg-body{grid-template-columns:1fr;gap:0;}" + root + " [data-wise-job-group='job-info'] .wise-jg-field[data-wise-span]{grid-column:auto;}" + root + " .wise-jg-field{grid-template-columns:minmax(118px,auto) minmax(0,1fr);}}",
+      root + " .wise-jg-field-long-text{grid-template-columns:1fr;align-items:start;gap:3px;min-height:78px;padding-top:7px;}",
+      root + " .wise-jg-field-long-text .wise-jg-field-label{white-space:normal;}",
+      root + " .wise-jg-field-long-text .wise-jg-field-value{white-space:pre-wrap;line-height:1.35;}",
+      root + " .wise-jg-timeline .wise-jg-body{position:relative;counter-reset:wise-project-timing;padding-left:18px;}",
+      root + " .wise-jg-timeline .wise-jg-body:before{content:'';position:absolute;left:25px;top:17px;bottom:20px;width:2px;background:rgba(" + accentRgb + ",.25);}",
+      root + " .wise-jg-timeline .wise-jg-field{counter-increment:wise-project-timing;position:relative;padding-left:30px;}",
+      root + " .wise-jg-timeline .wise-jg-field:before{content:counter(wise-project-timing);position:absolute;left:0;top:5px;display:flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:" + accent + ";color:#fff;font-size:10px;font-weight:800;line-height:1;box-shadow:0 0 0 3px #fff;z-index:1;}",
+      "@media (max-width:1180px){" + root + " .wise-jg-project-grid{grid-template-columns:1fr;}" + root + " .wise-jg-job-grid{grid-template-columns:repeat(2,minmax(0,1fr));}" + root + " [data-wise-job-group='job-details']{grid-column:1 / -1;}" + root + " [data-wise-job-group='job-details']>.wise-jg-body{grid-template-columns:repeat(2,minmax(0,1fr));gap:0 18px;}" + root + " [data-wise-job-group='job-details'] .wise-jg-field-long-text{grid-column:1 / -1;}}",
+      "@media (max-width:760px){" + root + " .wise-jg-project-grid," + root + " .wise-jg-job-grid{grid-template-columns:1fr;}" + root + " [data-wise-job-group='job-details']{grid-column:auto;}" + root + " [data-wise-job-group='job-details']>.wise-jg-body{grid-template-columns:1fr;gap:0;}" + root + " [data-wise-job-group='job-details'] .wise-jg-field-long-text{grid-column:auto;}" + root + " .wise-jg-field{grid-template-columns:minmax(118px,auto) minmax(0,1fr);}}",
       "@media (max-width:480px){" + root + " .wise-jg-field{grid-template-columns:1fr;gap:1px;}" + root + " .wise-jg-field-label{white-space:normal;} }"
     ].join("\n");
     var style = document.createElement("style");
@@ -698,6 +1088,10 @@
         jobInfoFound: !!$root.length,
         depotAllowed: isProposalCreationDepot(),
         grouped: $root.hasClass(ROOT_CLASS),
+        activeJobId: state.activeJobId,
+        parentProjectId: state.parentProjectId,
+        parentProjectState: state.parentProjectData ? "ready" : state.parentProjectRequest ? "loading" : state.parentProjectError ? "error" : "idle",
+        parentProjectError: state.parentProjectError,
         renderedFields: $root.find(".wise-jg-field").length,
         renderedValues: $root.find(".wise-jg-field-value").map(function () { return $(this).text(); }).get()
       };
