@@ -24,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-08-14.5", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-08-14.6", maintainRecoveryMs: 5000 };
 
   var GROUPS = [
     {
@@ -261,17 +261,17 @@
   function findJobDetailsPanel() {
     var $visiblePagePanel = $();
     var $fallbackPanel = $();
-    // Start from the class rather than #tabs because HireHop can retain more
-    // than one page widget with the same local IDs during navigation. The
-    // native field signature identifies the job's #main_tab without relying
-    // on active classes, ARIA state or visibility. Prefer the panel belonging
-    // to the visible page widget, but allow its #main_tab itself to be hidden
-    // while Tasks/Schedule/etc. is current, just as HireHop intends.
-    $(".hh-framework_tabs").each(function () {
+    // HireHop currently has two job-page structures in circulation:
+    //   legacy/live: #tabs.ui-tabs > #details_tab > table#job_info
+    //   framework:   .hh-framework_tabs > #main_tab
+    // Select the native details panel itself in either structure. Its job
+    // field signature distinguishes it from project and unrelated tab panels,
+    // while the visible parent tab widget wins if stale page widgets remain.
+    $("#details_tab,#main_tab").each(function () {
       if ($visiblePagePanel.length) return;
-      var $tabs = $(this);
-      var $panel = $tabs.children("#main_tab").first();
-      if (!$panel.length || !looksLikeJobInfoText(normaliseText($panel.text()))) return;
+      var $panel = $(this);
+      var $tabs = $panel.parent("#tabs,.hh-framework_tabs,.ui-tabs");
+      if (!$tabs.length || !looksLikeJobInfoText(normaliseText($panel.text()))) return;
       if ($tabs.is(":visible")) $visiblePagePanel = $panel;
       else if (!$fallbackPanel.length) $fallbackPanel = $panel;
     });
@@ -519,35 +519,10 @@
   function findJobInfoRoot($detailsPanel) {
     var panel = $detailsPanel && $detailsPanel.get(0);
     if (!panel) return $();
-    if (state.lastRoot && document.documentElement.contains(state.lastRoot)) {
-      var $lastRoot = $(state.lastRoot);
-      if (isInsideDetailsPanel(state.lastRoot, panel) && looksLikeJobInfo($lastRoot)) return $lastRoot;
-      state.lastRoot = null;
-    }
-    var selectors = ["#job_info", "#job_details", "#job_detail", "#job_info_container", "#details_tab", "[data-page='job-details']"];
-    for (var i = 0; i < selectors.length; i++) {
-      var $candidate = $detailsPanel.find(selectors[i]).addBack(selectors[i]).first();
-      if (looksLikeJobInfo($candidate)) return $candidate;
-    }
-
-    var $best = $();
-    var bestSize = Infinity;
-    $detailsPanel.find("label,b,strong,td,th,span,div").filter(function () {
-      return !$(this).closest(".wise-jg-layout").length;
-    }).each(function () {
-      var label = normaliseLabel(getOwnText(this));
-      var isJobId = label === "job id" || label.indexOf("job id ") === 0;
-      var isAnchorField = label === "kit booking start" || label === "job memo";
-      if (!isJobId && !isAnchorField) return;
-      var node = this.parentNode;
-      for (var depth = 0; node && isInsideDetailsPanel(node, panel) && depth < 16; depth += 1, node = node.parentNode) {
-        var $candidate = $(node);
-        if (!looksLikeJobInfo($candidate)) continue;
-        var size = $candidate.find("*").length;
-        if (size < bestSize) { $best = $candidate; bestSize = size; }
-      }
-    });
-    return $best;
+    // The panel is the stable/safe root. On the live legacy page its direct
+    // field-bearing child is table#job_info; using that table as the root
+    // would insert the generated <div> beside <tbody>, which is invalid HTML.
+    return looksLikeJobInfo($detailsPanel) ? $detailsPanel : $();
   }
 
   function looksLikeJobInfo($candidate) {
@@ -679,7 +654,7 @@
       // to mount against shared #tabs, cards cannot display outside the
       // native details panel.
       root + ">.wise-jg-layout{display:none!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;padding:5px;background:#fff;box-sizing:border-box;}",
-      "#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout{display:grid!important;}",
+      "#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout,#details_tab" + root + ">.wise-jg-layout,#details_tab " + root + ">.wise-jg-layout{display:grid!important;}",
       root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
       root + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid #e5e7eb;background:#fff;}",
       root + " .wise-jg-hdr-text{font-weight:700;font-size:.76em;letter-spacing:.025em;text-transform:uppercase;color:#1f2937;}",
