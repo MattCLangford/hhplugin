@@ -625,12 +625,17 @@ function testSourceGuards() {
   assert(jobGroups.includes('attributeFilter: ["style", "class"]'), "job accent observation should react to inline and class-based status colours");
   assert(jobGroups.includes("function setStylePropertyIfChanged"), "job accent writes should be idempotent to avoid mutation loops");
   assert(jobGroups.includes('!$(this).closest(".wise-jg-layout").length'), "job accent detection should not sample its own generated colour tints");
-  assert(jobGroups.includes("if (!isJobDetailsTabCurrent())"), "job cards should require positive Job details tab ownership");
+  assert(jobGroups.includes("var $detailsPanel = findActiveJobDetailsPanel()"), "job cards should require HireHop's active native details panel");
   assert(!jobGroups.includes("function isNonDetailJobTabCurrent"), "job cards should not rely on a fail-open negative tab check");
   assert(jobGroups.includes('document.addEventListener("mousedown", captureJobTabIntent, true)'), "job tab transitions should remove cards before HireHop renders the destination tab");
-  assert(jobGroups.includes("if (!isJobDetailsLabel(label)) restoreJobInfoLayouts()"), "every non-detail job tab should synchronously restore native content");
-  assert(jobGroups.includes("function readVisibleJobTabPanelLabel"), "job tab ownership should use visible native panels when available");
-  assert(jobGroups.includes("function jobTabVisualScore"), "older HireHop tabs should support their visual selected state");
+  assert(jobGroups.includes('kind && kind !== "main"'), "every non-main HireHop job tab should synchronously restore native content");
+  assert(jobGroups.includes('li[data-kind=\'main\']'), "job ownership should use HireHop's native main-tab identity");
+  assert(jobGroups.includes('$tabs.children("#main_tab")'), "job cards should resolve HireHop's native details content panel");
+  assert(jobGroups.includes("findJobInfoRoot($detailsPanel)"), "job field discovery should be scoped to the native details panel");
+  assert(jobGroups.includes("isInsideDetailsPanel($root.get(0), $detailsPanel.get(0))"), "job cards should refuse any mount outside the details panel");
+  assert(jobGroups.includes("restoreLayoutsOutsideDetailsPanel"), "previous shared-container layouts should be removed during migration");
+  assert(jobGroups.includes('tabsactivate.wiseJobGroups'), "native jQuery UI tab activation should enforce layout ownership");
+  assert(jobGroups.includes('"#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout{display:grid!important;}"'), "CSS should fail closed by displaying job cards only inside #main_tab");
 
   const journey = fs.readFileSync(path.join(root, "11-projectjourney.js"), "utf8");
   const buildJourney = journey.slice(journey.indexOf("function buildJourneyHtml"), journey.indexOf("function buildHeaderSummary"));

@@ -24,7 +24,7 @@
     "DEFAULT_DEPOT", "default_depot", "WAREHOUSE", "warehouse"
   ];
   var KNOWN_PROPOSAL_CREATION_DEPOT_ID = "14";
-  var CFG = { version: "2026-08-14.2", maintainRecoveryMs: 5000 };
+  var CFG = { version: "2026-08-14.3", maintainRecoveryMs: 5000 };
 
   var GROUPS = [
     {
@@ -96,8 +96,6 @@
     maintainScheduled: null,
     accentObserver: null,
     accentObserverRoot: null,
-    requestedTabLabel: "",
-    tabIntentAt: 0,
     lastRoot: null,
     recoveryCount: 0,
     recoveryChecks: 12
@@ -134,6 +132,11 @@
     $(window).on("load.wiseJobGroups focus.wiseJobGroups hashchange.wiseJobGroups", function () { scheduleMaintain(60); });
     $(document)
       .on("ajaxComplete.wiseJobGroups", function () { scheduleMaintain(80); })
+      .on("tabsactivate.wiseJobGroups", ".hh-framework_tabs", function (event, ui) {
+        var kind = normaliseText(ui && ui.newTab && ui.newTab.attr("data-kind"));
+        if (kind && kind !== "main") restoreJobInfoLayouts();
+        scheduleMaintain(20);
+      })
       .on("click.wiseJobGroups", "#tabs > ul a,.hh-framework_tabs > ul a,.ui-tabs > ul.ui-tabs-nav a", function () {
         scheduleMaintain(20);
       });
@@ -148,17 +151,24 @@
   }
 
   function maintain() {
-    // This root is shared/reused by several HireHop job tabs. Never infer
-    // ownership merely from the continued presence of hidden job fields:
-    // the enhancement is allowed to mount only while Job details itself is
-    // positively identified as the current tab.
-    if (!isJobDetailsTabCurrent()) {
+    // HireHop's hh_tabbed_page framework owns one #main_tab panel per page
+    // and jQuery UI hides that whole panel when another tab is selected. The
+    // layout must live inside that panel; mounting against a text-matched
+    // ancestor such as #tabs makes it a sibling of every panel and therefore
+    // visible everywhere.
+    var $detailsPanel = findActiveJobDetailsPanel();
+    if (!$detailsPanel.length) {
       restoreJobInfoLayouts();
       return;
     }
+    restoreLayoutsOutsideDetailsPanel($detailsPanel);
     restoreStaleJobInfoLayouts();
-    var $root = findJobInfoRoot();
+    var $root = findJobInfoRoot($detailsPanel);
     if (!$root.length || !isProposalCreationDepot()) return;
+    if (!isInsideDetailsPanel($root.get(0), $detailsPanel.get(0))) {
+      log("Refused to mount job cards outside HireHop's #main_tab details panel.");
+      return;
+    }
     if ($root.hasClass(ROOT_CLASS)) {
       // Unlike the project layout, this layout is a rendered copy of the
       // hidden native job fields. Keep its copied accent variables live when
@@ -264,17 +274,13 @@
   // prevents even a one-frame flash above the destination tab while its
   // native panel is being selected or loaded.
   function captureJobTabIntent(event) {
-    var $tab = $(event.target).closest("li,[role='tab'],a");
+    var $tab = $(event.target).closest(".hh-framework_tabs > ul > li");
     if (!$tab.length) return;
-    var $host = $tab.closest("ul");
-    if (!isJobTabsHost($host)) return;
+    var $tabs = $tab.closest(".hh-framework_tabs");
+    if (!isJobTabsContainer($tabs)) return;
 
-    var label = getJobTabLabel($tab);
-    if (!label) return;
-    state.requestedTabLabel = label;
-    state.tabIntentAt = Date.now();
-
-    if (!isJobDetailsLabel(label)) {
+    var kind = normaliseText($tab.attr("data-kind"));
+    if (kind && kind !== "main") {
       restoreJobInfoLayouts();
       scheduleMaintain(event.type === "click" ? 20 : 0);
     } else if (event.type === "click") {
@@ -284,44 +290,9 @@
     }
   }
 
-  function isJobDetailsTabCurrent() {
-    var $host = findJobTabsHost();
-    if (!$host.length) return false;
-
-    // During a click transition the old tab can remain marked active until
-    // HireHop's handler runs. Honour the captured destination during that
-    // small window, then prefer the native active/panel state.
-    if (state.requestedTabLabel && Date.now() - state.tabIntentAt < 750) {
-      return isJobDetailsLabel(state.requestedTabLabel);
-    }
-
-    var activeLabel = readNativeActiveJobTabLabel($host);
-    if (activeLabel) {
-      state.requestedTabLabel = activeLabel;
-      return isJobDetailsLabel(activeLabel);
-    }
-
-    var panelLabel = readVisibleJobTabPanelLabel($host);
-    if (panelLabel) {
-      state.requestedTabLabel = panelLabel;
-      return isJobDetailsLabel(panelLabel);
-    }
-
-    // A captured click remains a safer fallback than the presence of job
-    // fields in the shared content root, which persists across every tab.
-    return !!state.requestedTabLabel && isJobDetailsLabel(state.requestedTabLabel);
-  }
-
-  function findJobTabsHost() {
-    var $hosts = $("#tabs > ul,.hh-framework-tabs > ul,.hh-framework_tabs > ul,.ui-tabs > ul.ui-tabs-nav,ul.ui-tabs-nav");
-    for (var i = 0; i < $hosts.length; i++) {
-      if (isJobTabsHost($hosts.eq(i))) return $hosts.eq(i);
-    }
-    return $();
-  }
-
-  function isJobTabsHost($host) {
-    if (!$host || !$host.length || $host.closest("#items_tab").length) return false;
+  function isJobTabsContainer($tabs) {
+    if (!$tabs || !$tabs.length || $tabs.closest("#items_tab").length) return false;
+    var $host = $tabs.children("ul").first();
     var text = normaliseText($host.text());
     if (text.indexOf("job details") === -1 && text.indexOf("event requirements") === -1) return false;
     var supporting = 0;
@@ -332,76 +303,22 @@
     return supporting >= 2;
   }
 
-  function getJobTabLabel($tab) {
-    var $item = $tab.is("li,[role='tab']") ? $tab : $tab.closest("li,[role='tab']");
-    var $labelSource = $item.length ? $item : $tab;
-    return normaliseText($labelSource.text()).replace(/\s*\(\d+\)\s*$/, "");
-  }
-
-  function isJobDetailsLabel(label) {
-    label = normaliseText(label);
-    return label.indexOf("job details") !== -1 || label.indexOf("event requirements") !== -1;
-  }
-
-  function readNativeActiveJobTabLabel($host) {
-    var $tabs = $host.children("li,[role='tab']");
-    if (!$tabs.length) $tabs = $host.children().has("a");
-    var $active = $tabs.filter(function () {
-      var $tab = $(this);
-      var className = String($tab.attr("class") || "") + " " + String($tab.children("a").first().attr("class") || "");
-      return $tab.attr("aria-selected") === "true" ||
-        $tab.children("a").first().attr("aria-selected") === "true" ||
-        /(^|\s)(?:ui-tabs-active|ui-state-active|active|is-active|selected|current)(?:\s|$)/i.test(className);
-    }).first();
-    if ($active.length) return getJobTabLabel($active);
-
-    // Older HireHop tab builds expose selection only through their visual
-    // style. The selected tab is the single strongly coloured tab in this
-    // otherwise neutral navigation row (as in the live page screenshots).
-    var visual = [];
-    $tabs.each(function () {
-      var $tab = $(this);
-      var tab = this;
-      var anchor = $tab.children("a").first().get(0);
-      var score = Math.max(jobTabVisualScore(tab), jobTabVisualScore(anchor));
-      if (score > 0) visual.push({ label: getJobTabLabel($tab), score: score });
+  function findActiveJobDetailsPanel() {
+    var $found = $();
+    // Start from the class rather than #tabs because HireHop can retain more
+    // than one page widget with the same local IDs during navigation.
+    $(".hh-framework_tabs").each(function () {
+      if ($found.length) return;
+      var $tabs = $(this);
+      if (!isJobTabsContainer($tabs) || !$tabs.is(":visible")) return;
+      var $mainTab = $tabs.children("ul").first().children("li[data-kind='main']").first();
+      var $panel = $tabs.children("#main_tab").first();
+      var selected = $mainTab.hasClass("ui-tabs-active") ||
+        $mainTab.hasClass("ui-state-active") ||
+        $mainTab.attr("aria-selected") === "true";
+      if (selected && $panel.length && isElementActuallyVisible($panel.get(0))) $found = $panel;
     });
-    visual.sort(function (a, b) { return b.score - a.score; });
-    return visual.length && (!visual[1] || visual[0].score > visual[1].score) ? visual[0].label : "";
-  }
-
-  function jobTabVisualScore(element) {
-    if (!element || !window.getComputedStyle) return 0;
-    var style;
-    try { style = window.getComputedStyle(element); } catch (err) { return 0; }
-    var background = parseRgb(style.backgroundColor);
-    var foreground = parseRgb(style.color);
-    if (!background) return 0;
-    var chroma = Math.max.apply(Math, background) - Math.min.apply(Math, background);
-    var brightness = (background[0] * 299 + background[1] * 587 + background[2] * 114) / 1000;
-    if (chroma < 35 || brightness > 225) return 0;
-    var score = chroma + (225 - brightness);
-    if (foreground && Math.min.apply(Math, foreground) > 220) score += 80;
-    return score;
-  }
-
-  function readVisibleJobTabPanelLabel($host) {
-    var $tabs = $host.children("li,[role='tab']");
-    if (!$tabs.length) $tabs = $host.children().has("a");
-    var visible = [];
-    $tabs.each(function () {
-      var $tab = $(this);
-      var $anchor = $tab.children("a").first();
-      var panelId = String($tab.attr("aria-controls") || $anchor.attr("aria-controls") || "");
-      var href = String($anchor.attr("href") || "");
-      var hashIndex = href.lastIndexOf("#");
-      if (!panelId && hashIndex !== -1 && hashIndex < href.length - 1) panelId = href.slice(hashIndex + 1);
-      if (!panelId) return;
-      var panel = document.getElementById(panelId);
-      if (!panel || !isElementActuallyVisible(panel)) return;
-      visible.push(getJobTabLabel($tab));
-    });
-    return visible.length === 1 ? visible[0] : "";
+    return $found;
   }
 
   function isElementActuallyVisible(element) {
@@ -410,6 +327,17 @@
     if (ariaHidden === "true" || $(element).is(".ui-tabs-hide,.ui-helper-hidden")) return false;
     var style = window.getComputedStyle ? window.getComputedStyle(element) : element.style;
     return !style || (style.display !== "none" && style.visibility !== "hidden");
+  }
+
+  function isInsideDetailsPanel(node, panel) {
+    return !!node && !!panel && (node === panel || $.contains(panel, node));
+  }
+
+  function restoreLayoutsOutsideDetailsPanel($detailsPanel) {
+    var panel = $detailsPanel && $detailsPanel.get(0);
+    $("." + ROOT_CLASS).each(function () {
+      if (!isInsideDetailsPanel(this, panel)) restoreJobInfoLayout($(this));
+    });
   }
 
   function renderLayout($root) {
@@ -639,27 +567,31 @@
     return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 
-  function findJobInfoRoot() {
+  function findJobInfoRoot($detailsPanel) {
+    var panel = $detailsPanel && $detailsPanel.get(0);
+    if (!panel || !isElementActuallyVisible(panel)) return $();
     if (state.lastRoot && document.documentElement.contains(state.lastRoot)) {
       var $lastRoot = $(state.lastRoot);
-      if ($lastRoot.is(":visible") && looksLikeJobInfo($lastRoot)) return $lastRoot;
+      if (isInsideDetailsPanel(state.lastRoot, panel) && $lastRoot.is(":visible") && looksLikeJobInfo($lastRoot)) return $lastRoot;
       state.lastRoot = null;
     }
     var selectors = ["#job_info", "#job_details", "#job_detail", "#job_info_container", "#details_tab", "[data-page='job-details']"];
     for (var i = 0; i < selectors.length; i++) {
-      var $candidate = $(selectors[i]).filter(":visible").first();
+      var $candidate = $detailsPanel.find(selectors[i]).addBack(selectors[i]).filter(":visible").first();
       if (looksLikeJobInfo($candidate)) return $candidate;
     }
 
     var $best = $();
     var bestSize = Infinity;
-    $("label,b,strong,td,th,span,div").each(function () {
+    $detailsPanel.find("label,b,strong,td,th,span,div").filter(function () {
+      return !$(this).closest(".wise-jg-layout").length;
+    }).each(function () {
       var label = normaliseLabel(getOwnText(this));
       var isJobId = label === "job id" || label.indexOf("job id ") === 0;
       var isAnchorField = label === "kit booking start" || label === "job memo";
       if (!isJobId && !isAnchorField) return;
       var node = this.parentNode;
-      for (var depth = 0; node && node !== document.body && depth < 16; depth += 1, node = node.parentNode) {
+      for (var depth = 0; node && isInsideDetailsPanel(node, panel) && depth < 16; depth += 1, node = node.parentNode) {
         var $candidate = $(node);
         if (!$candidate.is(":visible") || !looksLikeJobInfo($candidate)) continue;
         var size = $candidate.find("*").length;
@@ -794,7 +726,11 @@
     var css = [
       root + "{box-sizing:border-box;}",
       root + ">.wise-jg-native-source-node{display:none!important;}",
-      root + ">.wise-jg-layout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;padding:5px;background:#fff;box-sizing:border-box;}",
+      // Fail closed in CSS too: even if a future discovery regression tries
+      // to mount against shared #tabs, cards cannot display outside the
+      // native details panel.
+      root + ">.wise-jg-layout{display:none!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch;padding:5px;background:#fff;box-sizing:border-box;}",
+      "#main_tab" + root + ">.wise-jg-layout,#main_tab " + root + ">.wise-jg-layout{display:grid!important;}",
       root + " .wise-jg-section{display:flex;flex-direction:column;box-sizing:border-box;min-width:0;background:#fff;border:1px solid #e5e7eb;border-left:6px solid " + accent + ";border-radius:10px;box-shadow:0 1px 2px rgba(0,0,0,.04),0 1px 8px rgba(0,0,0,.06);overflow:hidden;}",
       root + " .wise-jg-hdr{display:flex;align-items:center;gap:7px;padding:7px 10px;border-bottom:1px solid #e5e7eb;background:#fff;}",
       root + " .wise-jg-hdr-text{font-weight:700;font-size:.76em;letter-spacing:.025em;text-transform:uppercase;color:#1f2937;}",
@@ -828,9 +764,12 @@
     version: CFG.version,
     refresh: function () { scheduleMaintain(0); },
     describe: function () {
-      var $root = findJobInfoRoot();
+      var $panel = findActiveJobDetailsPanel();
+      var $root = findJobInfoRoot($panel);
       return {
         version: CFG.version,
+        detailsPanelActive: !!$panel.length,
+        rootInsideDetailsPanel: !!$root.length && isInsideDetailsPanel($root.get(0), $panel.get(0)),
         jobInfoFound: !!$root.length,
         depotAllowed: isProposalCreationDepot(),
         grouped: $root.hasClass(ROOT_CLASS),
