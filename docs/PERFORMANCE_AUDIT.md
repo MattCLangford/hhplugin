@@ -8,12 +8,14 @@ The transaction warnings were caused by request amplification rather than one co
 
 The implementation now isolates module loading, serialises automatic HireHop reads, caches inventory results for 15 minutes in the browser session, observes server rate-limit responses, and removes eager or duplicated data loads.
 
+Current deployment note (18 August 2026): the local `8-stagedesigner.js` implementation is disabled in every depot and replaced by the external Stage Designer. Stage-specific request and polling findings below describe the retained local implementation and apply only if it is re-enabled.
+
 ### Live reliability follow-up
 
 Live testing exposed three additional lifecycle defects behind intermittent combinations such as Stage Designer appearing without Preview, Job Performance or commercial columns:
 
 - shared-dependent scripts were allowed to initialize after the shared module failed to download, leaving their single-run guards around incomplete instances;
-- an early depot/header value could be cached before the logged-in user's stable depot fields were ready; Stage Designer is not depot-gated, so it could appear by itself;
+- an early depot/header value could be cached before the logged-in user's stable depot fields were ready; at that point Stage Designer was not depot-gated, so it could appear by itself;
 - the docked preview changes the supplying toolbar's DOM path, and HireHop can replace the complete `#items_tab` element after initialisation.
 
 The loader now waits for the shared dependency before starting those modules. Depot resolution evaluates every known authoritative `window.user` depot field plus active header state and accepts a positive Proposal Creation match without allowing the first unrelated numeric field to veto it. Toolbar discovery supports docked and undocked layouts, and root replacement triggers event-driven module health refreshes. These checks do not make HireHop API requests.
@@ -56,7 +58,7 @@ The loader now waits for the shared dependency before starting those modules. De
 
 - Journey now consumes the native jobs-grid AJAX response captured by its existing `ajaxComplete` handler and falls back to rendered grid rows. It no longer requests the jqGrid URL itself.
 - Job Performance reads supplying Revenue and CoS from the existing jsTree/native table data. The initial document-162 response is retained only for discount and commission inputs; subsequent line changes are calculated locally.
-- Stage Designer still reads any reliable stock collections already present on `window` before calling an endpoint. Live catalogue requests remain necessary because those page collections are not consistently complete.
+- If re-enabled, the local Stage Designer reads any reliable stock collections already present on `window` before calling an endpoint. Live catalogue requests remain necessary because those page collections are not consistently complete.
 - Supplying RSP/Revenue/Markup use custom fields already present on the line first. Inventory lookup is only queued when required master data is absent.
 
 ## Shared Request Controls
@@ -64,7 +66,7 @@ The loader now waits for the shared dependency before starting those modules. De
 `5-hirehop.js` now exposes `WiseProposalSectionBuilderHireHop.requests`:
 
 - concurrency limit of one automatic HireHop read;
-- priority queue so user-opened Journey or Stage work can pass background inventory hydration;
+- priority queue so user-opened Journey or, if re-enabled, local Stage work can pass background inventory hydration;
 - configurable minimum request gap;
 - identical in-flight request deduplication;
 - memory caching and optional session caching;
@@ -80,7 +82,7 @@ No automatic retry was added to the shared reader. Endpoint fallback remains exp
 - Loader recovery remains bounded to 12 visible-page checks at 2.5 seconds.
 - Icons and supplying commercial recovery remain bounded and now pause while hidden.
 - Checklist, Project Journey, Project Jobs, Project Groups and Job Groups previously maintained forever. They now stop after 12 visible-page recovery checks (about one minute); load, focus, hash, resize where applicable, and AJAX events remain available afterward.
-- Stage Designer toolbar recovery now stops after 12 visible-page checks.
+- If the local Stage Designer is re-enabled, its toolbar recovery stops after 12 visible-page checks.
 - The disabled visual editor's 2.5-second recovery loop now stops after 24 visible-page checks if the module is re-enabled.
 - The supplying commercial CoS watcher remains a 1.2-second interval only while an item-edit dialog is open. It reads local controls, makes no request, and is cleared when the dialog closes.
 - The commercial MutationObserver now watches `#items_tab`, not the whole document body. Dialog opening is covered by the existing dialog event.

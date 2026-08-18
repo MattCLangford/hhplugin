@@ -101,7 +101,8 @@ Recommended HireHop script set:
 
 `0-loader.js` then lazy-loads the old module set only when the matching HireHop surface exists:
 
-- Supplying list: `5-hirehop.js`, `1-docprev.js`, `3-meta.js`, `4-layout.js`, `8-stagedesigner.js` (all depots except Proposal Creation), and `13-proposalpageicons.js`. `6-editor2.js` remains registered in this sequence but is currently disabled and skipped.
+- All depots: `16-externalmod.js` loads the external Stage Designer bridge independently.
+- Supplying list: `5-hirehop.js`, `1-docprev.js`, `3-meta.js`, `4-layout.js`, and `13-proposalpageicons.js`. `6-editor2.js` and `8-stagedesigner.js` remain registered in this sequence but are currently disabled and skipped.
 - Autopull dialog: `2-apselall.js`.
 - Home page: `5-hirehop.js` and `7-captrack.js`.
 - Project or job tab set: `9-jobchecklist.js` and `11-projectjourney.js` (`11-projectjourney.js` only installs its tab on project pages).
@@ -127,3 +128,5 @@ If the project Journey module causes issues, disable `11-projectjourney.js`. It 
 If the job details grouping module causes issues, disable `14-jobgroups.js`. It is standalone and only changes the Proposal Creation job details presentation.
 
 `6-editor2.js` is currently disabled. To restore it, set its `enabled` flag to `true` in `0-loader.js`, mirror the state in `manifest.json`, bump the loader cache version, regenerate the plugin string, and deploy the updated string. The older `wise-sectionbuilder-ui.js` remains an optional fallback snapshot and must not run alongside it.
+
+`8-stagedesigner.js` is also currently disabled. Do not restore it alongside the external Stage Designer unless duplicate controls and import behavior have been explicitly reviewed.

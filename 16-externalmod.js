@@ -5,8 +5,8 @@
   window.__wiseHireHopExternalModBridgeLoaded = true;
 
   var CONFIG = {
-    // Load the pinned tool directly. The upstream loader currently rejects
-    // HireHop API 1.31 because it compares the numeric value with 1.3.
+    // Load the reviewed Stage Designer-only loader. This release pins its
+    // tool revision and owns the normal HireHop menu integration.
     url: "https://cdn.jsdelivr.net/gh/AdamYesEvents/HH-YES-Plugins@v0.1.89/loader-stage-designer.js",
 
     // Optional: paste a SHA-256/384/512 Subresource Integrity value supplied
@@ -21,9 +21,10 @@
   var timeout = null;
   var menuTimer = null;
   var registry = [];
+  var adapterTools = null;
   var state = {
-    version: "0.3",
-    status: "waiting-for-depot-check",
+    version: "0.4",
+    status: "ready",
     source: "",
     error: "",
     menuStatus: "waiting",
@@ -38,33 +39,6 @@
     if (state.status === "loading") return;
     if (state.status === "loaded") {
       maintainToolMenus();
-      return;
-    }
-
-    var shared = window.WiseProposalSectionBuilderHireHop;
-    if (!shared || !shared.depot || typeof shared.depot.isProposalCreation !== "function") {
-      state.status = "blocked-no-depot-detector";
-      state.source = "";
-      state.error = "";
-      state.menuStatus = "blocked-no-depot-detector";
-      return;
-    }
-
-    try {
-      if (!shared.depot.isProposalCreation()) {
-        state.status = "blocked-depot";
-        state.source = "";
-        state.error = "";
-        state.menuStatus = "blocked-depot";
-        removeToolMenus();
-        return;
-      }
-    } catch (error) {
-      state.status = "blocked-depot";
-      state.source = "";
-      state.error = "";
-      state.menuStatus = "blocked-depot";
-      removeToolMenus();
       return;
     }
 
@@ -127,7 +101,7 @@
 
   function installToolRegistry() {
     var tools = window.HHTools && typeof window.HHTools === "object" ? window.HHTools : {};
-    if (tools.__wiseProposalCreationAdapter) return;
+    if (tools.__wiseExternalModAdapter) return;
 
     var previousRegister = typeof tools.register === "function" ? tools.register : null;
     tools.register = function (tool) {
@@ -136,7 +110,8 @@
         try { previousRegister.call(tools, tool); } catch (ignore) {}
       }
     };
-    tools.__wiseProposalCreationAdapter = true;
+    tools.__wiseExternalModAdapter = true;
+    adapterTools = tools;
     window.HHTools = tools;
   }
 
@@ -164,9 +139,12 @@
   }
 
   function maintainToolMenus() {
-    if (!isProposalCreationDepot()) {
-      state.menuStatus = "blocked-depot";
-      removeToolMenus();
+    // The pinned loader currently installs its own registry and menu loop.
+    // Stop the fallback loop once that takeover has happened.
+    if (adapterTools && window.HHTools !== adapterTools) {
+      state.menuStatus = "managed-by-external-loader";
+      if (menuTimer) clearInterval(menuTimer);
+      menuTimer = null;
       return;
     }
     if (!isSupportedHireHopRuntime()) {
@@ -205,8 +183,8 @@
     }
 
     var apiVersion = Number(window.hh_api_version);
-    // The tool targets HireHop API 1.x. Treat 1.31 as a 1.x release instead
-    // of applying the upstream loader's incorrect numeric <= 1.3 comparison.
+    // Keep the local fallback adapter limited to the HireHop API 1.x runtime
+    // it was built against, including releases such as 1.31.
     return isFinite(apiVersion) && apiVersion >= 1 && apiVersion < 2;
   }
 
@@ -258,17 +236,6 @@
       var separator = $(this);
       if (!separator.siblings("li[class*=\"hhtool_\"]").length) separator.remove();
     });
-  }
-
-  function isProposalCreationDepot() {
-    var shared = window.WiseProposalSectionBuilderHireHop;
-    try {
-      return !!(shared && shared.depot &&
-        typeof shared.depot.isProposalCreation === "function" &&
-        shared.depot.isProposalCreation());
-    } catch (ignore) {
-      return false;
-    }
   }
 
   function safeToolId(value) {

@@ -21,7 +21,7 @@ The loader does not start shared-dependent modules until `5-hirehop.js` is avail
 5. `4-layout.js`
 6. `6-editor2.js` — currently disabled
 7. `7-captrack.js`
-8. `8-stagedesigner.js` — disabled in Proposal Creation only
+8. `8-stagedesigner.js` — currently disabled in every depot
 9. `9-jobchecklist.js` (commercial-tab policy active; prototype Checklist tab disabled)
 10. `10-projectjobs-qol.js`
 11. `11-projectjourney.js`
@@ -29,11 +29,11 @@ The loader does not start shared-dependent modules until `5-hirehop.js` is avail
 13. `13-proposalpageicons.js`
 14. `14-jobgroups.js`
 15. `15-supplyingcommercial.js`
-16. `16-externalmod.js`
+16. `16-externalmod.js` — enabled in every depot
 
-`16-externalmod.js` is a Proposal Creation depot-only bridge for the pinned external Stage Designer tool while keeping `0-loader.js` as the only HireHop company-config URL. The loader starts the shared authoritative depot detector first, and the bridge does not request the external tool unless that detector identifies Proposal Creation. Its local menu adapter treats HireHop API `1.31` as a supported `1.x` release, avoiding the upstream loader's numeric `<= 1.3` comparison, and removes its menu entries whenever the active depot is not Proposal Creation. The bridge rejects non-HTTPS URLs and embedded credentials, prevents duplicate loading, and contains download failures so the Wise modules continue normally. Because the external script works inside HireHop, it has the same page access as the other mods and remains pinned to a reviewed version.
+`16-externalmod.js` is an all-depot bridge for the pinned external Stage Designer loader while keeping `0-loader.js` as the only HireHop company-config URL. It loads independently of the shared depot detector, so the external tool is requested in every depot. The remote loader owns its normal HireHop menu integration, with the bridge's API `1.x` adapter retained as a compatibility fallback. The bridge rejects non-HTTPS URLs and embedded credentials, prevents duplicate loading, and contains download failures so the Wise modules continue normally. Because the external script works inside HireHop, it has the same page access as the other mods and remains pinned to a reviewed version.
 
-`8-stagedesigner.js` is excluded only when the shared depot detector identifies Proposal Creation, preventing it from interfering with the Proposal Creation external mod. It remains available on supplying lists in every other depot. The loader avoids requesting the file in Proposal Creation; the module also removes its button and open overlay if an already-loaded HireHop session changes into that depot.
+`8-stagedesigner.js` remains registered as a rollback option but has `enabled: false` in `0-loader.js`, so the local designer is not requested in any depot and cannot conflict with the external tool. Its source and runtime safeguards are retained.
 
 `11-projectjourney.js` loads on the project/job tab route, but it only installs the Journey tab when it detects the project tab set.
 
@@ -56,6 +56,8 @@ RSP checkbox clicks are captured on the current supplying root before HireHop's 
 Because HireHop renders the supplying header and item rows as separate tables, the commercial module applies one shared width contract to CoS, Markup, Revenue and RSP. The Revenue edit icon lives within that existing width. A resize observer and a post-switch alignment pass reconcile the header with the visible row geometry after preview resizing or switching between Job Performance and RSP Calculator. The native inline styles are restored if the enhancement is removed.
 
 `6-editor2.js` remains registered but `0-loader.js` currently skips it, so the other supplying-list modules continue loading normally. To turn it back on, change its loader entry from `enabled: false` to `enabled: true`, restore its manifest status to `lazy-supplying-list-primary`, and set manifest `enabled` to `true`.
+
+`8-stagedesigner.js` uses the same global feature flag. To restore it, enable its loader and manifest entries and decide whether the external Stage Designer should be disabled first to avoid duplicate controls and imports.
 
 For the full paste-ready company config string, use `docs/HIREHOP_PLUGIN_STRING.md`.
 

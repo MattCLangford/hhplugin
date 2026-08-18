@@ -5,7 +5,7 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-08-07.1",
+    version: "2026-08-18.1",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
@@ -19,7 +19,7 @@
       layout: { file: "4-layout.js", version: "0.2" },
       editor: { file: "6-editor2.js", version: "1.8", enabled: false },
       captrack: { file: "7-captrack.js", version: "3.5" },
-      stage: { file: "8-stagedesigner.js", version: "2.4" },
+      stage: { file: "8-stagedesigner.js", version: "2.4", enabled: false },
       checklist: { file: "9-jobchecklist.js", version: "1.2" },
       projectJobs: { file: "10-projectjobs-qol.js", version: "1.0" },
       projectJourney: { file: "11-projectjourney.js", version: "0.7" },
@@ -27,7 +27,7 @@
       proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.8" },
       jobGroups: { file: "14-jobgroups.js", version: "2.4" },
       supplyingCommercial: { file: "15-supplyingcommercial.js", version: "3.0" },
-      externalMod: { file: "16-externalmod.js", version: "0.3" }
+      externalMod: { file: "16-externalmod.js", version: "0.4" }
     }
   };
 
@@ -144,9 +144,8 @@
       return;
     }
 
-    // The external bridge uses the shared authoritative depot detector and
-    // requests its configured URL only in Proposal Creation.
-    loadAfterShared(["externalMod"]).then(function () {
+    // The external Stage Designer is available independently in every depot.
+    loadIndependent(["externalMod"]).then(function () {
       callModuleMethod("externalMod", window.WiseHireHopExternalMod, "check");
     });
 
@@ -177,7 +176,7 @@
 
   function loadAfterShared(keys) {
     return loadScript("hirehop").then(
-      function () { return loadIndependent(filterModulesForActiveDepot(keys)); },
+      function () { return loadIndependent(keys); },
       function (error) {
         // These modules read the shared selectors, depot rules and request
         // service during bootstrap. Loading them without that dependency can
@@ -188,31 +187,9 @@
     );
   }
 
-  function filterModulesForActiveDepot(keys) {
-    if (keys.indexOf("stage") === -1) return keys;
-
-    var shared = window.WiseProposalSectionBuilderHireHop;
-    var isProposalCreation = false;
-    try {
-      isProposalCreation = !!(shared && shared.depot &&
-        typeof shared.depot.isProposalCreation === "function" &&
-        shared.depot.isProposalCreation());
-    } catch (ignore) {}
-    if (!isProposalCreation) return keys;
-
-    moduleState.stage = {
-      status: "blocked-depot",
-      at: Date.now(),
-      file: CFG.scripts.stage.file,
-      reason: "Stage Designer is disabled in Proposal Creation."
-    };
-    return keys.filter(function (key) { return key !== "stage"; });
-  }
-
   function refreshSupplyingModuleHealth() {
     setTimeout(function () {
       callModuleMethod("docprev", window.__wiseDocPreview, "refresh");
-      callModuleMethod("stage", window.__wiseStageDesigner, "refresh");
       callModuleMethod("proposalPageIcons", window.__wiseProposalPageIcons, "refresh");
       callModuleMethod("supplyingCommercial", window.__wiseSupplyingCommercial, "refresh");
     }, 80);
@@ -242,7 +219,10 @@
   function loadScript(key) {
     var item = CFG.scripts[key];
     if (!item) return Promise.reject(new Error("Unknown Wise HireHop module: " + key));
-    if (item.enabled === false) return Promise.resolve();
+    if (item.enabled === false) {
+      moduleState[key] = { status: "disabled", at: Date.now(), file: item.file };
+      return Promise.resolve();
+    }
     if (loaded[key]) return Promise.resolve();
     if (loading[key]) return loading[key];
     var failed = failures[key];

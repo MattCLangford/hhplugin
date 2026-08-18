@@ -360,7 +360,7 @@ function testHeadingMarkupTargets() {
 function testExternalModBridge() {
   const source = fs.readFileSync(path.join(root, "16-externalmod.js"), "utf8");
 
-  function runWithUrl(url, isProposalCreation) {
+  function runWithUrl(url, depotMode) {
     const appended = [];
     const head = {
       appendChild(node) {
@@ -390,13 +390,18 @@ function testExternalModBridge() {
           remove() { return this; },
           siblings() { return { length: 0 }; }
         };
-      },
-      WiseProposalSectionBuilderHireHop: {
-        depot: {
-          isProposalCreation() { return isProposalCreation !== false; }
-        }
       }
     };
+    if (depotMode !== "missing") {
+      window.WiseProposalSectionBuilderHireHop = {
+        depot: {
+          isProposalCreation() {
+            if (depotMode === "throws") throw new Error("depot detector unavailable");
+            return depotMode !== false;
+          }
+        }
+      };
+    }
     const context = vm.createContext({
       window,
       document,
@@ -424,59 +429,73 @@ function testExternalModBridge() {
   assert.strictEqual(unsafe.window.WiseHireHopExternalMod.status, "failed", "an unsafe URL should expose a failed diagnostic state");
 
   const otherDepot = runWithUrl("https://mods.example.test/unique.js", false);
-  assert.strictEqual(otherDepot.appended.length, 0, "the external mod URL should not be requested outside Proposal Creation");
-  assert.strictEqual(otherDepot.window.WiseHireHopExternalMod.status, "blocked-depot", "a non-Proposal Creation depot should expose a blocked diagnostic state");
-
-  const safe = runWithUrl("https://mods.example.test/unique.js?company=wise");
-  assert.strictEqual(safe.appended.length, 1, "a valid HTTPS mod URL should inject exactly one script");
-  assert.strictEqual(safe.appended[0].referrerPolicy, "no-referrer", "the external request should not disclose its HireHop page URL");
-  safe.appended[0].onload();
-  safe.window.HHTools.register({
+  assert.strictEqual(otherDepot.appended.length, 1, "the external mod URL should be requested in non-Proposal depots");
+  otherDepot.appended[0].onload();
+  otherDepot.window.HHTools.register({
     id: "stage-designer",
     label: "Stage Designer",
     onClick() {}
   });
-  assert.strictEqual(safe.window.WiseHireHopExternalMod.menuStatus, "waiting-for-frame", "HireHop API 1.31 should pass the local menu adapter's runtime check");
+  assert.strictEqual(otherDepot.window.WiseHireHopExternalMod.menuStatus, "waiting-for-frame", "non-Proposal depots should retain normal menu maintenance");
+
+  const noDetector = runWithUrl("https://mods.example.test/no-detector.js", "missing");
+  assert.strictEqual(noDetector.appended.length, 1, "the external mod should not require the shared depot detector");
+
+  const brokenDetector = runWithUrl("https://mods.example.test/broken-detector.js", "throws");
+  assert.strictEqual(brokenDetector.appended.length, 1, "a failing depot detector should not block the all-depot external mod");
+
+  const safe = runWithUrl("https://mods.example.test/unique.js?company=wise");
+  assert.strictEqual(safe.appended.length, 1, "a valid HTTPS mod URL should inject exactly one script");
+  assert.strictEqual(safe.appended[0].referrerPolicy, "no-referrer", "the external request should not disclose its HireHop page URL");
+  safe.window.HHTools = { register() {} };
+  safe.appended[0].onload();
+  assert.strictEqual(safe.window.WiseHireHopExternalMod.menuStatus, "managed-by-external-loader", "the bridge should recognize the pinned loader's menu-registry takeover");
   safe.window.WiseHireHopExternalMod.retry();
   assert.strictEqual(safe.appended.length, 1, "a loaded external mod should not be injected twice");
 }
 
-function testLoaderDepotRestrictions() {
+async function testLoaderFeatureFlags() {
   const loader = fs.readFileSync(path.join(root, "0-loader.js"), "utf8");
-  const start = loader.indexOf("  function filterModulesForActiveDepot");
-  const end = loader.indexOf("  function refreshSupplyingModuleHealth", start);
-  assert(start >= 0 && end > start, "the loader depot filter should be discoverable");
+  const cfgStart = loader.indexOf("  var CFG = {");
+  const cfgEnd = loader.indexOf("\n  };", cfgStart) + "\n  };".length;
+  const loadStart = loader.indexOf("  function loadScript");
+  const loadEnd = loader.indexOf("  function reportModuleFailure", loadStart);
+  assert(cfgStart >= 0 && cfgEnd > cfgStart && loadStart >= 0 && loadEnd > loadStart, "loader feature-flag helpers should be discoverable");
 
-  function filter(isProposalCreation) {
-    const context = vm.createContext({
-      result: null,
-      moduleState: {},
-      CFG: { scripts: { stage: { file: "8-stagedesigner.js" } } },
-      window: {
-        WiseProposalSectionBuilderHireHop: {
-          depot: { isProposalCreation() { return isProposalCreation; } }
-        }
-      },
-      Date
-    });
-    vm.runInContext(
-      loader.slice(start, end) +
-      '; result = filterModulesForActiveDepot(["docprev", "stage", "supplyingCommercial"]);',
-      context
-    );
-    return Array.from(context.result);
-  }
+  const appended = [];
+  const head = { appendChild(node) { appended.push(node); } };
+  const context = vm.createContext({
+    result: null,
+    loaded: {},
+    loading: {},
+    failures: {},
+    moduleState: {},
+    baseUrl: "https://example.test/hhplugin/",
+    document: { head, documentElement: head, createElement() { return {}; } },
+    Promise,
+    Error,
+    Date,
+    Math,
+    encodeURIComponent,
+    setTimeout() { return 1; },
+    clearTimeout() {},
+    scheduleRouteCheck() {}
+  });
+  vm.runInContext(
+    loader.slice(cfgStart, cfgEnd) + loader.slice(loadStart, loadEnd) +
+      '; result = loadScript("stage");',
+    context
+  );
+  await context.result;
 
-  assert.deepStrictEqual(
-    filter(true),
-    ["docprev", "supplyingCommercial"],
-    "Proposal Creation should exclude only Stage Designer from the supplying bundle"
-  );
-  assert.deepStrictEqual(
-    filter(false),
-    ["docprev", "stage", "supplyingCommercial"],
-    "every other depot should retain Stage Designer"
-  );
+  assert.strictEqual(context.CFG.scripts.stage.enabled, false, "Stage Designer should be disabled in the loader configuration");
+  assert.strictEqual(appended.length, 0, "a disabled Stage Designer should never append its script");
+  assert.strictEqual(context.moduleState.stage.status, "disabled", "loader diagnostics should expose the global Stage Designer shutdown");
+
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+  const stageEntry = manifest.lazyScripts.find(entry => entry.file === "8-stagedesigner.js");
+  assert(stageEntry, "manifest should retain the local Stage Designer as a rollback module");
+  assert.strictEqual(stageEntry.enabled, false, "manifest and loader should agree that Stage Designer is globally disabled");
 }
 
 function testSourceGuards() {
@@ -489,21 +508,22 @@ function testSourceGuards() {
   assert(loader.includes("looksLikeJobDetailsText(document.body.textContent"), "ID-less job-detail pages should still load the grouped front-page module");
   assert(loader.includes('callModuleMethod("jobGroups"'), "an already-loaded job layout should refresh after HireHop route changes");
   assert(loader.includes("isNonDetailJobTabCurrent() || isSupplyingPanelCurrent()"), "the job-details route fallback must yield to every non-detail job tab");
-  assert(loader.includes('loadAfterShared(["externalMod"])'), "the external mod bridge should wait for the shared authoritative depot detector");
-  assert(loader.includes('callModuleMethod("externalMod"'), "the external mod bridge should recheck its depot gate after HireHop route changes");
-  assert(loader.includes("filterModulesForActiveDepot(keys)"), "shared-dependent modules should pass through depot restrictions");
-  assert(loader.includes('return key !== "stage"'), "Stage Designer should be excluded from Proposal Creation before its script is requested");
+  assert(loader.includes('loadIndependent(["externalMod"])'), "the all-depot external mod bridge should not depend on the shared depot detector");
+  assert(loader.includes('callModuleMethod("externalMod"'), "the external mod bridge should maintain its health after HireHop route changes");
+  assert(/stage:\s*\{[^}]*enabled:\s*false[^}]*\}/.test(loader), "Stage Designer should have a global loader feature flag");
+  assert(!loader.includes("filterModulesForActiveDepot"), "the retired Stage Designer depot filter should not imply that other depots remain enabled");
 
   const externalMod = fs.readFileSync(path.join(root, "16-externalmod.js"), "utf8");
   assert(/url:\s*"[^"\r\n]*"/.test(externalMod), "the external mod should retain one quoted URL configuration field");
   assert(externalMod.includes('parsed.protocol !== "https:"'), "the external mod bridge should reject non-HTTPS script URLs");
   assert(externalMod.includes("parsed.username || parsed.password"), "the external mod bridge should reject URL-embedded credentials");
-  assert(externalMod.includes("shared.depot.isProposalCreation()"), "the external mod URL should only load in Proposal Creation");
+  assert(!externalMod.includes("isProposalCreation"), "the external mod should not retain a Proposal Creation depot gate");
+  assert(!externalMod.includes("blocked-depot"), "all-depot diagnostics should not report a depot block");
   assert(externalMod.includes("script.integrity = integrity"), "the external mod bridge should support optional Subresource Integrity");
   assert(externalMod.includes('state.status === "loading"') && externalMod.includes('state.status === "loaded"'), "the external mod bridge should prevent duplicate script loads");
   assert(externalMod.includes("apiVersion >= 1 && apiVersion < 2"), "the external mod menu adapter should accept HireHop API 1.31 as a 1.x release");
-  assert(externalMod.includes("function removeToolMenus"), "the external mod menu should be removable outside Proposal Creation");
-  assert(externalMod.includes("stage-designer-v0.26.1/tools/stage-designer.js"), "the bridge should load the pinned tool directly instead of the incompatible upstream loader");
+  assert(externalMod.includes("function removeToolMenus"), "the external mod bridge should clean up its fallback menus after a load failure");
+  assert(externalMod.includes("HH-YES-Plugins@v0.1.89/loader-stage-designer.js"), "the bridge should retain the reviewed pinned Stage Designer loader");
 
   const shared = fs.readFileSync(path.join(root, "5-hirehop.js"), "utf8");
   assert(shared.includes('allowedIds: ["14"]'), "Proposal Creation depot ID should be an explicit stable gate");
@@ -716,6 +736,8 @@ function testSourceGuards() {
   assert(shared.includes('projectSave: "/php_functions/project_save.php"'), "the shared HireHop contract should expose project partial saves");
 
   const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.json"), "utf8"));
+  const externalEntry = manifest.lazyScripts.find(entry => entry.file === "16-externalmod.js");
+  assert(externalEntry && /all-depots/.test(externalEntry.status), "manifest should describe the external bridge as an all-depot module");
   for (const entry of manifest.lazyScripts) {
     const escaped = entry.file.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const match = loader.match(new RegExp('file:\\s*"' + escaped + '",\\s*version:\\s*"([^"]+)"'));
@@ -727,7 +749,7 @@ function testSourceGuards() {
 (async function run() {
   testSourceGuards();
   testExternalModBridge();
-  testLoaderDepotRestrictions();
+  await testLoaderFeatureFlags();
   testCommercialTextMarkup();
   testHeadingMarkupTargets();
   await testRequestManager();

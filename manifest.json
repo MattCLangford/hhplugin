@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-08-07.1",
+  "version": "2026-08-18.1",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "7.5",
+      "cacheVersion": "7.6",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -70,9 +70,10 @@
     },
     {
       "file": "8-stagedesigner.js",
-      "status": "lazy-supplying-list-except-proposal-creation",
+      "status": "disabled-ready-to-enable",
+      "enabled": false,
       "cacheVersion": "2.4",
-      "role": "Metric/imperial staging designer for every depot except Proposal Creation, using the shared priority request queue, preferred per-category catalogue calls and conditional fallbacks. The loader does not request this module in Proposal Creation, and its own runtime gate removes its UI if an existing session changes into that depot. Generated rows and visual behaviour are otherwise preserved; writes remain throttled, bounded and Retry-After aware.",
+      "role": "Retained metric/imperial staging designer, currently skipped by 0-loader.js in every depot because the external Stage Designer replaces it. Its source and runtime safeguards remain available for a future rollback.",
       "recommendedLoadOrder": 8
     },
     {
@@ -126,9 +127,9 @@
     },
     {
       "file": "16-externalmod.js",
-      "status": "lazy-proposal-creation-external-mod-bridge",
-      "cacheVersion": "0.3",
-      "role": "Proposal Creation depot-only bridge for the pinned external Stage Designer tool. It uses the shared authoritative depot detector before requesting the external URL, supplies a HireHop API 1.x-compatible menu adapter, removes its entries outside Proposal Creation, validates the URL, rejects embedded credentials and unsafe schemes, supports optional Subresource Integrity, prevents duplicate loading, exposes diagnostics, and isolates remote download failures from the Wise modules.",
+      "status": "lazy-all-depots-external-mod-bridge",
+      "cacheVersion": "0.4",
+      "role": "All-depot bridge for the pinned external Stage Designer loader. It loads independently of the shared depot detector, supplies a HireHop API 1.x-compatible fallback menu adapter, validates the URL, rejects embedded credentials and unsafe schemes, supports optional Subresource Integrity, prevents duplicate loading, exposes diagnostics, and isolates remote download failures from the Wise modules.",
       "recommendedLoadOrder": 16
     }
   ],
