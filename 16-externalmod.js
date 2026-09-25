@@ -7,7 +7,7 @@
   var CONFIG = {
     // Load the reviewed Stage Designer-only loader. This release pins its
     // tool revision and owns the normal HireHop menu integration.
-    url: "https://cdn.jsdelivr.net/gh/AdamYesEvents/HH-YES-Plugins@v0.1.89/loader-stage-designer.js",
+    url: "https://cdn.jsdelivr.net/gh/AdamYesEvents/HH-YES-Plugins@v0.1.110/loader-stage-designer.js",
 
     // Optional: paste a SHA-256/384/512 Subresource Integrity value supplied
     // by the mod owner. Leave blank if the owner does not provide one.
