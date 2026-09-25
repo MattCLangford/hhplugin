@@ -5,29 +5,29 @@
   window.__wiseHireHopEnhancementLoaderLoaded = true;
 
   var CFG = {
-    version: "2026-08-18.1",
+    version: "2026-08-18.2",
     fallbackBaseUrl: "https://mattclangford.github.io/hhplugin/",
     initialDelayMs: 180,
     routeDebounceMs: 220,
     recoveryIntervalMs: 2500,
     recoveryChecks: 12,
     scripts: {
-      hirehop: { file: "5-hirehop.js", version: "1.3" },
-      docprev: { file: "1-docprev.js", version: "2.5" },
-      autopull: { file: "2-apselall.js", version: "0.5" },
-      meta: { file: "3-meta.js", version: "0.2" },
-      layout: { file: "4-layout.js", version: "0.2" },
-      editor: { file: "6-editor2.js", version: "1.8", enabled: false },
-      captrack: { file: "7-captrack.js", version: "3.5" },
-      stage: { file: "8-stagedesigner.js", version: "2.4", enabled: false },
-      checklist: { file: "9-jobchecklist.js", version: "1.2" },
-      projectJobs: { file: "10-projectjobs-qol.js", version: "1.0" },
-      projectJourney: { file: "11-projectjourney.js", version: "0.7" },
-      projectGroups: { file: "12-projectgroups.js", version: "0.13" },
-      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.8" },
-      jobGroups: { file: "14-jobgroups.js", version: "2.4" },
-      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "3.0" },
-      externalMod: { file: "16-externalmod.js", version: "0.5" }
+      hirehop: { file: "5-hirehop.js", version: "1.4" },
+      docprev: { file: "1-docprev.js", version: "2.6" },
+      autopull: { file: "2-apselall.js", version: "0.6" },
+      meta: { file: "3-meta.js", version: "0.3" },
+      layout: { file: "4-layout.js", version: "0.3" },
+      editor: { file: "6-editor2.js", version: "1.9", enabled: false },
+      captrack: { file: "7-captrack.js", version: "3.6" },
+      stage: { file: "8-stagedesigner.js", version: "2.5", enabled: false },
+      checklist: { file: "9-jobchecklist.js", version: "1.3" },
+      projectJobs: { file: "10-projectjobs-qol.js", version: "1.1" },
+      projectJourney: { file: "11-projectjourney.js", version: "0.8" },
+      projectGroups: { file: "12-projectgroups.js", version: "0.14" },
+      proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.9" },
+      jobGroups: { file: "14-jobgroups.js", version: "2.5" },
+      supplyingCommercial: { file: "15-supplyingcommercial.js", version: "3.1" },
+      externalMod: { file: "16-externalmod.js", version: "0.6" }
     }
   };
 

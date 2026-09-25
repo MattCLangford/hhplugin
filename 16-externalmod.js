@@ -23,7 +23,7 @@
   var registry = [];
   var adapterTools = null;
   var state = {
-    version: "0.5",
+    version: "0.6",
     status: "ready",
     source: "",
     error: "",

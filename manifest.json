@@ -1,6 +1,6 @@
 {
   "name": "wise-hirehop-proposal-platform",
-  "version": "2026-08-18.1",
+  "version": "2026-08-18.2",
   "purpose": "Wise internal HireHop enhancement package for proposal authoring, staging kit design, document preview, native item workflow helpers, proposal-page visibility, capacity tracking, project journey visibility, and QTC renderer alignment.",
   "runtime": "HireHop browser UI",
   "deployment": {
@@ -12,7 +12,7 @@
     {
       "file": "0-loader.js",
       "status": "active-loader",
-      "cacheVersion": "7.6",
+      "cacheVersion": "7.7",
       "role": "Route-aware loader that enforces the shared-module dependency, initializes sibling features independently, refreshes module health after supplying-root replacement, and applies bounded exponential backoff.",
       "recommendedLoadOrder": 1
     }
@@ -21,35 +21,35 @@
     {
       "file": "5-hirehop.js",
       "status": "lazy-shared-module",
-      "cacheVersion": "1.3",
+      "cacheVersion": "1.4",
       "role": "Shared selectors, multi-source Proposal Creation depot matching, docked-preview-safe toolbar discovery and a priority request queue providing concurrency control, deduplication, caching, hidden-page pausing, rate-limit cooldown and diagnostics.",
       "recommendedLoadOrder": 1
     },
     {
       "file": "1-docprev.js",
       "status": "lazy-supplying-list",
-      "cacheVersion": "2.5",
+      "cacheVersion": "2.6",
       "role": "Supplying-list QTC V4 preview (document 169, A4) and Job Performance strip with live depot re-evaluation and event-driven recovery after HireHop replaces the supplying root. Job Track inputs are loaded once, then Revenue/CoS changes recalculate locally from every non-heading supplying item using the same displayed row values.",
       "recommendedLoadOrder": 2
     },
     {
       "file": "2-apselall.js",
       "status": "lazy-autopull-dialog",
-      "cacheVersion": "0.5",
+      "cacheVersion": "0.6",
       "role": "Small native-popup helper for repetitive line item selection actions across all depots.",
       "recommendedLoadOrder": 3
     },
     {
       "file": "3-meta.js",
       "status": "lazy-supplying-list-module",
-      "cacheVersion": "0.2",
+      "cacheVersion": "0.3",
       "role": "Shared QTC-V4 Heading custom-field contract, option values, and legacy WisePageMeta compatibility identifiers.",
       "recommendedLoadOrder": 4
     },
     {
       "file": "4-layout.js",
       "status": "lazy-supplying-list-module",
-      "cacheVersion": "0.2",
+      "cacheVersion": "0.3",
       "role": "Shared proposal layout catalogue plus PageTemplate and PageVariant value mappings consumed by the section builder and QTC-V4.",
       "recommendedLoadOrder": 5
     },
@@ -57,14 +57,14 @@
       "file": "6-editor2.js",
       "status": "disabled-ready-to-enable",
       "enabled": false,
-      "cacheVersion": "1.8",
+      "cacheVersion": "1.9",
       "role": "Main proposal page editor and HireHop authoring layer, updated to read and write QTC-V4 Heading custom fields with legacy prefix/suffix fallback. Retained but currently skipped by 0-loader.js; set its loader entry to enabled: true when it is needed again.",
       "recommendedLoadOrder": 6
     },
     {
       "file": "7-captrack.js",
       "status": "lazy-home-page",
-      "cacheVersion": "3.5",
+      "cacheVersion": "3.6",
       "role": "Full-page Wise capacity timeline with progressive overview, team and individual detail, project-colour editable DaysPrior/DaysPost allocation envelopes, independent buffer and absence toggles, person-level conflict detection, and a conflict-only planning lens.",
       "recommendedLoadOrder": 7
     },
@@ -72,63 +72,63 @@
       "file": "8-stagedesigner.js",
       "status": "disabled-ready-to-enable",
       "enabled": false,
-      "cacheVersion": "2.4",
+      "cacheVersion": "2.5",
       "role": "Retained metric/imperial staging designer, currently skipped by 0-loader.js in every depot because the external Stage Designer replaces it. Its source and runtime safeguards remain available for a future rollback.",
       "recommendedLoadOrder": 8
     },
     {
       "file": "9-jobchecklist.js",
       "status": "lazy-project-job-tabs",
-      "cacheVersion": "1.2",
+      "cacheVersion": "1.3",
       "role": "Project and job page UI polish that hides Billing and Purchase orders tabs for non-admin users and keeps them visible for admins. The prototype Checklist tab and panel are disabled while their source is retained for possible future use.",
       "recommendedLoadOrder": 9
     },
     {
       "file": "10-projectjobs-qol.js",
       "status": "lazy-project-details",
-      "cacheVersion": "1.0",
+      "cacheVersion": "1.1",
       "role": "Project details page quality-of-life helper across all depots that keeps the jobs list reachable, adds a compact project-info toggle above the jobs grid, and hides secondary project-level timing fields so project dates read as the Wise event wrapper.",
       "recommendedLoadOrder": 10
     },
     {
       "file": "11-projectjourney.js",
       "status": "lazy-project-tabs",
-      "cacheVersion": "0.7",
+      "cacheVersion": "0.8",
       "role": "Project Journey tab that reuses the native jobs-grid response and requests missing job details only after the user opens Journey, serialised through the shared request queue.",
       "recommendedLoadOrder": 11
     },
     {
       "file": "12-projectgroups.js",
       "status": "lazy-project-details",
-      "cacheVersion": "0.13",
+      "cacheVersion": "0.14",
       "role": "Proposal Creation depot only, using the shared multi-source depot gate. Groups native project fields into Wise Project Details, Project Ownership, Operational Timings, Working Links and System Details cards without changing their values or save behaviour.",
       "recommendedLoadOrder": 12
     },
     {
       "file": "13-proposalpageicons.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "0.8",
+      "cacheVersion": "0.9",
       "role": "Proposal Creation depot only: uses QTC-V4 CreatePage, PageTemplate and Include Heading custom fields for proposal-page thumbnails, with legacy Section:/Dept: and // markers as read-only fallback. Heading data and every unmatched native tree icon remain untouched.",
       "recommendedLoadOrder": 13
     },
     {
       "file": "14-jobgroups.js",
       "status": "lazy-job-details",
-      "cacheVersion": "2.4",
+      "cacheVersion": "2.5",
       "role": "Proposal Creation depot only: replaces the native read-only job information area with a dense job-first comparison layout. Job Details and Job Commercial Info form the top two-column row, followed by nine fixed-size Job Timing cards. A recessed read-only parent-project window sits last, showing six fixed-size Project Timing cards before five compact project information fields. Every timing card separates its label, DD/MM/YYYY date and HH:mm time. Job-owned cards retain the live job status accent, while the project window uses its independently loaded project colour/status through a quieter four-pixel rail, tinted background, dashed boundary and read-only note. Parent data is resolved from the live job relationship through HireHop's documented project_get_data endpoint with custom-field flags, then supplemented from search-list using both exact-filter encodings and a narrow date-window fallback. Custom fields are matched across wrapper/rowData envelopes, nested response collections, object keys with normalised prefixes, JSON bags and arrays. Diagnostics expose supplement failures and available parent keys. Memo extraction is confined to its own legacy table cell so it cannot absorb adjacent commercial fields. The native source remains intact and hidden; the layout transforms only legacy #details_tab or newer #main_tab and remains isolated from every other job tab.",
       "recommendedLoadOrder": 14
     },
     {
       "file": "15-supplyingcommercial.js",
       "status": "lazy-supplying-list-proposal-creation",
-      "cacheVersion": "3.0",
+      "cacheVersion": "3.1",
       "role": "Proposal Creation depot only: displays line-level Revenue and Markup for every non-heading supplying item, plus inventory-master RSP controls for master-backed rows. A compact pen icon beside each item line's Revenue opens a standalone Markup/Revenue editor, while a percentage action on a structural heading applies one Markup to every immediate item child and recalculates each child's Revenue from its own displayed CoS; nested headings and their descendants are deliberately excluded. Heading batches continue immediately after each server acknowledgement, without the shared per-write delay. Both editors are independent of HireHop's reused native item popup and do not add a separate table column. Saving posts only the native tree-derived line identity and item kind, current job routing ID and merged custom-field bag, so Qty, dates, price, memo, parent and other native item values are not resubmitted. After a successful native item-popup save, an existing Revenue remains fixed while Markup is recalculated from the newly rendered CoS and persisted through the same minimal custom-field-only update. Namespaced line custom fields take precedence over generic row properties, and text Markup values support negative whole numbers such as -100. Job Performance reads the same row Revenue and native CoS values displayed in the list for absolute consistency, excluding only structural heading/root rows to prevent subtotal double-counting. RSP selection and inherited defaults depend on an actual inventory/list master rather than a commercial item-type allowlist. A display-only switch alternates the independent Job Performance and RSP Calculator summaries without changing either module's data or selection state. Native commercial data is preserved.",
       "recommendedLoadOrder": 15
     },
     {
       "file": "16-externalmod.js",
       "status": "lazy-all-depots-external-mod-bridge",
-      "cacheVersion": "0.5",
+      "cacheVersion": "0.6",
       "role": "All-depot bridge for the pinned external Stage Designer loader. It loads independently of the shared depot detector, supplies a HireHop API 1.x-compatible fallback menu adapter, validates the URL, rejects embedded credentials and unsafe schemes, supports optional Subresource Integrity, prevents duplicate loading, exposes diagnostics, and isolates remote download failures from the Wise modules.",
       "recommendedLoadOrder": 16
     }
