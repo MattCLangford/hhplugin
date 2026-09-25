@@ -523,7 +523,7 @@ function testSourceGuards() {
   assert(externalMod.includes('state.status === "loading"') && externalMod.includes('state.status === "loaded"'), "the external mod bridge should prevent duplicate script loads");
   assert(externalMod.includes("apiVersion >= 1 && apiVersion < 2"), "the external mod menu adapter should accept HireHop API 1.31 as a 1.x release");
   assert(externalMod.includes("function removeToolMenus"), "the external mod bridge should clean up its fallback menus after a load failure");
-  assert(externalMod.includes("HH-YES-Plugins@v0.1.89/loader-stage-designer.js"), "the bridge should retain the reviewed pinned Stage Designer loader");
+  assert(externalMod.includes("HH-YES-Plugins@v0.1.110/loader-stage-designer.js"), "the bridge should retain the reviewed pinned Stage Designer loader");
 
   const shared = fs.readFileSync(path.join(root, "5-hirehop.js"), "utf8");
   assert(shared.includes('allowedIds: ["14"]'), "Proposal Creation depot ID should be an explicit stable gate");

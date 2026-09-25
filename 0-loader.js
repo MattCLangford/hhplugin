@@ -27,7 +27,7 @@
       proposalPageIcons: { file: "13-proposalpageicons.js", version: "0.8" },
       jobGroups: { file: "14-jobgroups.js", version: "2.4" },
       supplyingCommercial: { file: "15-supplyingcommercial.js", version: "3.0" },
-      externalMod: { file: "16-externalmod.js", version: "0.4" }
+      externalMod: { file: "16-externalmod.js", version: "0.5" }
     }
   };
 

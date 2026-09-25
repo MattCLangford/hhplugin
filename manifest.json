@@ -128,7 +128,7 @@
     {
       "file": "16-externalmod.js",
       "status": "lazy-all-depots-external-mod-bridge",
-      "cacheVersion": "0.4",
+      "cacheVersion": "0.5",
       "role": "All-depot bridge for the pinned external Stage Designer loader. It loads independently of the shared depot detector, supplies a HireHop API 1.x-compatible fallback menu adapter, validates the URL, rejects embedded credentials and unsafe schemes, supports optional Subresource Integrity, prevents duplicate loading, exposes diagnostics, and isolates remote download failures from the Wise modules.",
       "recommendedLoadOrder": 16
     }
